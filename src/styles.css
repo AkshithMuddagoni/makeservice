@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", ui-sans-serif, sans-serif;
+  --color-ink: #14283a;
+  --color-ink-soft: #1d3c56;
+  --color-on-ink: #f4f7f6;
+  --color-paper: #f3f5f4;
+  --color-card: #ffffff;
+  --color-line: #e2e6e3;
+  --color-muted: #5c6c76;
+  --color-field: #0e7a4f;
+  --color-field-soft: #e7f6ef;
+  --color-on-field: #f3fbf7;
+  --color-gold: #8f5d10;
+  --color-gold-soft: #f8efd8;
+  --color-danger: #9f3b32;
+  --color-danger-soft: #fdeceb;
+}
+
+@layer base {
+  html,
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  ::selection {
+    background: var(--color-gold-soft);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.map-wrap {
+  position: relative;
+  height: 100%;
+  min-height: 16rem;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  background: var(--color-field-soft);
+}
+.map-wrap .maplibregl-map,
+.map-wrap .maplibregl-canvas {
+  width: 100%;
+  height: 100%;
+}
+.maplibregl-ctrl-attrib {
+  font-size: 10px;
+}
+.pin {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 11rem;
+  height: 2rem;
+  padding: 0 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-ink);
+  background: var(--color-card);
+  color: var(--color-ink);
+  font: 600 0.75rem/1 var(--font-sans);
+  box-shadow: 0 8px 18px rgba(20, 40, 58, 0.16);
+  white-space: nowrap;
+}
+.pin span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pin-site {
+  background: var(--color-ink);
+  color: var(--color-on-ink);
+}
+.pin-vehicle {
+  background: var(--color-gold-soft);
+}
+.otp-digit {
+  width: 3rem;
+  height: 3.5rem;
+  border-radius: 0.85rem;
+  border: 1px solid var(--color-line);
+  background: var(--color-card);
+  text-align: center;
+  font: 700 1.35rem/1 var(--font-display);
+  color: var(--color-ink);
+}
