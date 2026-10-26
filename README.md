@@ -59,3 +59,10 @@ npm test          # project tests
 
 ## Stack
 React 19, TanStack Start/Router, Vite, TypeScript, Tailwind CSS 4, Lucide icons, MapLibre GL, Zustand. Render can host the Node application; Supabase can provide PostgreSQL, authentication and file storage once the app data layer is connected.
+
+
+hptMxYDafgqcA4A6
+
+postgresql://postgres.tmtfrxlqujrzjxyyzwpp:hptMxYDafgqcA4A6 @aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres
+
+https://makeservice.onrender.com/
