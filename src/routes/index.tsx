@@ -439,7 +439,7 @@ function Marketplace() {
           {services.length === 0 && <p className="text-muted">{t(lang, "no_services")}</p>}
         </div>
 
-        <div className="mt-10 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="mt-10 grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <section className="rounded-3xl border border-line bg-card p-5 md:p-6">
             <h2 className="font-display text-2xl font-bold">{t(lang, "nearby")}</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">{t(lang, "sample_listing_note")}</p>
