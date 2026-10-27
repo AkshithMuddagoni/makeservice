@@ -102,8 +102,15 @@ async function openLocationDialog(page) {
   await page.goto(BASE_URL + "/", { waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: /Construction & Field Equipment Services/i }).waitFor();
   await page.getByRole("button", { name: /Enter location/ }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.waitFor();
+  const locationHeading = page.locator("#fieldly-location-title");
+  try {
+    await locationHeading.waitFor({ state: "visible", timeout: 10_000 });
+  } catch {
+    const bodyText = (await page.locator("body").innerText()).slice(0, 1800);
+    throw new Error("Location selector did not open after clicking Enter location. Visible page text:\n" + bodyText);
+  }
+  const dialog = page.locator('[aria-labelledby="fieldly-location-title"]');
+  await dialog.waitFor({ state: "visible" });
   return dialog;
 }
 
