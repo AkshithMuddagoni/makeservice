@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MapCanvas } from "@/components/fieldly/map-canvas";
 import { SitePicker } from "@/components/fieldly/site-picker";
 import { Button } from "@/components/ui/button";
@@ -76,6 +76,15 @@ function Home() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerMethod, setPickerMethod] = useState<LocationMethod>("manual");
   const [showAllServices, setShowAllServices] = useState(false);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setPickerOpen(false);
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [pickerOpen]);
 
   if (site) return <Marketplace />;
 
@@ -280,12 +289,18 @@ function Home() {
             aria-label="Close location selector"
             onClick={() => setPickerOpen(false)}
           />
-          <div className="relative z-10 max-h-[94vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-card p-4 shadow-2xl sm:rounded-3xl sm:p-6">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="fieldly-location-title"
+            aria-describedby="fieldly-location-description"
+            className="relative z-10 max-h-[94vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-card p-4 shadow-2xl sm:rounded-3xl sm:p-6"
+          >
             <div className="mb-4 flex items-start justify-between gap-4 border-b border-line pb-4">
               <div>
                 <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-field">01 / LOCATION</p>
-                <h2 className="mt-1 font-display text-2xl font-extrabold">{t(lang, "gate_panel_title")}</h2>
-                <p className="mt-1 text-sm leading-5 text-muted">{t(lang, "gate_panel_sub")}</p>
+                <h2 id="fieldly-location-title" className="mt-1 font-display text-2xl font-extrabold">{t(lang, "gate_panel_title")}</h2>
+                <p id="fieldly-location-description" className="mt-1 text-sm leading-5 text-muted">{t(lang, "gate_panel_sub")}</p>
               </div>
               <button
                 type="button"
