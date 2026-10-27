@@ -82,10 +82,16 @@ function reverseUrl(lat: number, lng: number) {
   return "https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=" + lat + "&lon=" + lng;
 }
 
-export function SitePicker({ onPick }: { onPick: (site: Site) => void }) {
+export function SitePicker({
+  onPick,
+  initialMethod = "manual",
+}: {
+  onPick: (site: Site) => void;
+  initialMethod?: Method;
+}) {
   const lang = useFieldly((s) => s.lang);
   const currentSite = useFieldly((s) => s.site);
-  const [method, setMethod] = useState<Method>("manual");
+  const [method, setMethod] = useState<Method>(initialMethod);
   const [fields, setFields] = useState<AddressFields>(() => ({
     ...EMPTY_FIELDS,
     state: currentSite?.state ?? "",

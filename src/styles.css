@@ -99,3 +99,22 @@
   font: 700 1.35rem/1 var(--font-display);
   color: var(--color-ink);
 }
+
+
+/* Fieldly landing page — bright, photo-led visual system */
+.fieldly-landing {
+  background: #f6f8f7;
+}
+.fieldly-home-hero {
+  background-position: center, center right;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+.fieldly-service-photo {
+  transform: scale(1.001);
+}
+@media (max-width: 767px) {
+  .fieldly-home-hero {
+    background-position: center, 64% center;
+  }
+}

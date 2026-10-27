@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { MapPin, Menu, X } from "lucide-react";
+import { MapPin, Menu, Sprout, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Toaster } from "sonner";
 import { t } from "@/lib/fieldly/i18n";
@@ -40,7 +40,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-line bg-card/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
           <Link to="/" className="flex items-center gap-2 font-display text-xl font-bold tracking-tight">
-            <span className="grid size-9 place-items-center rounded-xl bg-ink text-sm text-on-ink">F</span>
+            <span className="grid size-9 place-items-center rounded-full bg-field text-white shadow-sm"><Sprout className="size-5" aria-hidden /></span>
             Fieldly
           </Link>
           <nav className="ml-4 hidden items-center gap-1 md:flex">
