@@ -83,7 +83,6 @@ type State = {
   isOnline: (id: string) => boolean
   setOnline: (id: string, online: boolean) => void
   addProvider: (provider: Provider) => void
-  approveProvider: (id: string) => void
   createRequest: (input: {
     serviceId: string
     providerId?: string
@@ -181,25 +180,6 @@ export const useFieldly = create<State>()(
           extras: s.extras.map((p) => (p.id === id ? { ...p, online } : p)),
         })),
       addProvider: (provider) => set((s) => ({ extras: [...s.extras.filter((p) => p.id !== provider.id), provider] })),
-      approveProvider: (id) =>
-        set((s) => ({
-          extras: s.extras.map((p) =>
-            p.id === id
-              ? {
-                  ...p,
-                  approved: true,
-                  verified: {
-                    ...p.verified,
-                    identity: true,
-                    equipment: true,
-                    walta: p.services.includes("borewell")
-                      ? p.verified.walta || "TS-WALTA-PREVIEW"
-                      : p.verified.walta,
-                  },
-                }
-              : p,
-          ),
-        })),
       createRequest: ({ serviceId, providerId }) => {
         const { site, draft, customer, session } = get();
         const who = session?.role === "customer" ? session : customer;

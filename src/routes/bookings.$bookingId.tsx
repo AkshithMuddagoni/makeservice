@@ -29,8 +29,6 @@ function BookingPage() {
   const booking = useFieldly((s) => s.bookings.find((b) => b.id === bookingId));
   const lang = useFieldly((s) => s.lang);
   const session = useFieldly((s) => s.session);
-  const signInProvider = useFieldly((s) => s.signInProvider);
-  const resumeCustomer = useFieldly((s) => s.resumeCustomer);
   const transition = useFieldly((s) => s.transition);
   const verifyCode = useFieldly((s) => s.verifyCode);
   const regenerateCode = useFieldly((s) => s.regenerateCode);
@@ -38,7 +36,9 @@ function BookingPage() {
   const review = useFieldly((s) => s.review);
   const sendMessage = useFieldly((s) => s.sendMessage);
   const providers = useProviders();
-  const [pane, setPane] = useState<"customer" | "operator">("customer");
+  const isCustomer = Boolean(booking && session?.role === "customer" && session.phone === booking.customerPhone);
+  const isOperator = Boolean(booking && session?.role === "provider" && session.providerId === booking.providerId);
+  const [pane, setPane] = useState<"customer" | "operator">(session?.role === "provider" ? "operator" : "customer");
   const [code, setCode] = useState("");
   const [reason, setReason] = useState("");
   const [method, setMethod] = useState("UPI");
@@ -46,13 +46,12 @@ function BookingPage() {
   const [comment, setComment] = useState("");
   const [showPay, setShowPay] = useState(false);
 
-  if (!booking) {
+  if (!booking || (!isCustomer && !isOperator)) {
     return (
       <div className="mx-auto max-w-xl px-4 py-16">
-        <h1 className="font-display text-3xl font-bold">Booking not on this device.</h1>
-        <Link to="/bookings" className="mt-3 inline-block font-semibold">
-          All bookings
-        </Link>
+        <h1 className="font-display text-3xl font-bold">Booking unavailable</h1>
+        <p className="mt-2 text-sm text-muted">Sign in as the customer or the assigned operator to view this booking.</p>
+        <Link to="/account" className="mt-3 inline-block font-semibold">Account sign in</Link>
       </div>
     );
   }
@@ -84,15 +83,19 @@ function BookingPage() {
   }
 
   function openOperator() {
-    signInProvider(booking!.providerId);
+    if (!isOperator) {
+      toast.error("Only the assigned operator can manage this booking.");
+      return;
+    }
     setPane("operator");
   }
   function openCustomer() {
-    if (!resumeCustomer()) toast.error("Sign in as the customer from Account to pay or refresh the code.");
+    if (!isCustomer) {
+      toast.error("Only the customer who made this booking can manage it.");
+      return;
+    }
     setPane("customer");
   }
-
-  const isOperator = session?.providerId === booking.providerId;
   const minutesLeft = booking.codeExpiresAt ? Math.max(0, Math.ceil((booking.codeExpiresAt - Date.now()) / 60000)) : 0;
 
   return (
@@ -155,14 +158,16 @@ function BookingPage() {
           <button
             type="button"
             onClick={openCustomer}
-            className={cn("h-11 flex-1 rounded-xl text-sm font-semibold", pane === "customer" ? "bg-ink text-on-ink" : "")}
+            className={cn("h-11 flex-1 rounded-xl text-sm font-semibold", pane === "customer" ? "bg-ink text-on-ink" : "", !isCustomer && "cursor-not-allowed opacity-50")}
+            disabled={!isCustomer}
           >
             Customer
           </button>
           <button
             type="button"
             onClick={openOperator}
-            className={cn("h-11 flex-1 rounded-xl text-sm font-semibold", pane === "operator" ? "bg-ink text-on-ink" : "")}
+            className={cn("h-11 flex-1 rounded-xl text-sm font-semibold", pane === "operator" ? "bg-ink text-on-ink" : "", !isOperator && "cursor-not-allowed opacity-50")}
+            disabled={!isOperator}
           >
             Operator
           </button>
@@ -307,7 +312,7 @@ function BookingPage() {
           <section className="rounded-3xl border border-line bg-card p-5">
             <h2 className="font-display text-2xl font-bold">{provider?.name}</h2>
             <p className="text-sm text-muted">
-              {isOperator ? "You are this operator." : "Switching you onto this job."} The desk rejects skipped steps.
+              Only the assigned operator can update this job. Status changes are restricted to this operator session.
             </p>
             <div className="mt-4 grid gap-2">
               {booking.status === "CONFIRMED" && (
