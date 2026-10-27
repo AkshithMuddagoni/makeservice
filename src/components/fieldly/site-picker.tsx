@@ -105,7 +105,6 @@ export function SitePicker({ onPick }: { onPick: (site: Site) => void }) {
 
   function patchField(key: keyof AddressFields, value: string) {
     setFields((previous) => ({ ...previous, [key]: value }));
-    if (key !== "landmark") setPin(null);
   }
 
   async function reverseGeocode(lat: number, lng: number) {
@@ -234,7 +233,6 @@ export function SitePicker({ onPick }: { onPick: (site: Site) => void }) {
   }
 
   const center = pin ?? { lat: CITY_CENTER.lat, lng: CITY_CENTER.lng };
-  const mapsVisible = method === "map" || (method === "gps" && Boolean(pin));
   const stateValueIsUnlisted = Boolean(fields.state && !STATES_AND_UTS.includes(fields.state));
   const methods: { id: Method; title: string; subtitle: string; icon: typeof ListTree }[] = [
     { id: "manual", title: t(lang, "location_method_manual"), subtitle: "Enter the address", icon: ListTree },
@@ -491,7 +489,6 @@ export function SitePicker({ onPick }: { onPick: (site: Site) => void }) {
           {t(lang, "location_privacy_note")}
         </p>
       </form>
-      {mapsVisible && method === "gps" && <span className="sr-only">Map preview of the selected pin</span>}
     </div>
   );
 }
