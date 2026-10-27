@@ -11,10 +11,12 @@ function BookingsPage() {
   const lang = useFieldly((s) => s.lang);
   const bookings = useFieldly((s) => s.bookings);
   const session = useFieldly((s) => s.session);
-  const customer = useFieldly((s) => s.customer);
   const providers = useProviders();
-  const phone = session?.role === "customer" ? session.phone : customer?.phone;
-  const mine = phone ? bookings.filter((b) => b.customerPhone === phone || b.providerId === session?.providerId) : bookings;
+  const mine = session?.role === "customer"
+    ? bookings.filter((b) => b.customerPhone === session.phone)
+    : session?.role === "provider" && session.providerId
+      ? bookings.filter((b) => b.providerId === session.providerId)
+      : [];
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -23,10 +25,17 @@ function BookingsPage() {
       <div className="mt-6 grid gap-3">
         {mine.length === 0 && (
           <div className="rounded-3xl border border-line bg-card p-6">
-            <p>{t(lang, "empty_bookings")}</p>
-            <Link to="/" className="mt-3 inline-block font-semibold">
-              Find a machine
-            </Link>
+            {session ? (
+              <>
+                <p>{t(lang, "empty_bookings")}</p>
+                <Link to="/" className="mt-3 inline-block font-semibold">Find a machine</Link>
+              </>
+            ) : (
+              <>
+                <p>Sign in to see bookings associated with your account.</p>
+                <Link to="/account" className="mt-3 inline-block font-semibold">Sign in</Link>
+              </>
+            )}
           </div>
         )}
         {mine.map((booking) => {

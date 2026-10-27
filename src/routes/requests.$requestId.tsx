@@ -15,6 +15,11 @@ function RequestPage() {
   const { requestId } = Route.useParams();
   const navigate = useNavigate();
   const request = useFieldly((s) => s.requests.find((r) => r.id === requestId));
+  const session = useFieldly((s) => s.session);
+  const canViewRequest = Boolean(request && (
+    (session?.role === "customer" && session.phone === request.customerPhone) ||
+    (session?.role === "provider" && session.providerId && request.targetedProviderIds.includes(session.providerId))
+  ));
   const allQuotes = useFieldly((s) => s.quotes);
   const quotes = useMemo(
     () => allQuotes.filter((q) => q.requestId === requestId),
@@ -39,13 +44,12 @@ function RequestPage() {
     return () => timers.forEach(clearTimeout);
   }, [request, quotes.length, requestId]);
 
-  if (!request) {
+  if (!request || !canViewRequest) {
     return (
       <div className="mx-auto max-w-xl px-4 py-16">
-        <h1 className="font-display text-3xl font-bold">Request not on this device.</h1>
-        <Link to="/" className="mt-3 inline-block font-semibold">
-          Home
-        </Link>
+        <h1 className="font-display text-3xl font-bold">Request unavailable</h1>
+        <p className="mt-2 text-sm text-muted">Sign in as the customer or an operator invited to quote on this request.</p>
+        <Link to="/account" className="mt-3 inline-block font-semibold">Account sign in</Link>
       </div>
     );
   }

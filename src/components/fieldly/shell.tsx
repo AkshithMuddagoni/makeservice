@@ -38,6 +38,9 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-paper text-ink">
+      <div role="status" className="border-b border-line bg-gold-soft px-4 py-2 text-center text-xs font-medium text-ink">
+        Preview only: some provider profiles are sample data; listings and bookings stay in this browser. No real SMS or payments are processed.
+      </div>
       <header className="sticky top-0 z-40 border-b border-line bg-card/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
           <Link to="/" className="flex items-center gap-2 font-display text-xl font-bold tracking-tight">

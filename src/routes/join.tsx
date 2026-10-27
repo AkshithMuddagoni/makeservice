@@ -18,7 +18,6 @@ function JoinPage() {
   const navigate = useNavigate();
   const site = useFieldly((s) => s.site);
   const addProvider = useFieldly((s) => s.addProvider);
-  const approveProvider = useFieldly((s) => s.approveProvider);
   const signInProvider = useFieldly((s) => s.signInProvider);
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
@@ -66,11 +65,12 @@ function JoinPage() {
       reviewCount: 0,
       replyMin: 10,
       rates,
+      // Document checkboxes are declarations in this preview, not verification.
       verified: {
-        identity: papers.identity,
-        equipment: papers.equipment,
-        insurance: papers.insurance,
-        walta: services.includes("borewell") ? walta.trim() || null : null,
+        identity: false,
+        equipment: false,
+        insurance: false,
+        walta: null,
       },
       approved: false,
       online: false,
@@ -196,19 +196,18 @@ function JoinPage() {
         <div className="mt-6 rounded-3xl border border-line bg-card p-5">
           <h2 className="font-display text-2xl font-bold">Under review</h2>
           <p className="mt-2 text-sm text-muted">
-            In production an admin checks the file. For this preview you can approve the listing so it can receive
-            jobs. Sign in on the desk with {phone} and code 482609.
+            This listing is stored only in this browser for the preview. No documents were uploaded or independently
+            checked, so the listing remains unapproved and is not shown to customers.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button
               onClick={() => {
-                approveProvider(created);
                 signInProvider(created);
-                toast.success("Approved for this preview.");
+                toast.success("Preview desk opened. Your listing remains under review.");
                 void navigate({ to: "/desk" });
               }}
             >
-              Approve and open desk
+              Open preview desk
             </Button>
             <Button asChild variant="secondary">
               <Link to="/desk">Desk</Link>
