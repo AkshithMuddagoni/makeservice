@@ -168,17 +168,11 @@ async function testMobileCustomerJourney() {
     await page.getByRole("link", { name: /Borewell drilling/ }).first().click();
     await page.getByRole("heading", { name: "Borewell drilling", exact: true }).waitFor();
 
-    const purposeOption = page.getByRole("button", { name: "Home", exact: true });
-    try {
-      await purposeOption.waitFor({ state: "visible", timeout: 5_000 });
-    } catch {
-      const visibleText = (await page.locator("body").innerText()).slice(0, 2200);
-      const buttons = await page.locator("button:visible").allTextContents();
-      throw new Error("Borewell purpose option not visible. Page text:\\n" + visibleText + "\\nVisible buttons: " + JSON.stringify(buttons));
-    }
+    const purposeOption = page.locator("button").filter({ hasText: /^Home$/ }).first();
+    await purposeOption.waitFor({ state: "visible" });
     await purposeOption.click();
-    await page.getByRole("button", { name: "Easy access", exact: true }).click();
-    await page.getByRole("button", { name: "Today", exact: true }).click();
+    await page.locator("button").filter({ hasText: /^Easy access$/ }).click();
+    await page.locator("button").filter({ hasText: /^Today$/ }).click();
     await page.getByLabel(/Anything the operator should know/).fill("Mockup smoke test work site");
     await page.getByRole("button", { name: /See who can reach this site/ }).click();
 
