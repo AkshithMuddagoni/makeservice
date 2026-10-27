@@ -181,8 +181,8 @@ export const useFieldly = create<State>()(
         })),
       addProvider: (provider) => set((s) => ({ extras: [...s.extras.filter((p) => p.id !== provider.id), provider] })),
       createRequest: ({ serviceId, providerId }) => {
-        const { site, draft, customer, session } = get();
-        const who = session?.role === "customer" ? session : customer;
+        const { site, draft, session } = get();
+        const who = session?.role === "customer" ? session : null;
         if (!who) return { ok: false, error: "Sign in with your mobile number before requesting a quote." };
         if (!site) return { ok: false, error: "Set the work site first." };
         const service = getService(serviceId);
@@ -254,6 +254,9 @@ export const useFieldly = create<State>()(
         if (!request || request.status !== "open") return { ok: false, error: "This request is not open." };
         const provider = get().providerById(session.providerId);
         if (!provider) return { ok: false, error: "Operator not found." };
+        if (!request.targetedProviderIds.includes(provider.id)) {
+          return { ok: false, error: "This request has not been assigned to your operator account." };
+        }
         if (!isEligible(provider, request.serviceId)) {
           return { ok: false, error: "This machine is not eligible for the service. Check papers and WALTA if it is a rig." };
         }
@@ -287,8 +290,12 @@ export const useFieldly = create<State>()(
         return { ok: true, id: next.id };
       },
       declineRequest: (requestId) => {
-        const pid = get().session?.providerId;
+        const session = get().session;
+        const pid = session?.role === "provider" ? session.providerId : undefined;
         if (!pid) return { ok: false, error: "Open the operator desk first." };
+        const request = get().requests.find((r) => r.id === requestId);
+        if (!request || request.status !== "open") return { ok: false, error: "This request is not open." };
+        if (!request.targetedProviderIds.includes(pid)) return { ok: false, error: "This request is not assigned to your operator account." };
         set((s) => ({
           quotes: s.quotes.map((q) =>
             q.requestId === requestId && q.providerId === pid && q.status === "pending"
@@ -304,8 +311,7 @@ export const useFieldly = create<State>()(
         const request = get().requests.find((r) => r.id === quote.requestId);
         if (!request || request.status !== "open") return { ok: false, error: "This request is closed." };
         const session = get().session;
-        const customer = get().customer;
-        const phone = session?.role === "customer" ? session.phone : customer?.phone;
+        const phone = session?.role === "customer" ? session.phone : null;
         if (phone !== request.customerPhone) {
           return { ok: false, error: "Only the customer who asked can accept." };
         }
@@ -377,6 +383,10 @@ export const useFieldly = create<State>()(
       cancelRequest: (requestId) => {
         const request = get().requests.find((r) => r.id === requestId);
         if (!request || request.status !== "open") return { ok: false, error: "Nothing open to cancel." };
+        const session = get().session;
+        if (session?.role !== "customer" || session.phone !== request.customerPhone) {
+          return { ok: false, error: "Only the customer who opened this request can cancel it." };
+        }
         set((s) => ({
           requests: s.requests.map((r) => (r.id === requestId ? { ...r, status: "cancelled" } : r)),
           quotes: s.quotes.map((q) =>
@@ -403,9 +413,8 @@ export const useFieldly = create<State>()(
         }
         const session = get().session;
         if (to === "CANCELLED" || to === "DISPUTED") {
-          const customerPhone = session?.role === "customer" ? session.phone : get().customer?.phone;
-          const isCustomer = customerPhone === booking.customerPhone;
-          const isOperator = session?.providerId === booking.providerId;
+          const isCustomer = session?.role === "customer" && session.phone === booking.customerPhone;
+          const isOperator = session?.role === "provider" && session.providerId === booking.providerId;
           if (!isCustomer && !isOperator) {
             return { ok: false, error: "Only the customer or the operator on this job can do that." };
           }
@@ -417,7 +426,10 @@ export const useFieldly = create<State>()(
           to === "CANCELLED" || to === "DISPUTED"
             ? session?.name || booking.customerName
             : get().providerById(booking.providerId)?.name || "Operator";
-        if ((to === "ON_THE_WAY" || to === "ARRIVED" || to === "SERVICE_COMPLETED") && session?.providerId !== booking.providerId) {
+        if (
+          (to === "ON_THE_WAY" || to === "ARRIVED" || to === "SERVICE_COMPLETED") &&
+          (session?.role !== "provider" || session.providerId !== booking.providerId)
+        ) {
           return { ok: false, error: "Switch to this operator before moving the job." };
         }
         const now = Date.now();
@@ -442,7 +454,8 @@ export const useFieldly = create<State>()(
         const booking = get().bookings.find((b) => b.id === bookingId);
         if (!booking) return { ok: false, error: "Booking not found." };
         if (booking.status !== "ARRIVED") return { ok: false, error: "The code works only after the operator has arrived." };
-        if (get().session?.providerId !== booking.providerId) {
+        const session = get().session;
+        if (session?.role !== "provider" || session.providerId !== booking.providerId) {
           return { ok: false, error: "Only the operator on this job can enter the code." };
         }
         if (!booking.codeHash || !booking.codeExpiresAt) {
@@ -493,8 +506,9 @@ export const useFieldly = create<State>()(
         const booking = get().bookings.find((b) => b.id === bookingId);
         if (!booking) return { ok: false, error: "Booking not found." };
         if (booking.status !== "ARRIVED") return { ok: false, error: "A code is issued when the operator arrives." };
-        const phone = get().session?.role === "customer" ? get().session?.phone : get().customer?.phone;
-        if (phone !== booking.customerPhone) return { ok: false, error: "Only the customer can refresh the code." };
+        const session = get().session;
+        const phone = session?.role === "customer" ? session.phone : null;
+        if (phone !== booking.customerPhone) return { ok: false, error: "Only the customer on this booking can refresh the code." };
         const code = newOtp();
         set((s) => ({
           bookings: s.bookings.map((b) =>
@@ -517,8 +531,9 @@ export const useFieldly = create<State>()(
         if (booking.status !== "SERVICE_COMPLETED") {
           return { ok: false, error: "Pay only after the work is marked done." };
         }
-        const phone = get().session?.role === "customer" ? get().session?.phone : get().customer?.phone;
-        if (phone !== booking.customerPhone) return { ok: false, error: "Only the customer can record payment." };
+        const session = get().session;
+        const phone = session?.role === "customer" ? session.phone : null;
+        if (phone !== booking.customerPhone) return { ok: false, error: "Only the customer on this booking can record payment." };
         const now = Date.now();
         const ref = `PAY-${makeId("r").slice(-6).toUpperCase()}`;
         set((s) => ({
@@ -542,6 +557,11 @@ export const useFieldly = create<State>()(
       review: (bookingId, stars, text) => {
         const booking = get().bookings.find((b) => b.id === bookingId);
         if (!booking || booking.status !== "PAID") return { ok: false, error: "Rate the job after payment." };
+        const session = get().session;
+        if (session?.role !== "customer" || session.phone !== booking.customerPhone) {
+          return { ok: false, error: "Only the customer on this booking can leave a review." };
+        }
+        if (booking.review) return { ok: false, error: "This booking already has a review." };
         if (stars < 1 || stars > 5) return { ok: false, error: "Pick 1 to 5 stars." };
         set((s) => ({
           bookings: s.bookings.map((b) =>
@@ -554,13 +574,26 @@ export const useFieldly = create<State>()(
         const body = text.trim();
         if (!body) return { ok: false, error: "Write a message first." };
         const session = get().session;
-        const from = session?.role === "provider" ? "provider" : "customer";
-        const msg = { id: makeId("msg"), from: from as "customer" | "provider", text: body, at: Date.now() };
+        if (!session) return { ok: false, error: "Sign in to send a message." };
+        const from = session.role === "provider" ? "provider" : "customer";
+
         if (kind === "request") {
+          const request = get().requests.find((r) => r.id === id);
+          if (!request) return { ok: false, error: "Request not found." };
+          const isCustomer = session.role === "customer" && session.phone === request.customerPhone;
+          const isAssignedProvider = session.role === "provider" && Boolean(session.providerId) && request.targetedProviderIds.includes(session.providerId!);
+          if (!isCustomer && !isAssignedProvider) return { ok: false, error: "Only participants in this request can send messages." };
+          const msg = { id: makeId("msg"), from: from as "customer" | "provider", text: body, at: Date.now() };
           set((s) => ({
             requests: s.requests.map((r) => (r.id === id ? { ...r, messages: [...r.messages, msg] } : r)),
           }));
         } else {
+          const booking = get().bookings.find((b) => b.id === id);
+          if (!booking) return { ok: false, error: "Booking not found." };
+          const isCustomer = session.role === "customer" && session.phone === booking.customerPhone;
+          const isAssignedProvider = session.role === "provider" && session.providerId === booking.providerId;
+          if (!isCustomer && !isAssignedProvider) return { ok: false, error: "Only participants in this booking can send messages." };
+          const msg = { id: makeId("msg"), from: from as "customer" | "provider", text: body, at: Date.now() };
           set((s) => ({
             bookings: s.bookings.map((b) => (b.id === id ? { ...b, messages: [...b.messages, msg] } : b)),
           }));

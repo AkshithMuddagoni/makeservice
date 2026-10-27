@@ -118,3 +118,41 @@
     background-position: center, 64% center;
   }
 }
+
+
+/* Responsive landing composition and keyboard-visible focus */
+.fieldly-home-hero {
+  min-height: 33rem;
+  background-position: center, right 32%;
+}
+.fieldly-home-hero h1 {
+  text-wrap: balance;
+}
+.fieldly-landing a:focus-visible,
+.fieldly-landing button:focus-visible,
+.fieldly-landing input:focus-visible,
+.fieldly-landing select:focus-visible,
+.fieldly-landing textarea:focus-visible {
+  outline: 3px solid rgba(14, 122, 79, 0.7);
+  outline-offset: 3px;
+}
+.fieldly-category-card img {
+  display: block;
+}
+@media (max-width: 767px) {
+  .fieldly-home-hero {
+    min-height: 0;
+    background-position: center, 67% center;
+  }
+  .fieldly-home-hero h1 {
+    max-width: 13ch;
+  }
+}
+@media (max-width: 390px) {
+  .fieldly-landing .fieldly-category-card > div:last-child {
+    padding: 0.65rem;
+  }
+  .fieldly-landing .fieldly-category-card > div:last-child > span:first-child > span:first-child {
+    font-size: 0.78rem;
+  }
+}
