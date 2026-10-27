@@ -219,7 +219,11 @@ function Home() {
                     loading="lazy"
                     decoding="async"
                     onError={(event) => {
-                      event.currentTarget.onerror = null;
+                      if (event.currentTarget.dataset.fallback === "true") {
+                        event.currentTarget.style.display = "none";
+                        return;
+                      }
+                      event.currentTarget.dataset.fallback = "true";
                       event.currentTarget.src = HERO_IMAGE;
                     }}
                     className="fieldly-service-photo h-full w-full object-cover transition duration-500 group-hover:scale-105"
