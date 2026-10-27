@@ -570,6 +570,27 @@ export const useFieldly = create<State>()(
     }),
     {
       name: "fieldly-preview-v1",
+      version: 2,
+      migrate: (persistedState, version) => {
+        const state = persistedState as Partial<State>;
+        const oldWarangalPresets = new Set([
+          "Hunter Road",
+          "Kazipet",
+          "Warangal Fort",
+          "Enumamula",
+          "Subedari",
+          "Narsampet Road",
+          "Parkal",
+          "Kazipet industrial",
+        ]);
+        const selectedLabel = state.site?.label.replace(/^Near\\s+/, "");
+        const oldLocalPin =
+          state.site && kmBetween(state.site, { lat: 17.978, lng: 79.575 }) < 35;
+        if (version < 2 && ((selectedLabel && oldWarangalPresets.has(selectedLabel)) || oldLocalPin)) {
+          return { ...state, site: null } as State;
+        }
+        return state as State;
+      },
       skipHydration: true,
       storage: createJSONStorage(() => (typeof window === "undefined" ? memoryStorage : localStorage)),
       partialize: (s) => ({
