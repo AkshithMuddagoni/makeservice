@@ -1,72 +1,16 @@
 import type { Provider, ServiceDef, Site } from "./types";
 
-export const CITY_CENTER = { lat: 17.978, lng: 79.575 };
+export const CITY_CENTER = { lat: 22.9734, lng: 78.6569 };
 
 export const PRESET_SITES: Site[] = [
-  {
-    label: "Hunter Road",
-    area: "Hanamkonda",
-    city: "Warangal",
-    state: "Telangana",
-    lat: 17.9984,
-    lng: 79.5528,
-  },
-  {
-    label: "Kazipet",
-    area: "Railway colony",
-    city: "Warangal",
-    state: "Telangana",
-    lat: 17.9724,
-    lng: 79.5033,
-  },
-  {
-    label: "Warangal Fort",
-    area: "Fort Road",
-    city: "Warangal",
-    state: "Telangana",
-    lat: 17.9576,
-    lng: 79.6147,
-  },
-  {
-    label: "Enumamula",
-    area: "Agriculture market",
-    city: "Warangal",
-    state: "Telangana",
-    lat: 17.9918,
-    lng: 79.6094,
-  },
-  {
-    label: "Subedari",
-    area: "Hanamkonda",
-    city: "Warangal",
-    state: "Telangana",
-    lat: 18.0012,
-    lng: 79.5448,
-  },
-  {
-    label: "Narsampet Road",
-    area: "Towards Narsampet",
-    city: "Warangal",
-    state: "Telangana",
-    lat: 17.9455,
-    lng: 79.668,
-  },
-  {
-    label: "Parkal",
-    area: "Parkal town",
-    city: "Hanamkonda",
-    state: "Telangana",
-    lat: 18.1965,
-    lng: 79.7094,
-  },
-  {
-    label: "Kazipet industrial",
-    area: "Industrial estate",
-    city: "Warangal",
-    state: "Telangana",
-    lat: 17.9805,
-    lng: 79.4905,
-  },
+  { label: "Hyderabad", area: "Telangana", city: "Hyderabad", state: "Telangana", lat: 17.385, lng: 78.4867 },
+  { label: "Bengaluru", area: "Karnataka", city: "Bengaluru", state: "Karnataka", lat: 12.9716, lng: 77.5946 },
+  { label: "Chennai", area: "Tamil Nadu", city: "Chennai", state: "Tamil Nadu", lat: 13.0827, lng: 80.2707 },
+  { label: "Mumbai", area: "Maharashtra", city: "Mumbai", state: "Maharashtra", lat: 19.076, lng: 72.8777 },
+  { label: "Delhi", area: "Delhi", city: "Delhi", state: "Delhi", lat: 28.6139, lng: 77.209 },
+  { label: "Pune", area: "Maharashtra", city: "Pune", state: "Maharashtra", lat: 18.5204, lng: 73.8567 },
+  { label: "Ahmedabad", area: "Gujarat", city: "Ahmedabad", state: "Gujarat", lat: 23.0225, lng: 72.5714 },
+  { label: "Kolkata", area: "West Bengal", city: "Kolkata", state: "West Bengal", lat: 22.5726, lng: 88.3639 },
 ];
 
 const access = {

@@ -9,7 +9,24 @@ import type { Site } from "@/lib/fieldly/types";
 import { Button } from "@/components/ui/button";
 import { MapCanvas } from "./map-canvas";
 
-type Hit = { label: string; area: string; lat: number; lng: number };
+type Hit = { label: string; area: string; city: string; state: string; lat: number; lng: number };
+type SearchResult = {
+  display_name: string;
+  lat: string;
+  lon: string;
+  address?: {
+    city?: string;
+    town?: string;
+    village?: string;
+    municipality?: string;
+    county?: string;
+    city_district?: string;
+    state?: string;
+    suburb?: string;
+    neighbourhood?: string;
+    road?: string;
+  };
+};
 
 export function SitePicker({
   onPick,
@@ -41,10 +58,10 @@ export function SitePicker({
       .sort((a, b) => a.km - b.km)[0];
     const close = near && near.km < 2.5 ? near.s : null;
     choose({
-      label: close ? `Near ${close.label}` : "Dropped pin",
-      area: close?.area ?? `${lat.toFixed(3)}, ${lng.toFixed(3)}`,
-      city: close?.city ?? "Warangal",
-      state: "Telangana",
+      label: close ? `Near ${close.label}` : "Map pin",
+      area: close?.area ?? "Selected work site",
+      city: close?.city ?? "Selected location",
+      state: close?.state ?? "India",
       lat,
       lng,
     });
@@ -59,17 +76,31 @@ export function SitePicker({
     setBusy(true);
     try {
       const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=in&q=${encodeURIComponent(query)}`,
+        `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&countrycodes=in&q=${encodeURIComponent(query)}`,
         { headers: { Accept: "application/json" } },
       );
       if (!res.ok) throw new Error("search failed");
-      const data = (await res.json()) as { display_name: string; lat: string; lon: string }[];
+      const data = (await res.json()) as SearchResult[];
       setHits(
         data.map((row) => {
-          const [label, ...rest] = row.display_name.split(",");
+          const address = row.address ?? {};
+          const fallback = row.display_name.split(",").map((part) => part.trim()).filter(Boolean);
+          const city =
+            address.city ??
+            address.town ??
+            address.village ??
+            address.municipality ??
+            address.county ??
+            address.city_district ??
+            fallback[0] ??
+            "Selected location";
+          const label = address.neighbourhood ?? address.suburb ?? address.road ?? city;
+          const area = address.suburb ?? address.neighbourhood ?? address.city_district ?? city;
           return {
             label: label.trim(),
-            area: rest.slice(0, 2).join(",").trim(),
+            area: area.trim(),
+            city: city.trim(),
+            state: address.state?.trim() || "India",
             lat: Number(row.lat),
             lng: Number(row.lon),
           };
@@ -146,8 +177,8 @@ export function SitePicker({
                 choose({
                   label: hit.label,
                   area: hit.area,
-                  city: hit.label,
-                  state: "India",
+                  city: hit.city,
+                  state: hit.state,
                   lat: hit.lat,
                   lng: hit.lng,
                 })
@@ -183,12 +214,12 @@ export function SitePicker({
       <div className="h-64">
         <MapCanvas
           center={center}
-          zoom={11}
+          zoom={pin ? 11 : 4}
           onPick={fromPin}
           markers={
             pin
               ? [{ id: "pin", lat: pin.lat, lng: pin.lng, label: "Site", kind: "site" }]
-              : presets.slice(0, 4).map((s) => ({
+              : presets.map((s) => ({
                   id: s.label,
                   lat: s.lat,
                   lng: s.lng,
