@@ -52,7 +52,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-line bg-card/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
           <Link to="/" className="flex items-center gap-2 font-display text-xl font-bold tracking-tight">
-            <span className="grid size-9 place-items-center rounded-full bg-field text-white shadow-sm"><Sprout className="size-5" aria-hidden /></span>
+            <span className="grid size-9 place-items-center rounded-xl bg-white text-field"><Sprout className="size-6" aria-hidden /></span>
             Fieldly
           </Link>
           <nav className="hidden items-center gap-1">
