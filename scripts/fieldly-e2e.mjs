@@ -198,7 +198,7 @@ async function testDesktopGpsJourney() {
     await assertNoHorizontalOverflow(page, "desktop landing/dialog");
     await dialog.getByRole("tab", { name: /Use my location/ }).click();
     await dialog.getByRole("button", { name: /Use my current location/ }).click();
-    await dialog.getByLabel(/Exact work-site address/).waitFor();
+    await page.getByText("Address details found. Review them before confirming.").waitFor({ timeout: 20_000 });
     await dialog.getByRole("button", { name: /Confirm this location and find services/ }).click();
     await page.getByRole("heading", { name: "Choose a service" }).waitFor();
     await assertNoHorizontalOverflow(page, "desktop marketplace");
