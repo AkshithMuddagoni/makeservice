@@ -218,8 +218,20 @@ export function SitePicker({
       toast.error("Enter a valid 6-digit Indian PIN code.");
       return;
     }
+
+    if (method === "manual") {
+      const addressQuery = [fields.address, fields.city, fields.district, fields.state, fields.pincode]
+        .filter(Boolean)
+        .join(", ");
+      setQuery(addressQuery);
+      setMethod("map");
+      toast.message("Address saved for this step. Select the exact work-site pin on the map.");
+      void searchPlaces(addressQuery);
+      return;
+    }
+
     if (!pin) {
-      toast.error("Set the exact work-site pin using Map or Use my location before continuing.");
+      toast.error("Set the exact work-site pin using the map before continuing.");
       setMethod("map");
       return;
     }
@@ -282,6 +294,7 @@ export function SitePicker({
                 const addressQuery = [fields.address, fields.city, fields.district, fields.state, fields.pincode].filter(Boolean).join(", ");
                 setQuery(addressQuery);
                 setMethod("map");
+                void searchPlaces(addressQuery);
               }}
               className="mt-2 inline-flex items-center gap-1 text-sm font-bold text-field hover:underline"
             >
@@ -487,7 +500,7 @@ export function SitePicker({
         </div>
 
         <Button type="submit" variant="primary" className="h-12 w-full text-base" disabled={busy || gpsBusy}>
-          {t(lang, "location_confirm_btn")}
+          {method === "manual" ? t(lang, "location_continue_map") : t(lang, "location_confirm_map")}
           <Navigation className="ml-2 size-4" />
         </Button>
         <p className="flex items-start gap-2 text-xs leading-5 text-muted">
