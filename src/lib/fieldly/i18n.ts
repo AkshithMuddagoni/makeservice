@@ -90,6 +90,8 @@ const en: Record<string, string> = {
   location_pin_confirmed: "Exact work-site pin selected",
   location_pin_required: "A work-site map pin is required",
   location_pin_help: "Place the pin at the actual job location, not just the centre of the city. You can move the pin to adjust it.",
+  location_continue_map: "Continue to map",
+  location_confirm_map: "Confirm this location and find services",
   location_confirm_btn: "Confirm location and find services",
   location_privacy_note: "Your location is used to estimate provider distance. In this preview, the selected address is saved in this browser.",
 };
@@ -184,6 +186,8 @@ const te: Record<string, string> = {
   location_pin_confirmed: "పని స్థలానికి ఖచ్చితమైన పిన్ ఎంచుకున్నారు",
   location_pin_required: "పని స్థలానికి మ్యాప్ పిన్ అవసరం",
   location_pin_help: "నగరం మధ్యలో కాకుండా నిజంగా పని జరిగే చోట పిన్ పెట్టండి.",
+  location_continue_map: "మ్యాప్‌కు కొనసాగండి",
+  location_confirm_map: "ఈ లొకేషన్‌ను నిర్ధారించి సేవలు చూడండి",
   location_confirm_btn: "లొకేషన్ నిర్ధారించి సేవలు చూడండి",
   location_privacy_note: "దూరాన్ని అంచనా వేయడానికి లొకేషన్ ఉపయోగిస్తాం. ఈ ప్రివ్యూలో చిరునామా ఈ బ్రౌజర్‌లో సేవ్ అవుతుంది.",
 };
@@ -278,6 +282,8 @@ const hi: Record<string, string> = {
   location_pin_confirmed: "कार्यस्थल का सटीक पिन चुना गया",
   location_pin_required: "कार्यस्थल का मैप पिन ज़रूरी है",
   location_pin_help: "पिन वहीं रखें जहाँ काम होगा, सिर्फ शहर के बीच में नहीं।",
+  location_continue_map: "मैप पर आगे बढ़ें",
+  location_confirm_map: "लोकेशन की पुष्टि करें और सेवाएँ देखें",
   location_confirm_btn: "लोकेशन पुष्टि करें और सेवाएँ देखें",
   location_privacy_note: "लोकेशन का इस्तेमाल दूरी के अनुमान के लिए होगा। इस प्रिव्यू में पता इसी ब्राउज़र में सेव है।",
 };
