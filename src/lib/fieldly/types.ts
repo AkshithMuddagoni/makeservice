@@ -15,6 +15,10 @@ export type Site = {
   area: string
   city: string
   state: string
+  district?: string
+  pincode?: string
+  address?: string
+  landmark?: string
   lat: number
   lng: number
 };
