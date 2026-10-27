@@ -73,7 +73,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={() => setSiteOpen(true)}
-              className="inline-flex h-10 min-w-0 max-w-[142px] items-center gap-1.5 rounded-xl border border-line bg-white px-2.5 text-left text-xs font-bold shadow-sm transition hover:border-field sm:h-11 sm:max-w-52 sm:gap-2 sm:px-3"
+              className="inline-flex h-10 min-w-0 max-w-[142px] items-center gap-1.5 rounded-xl border border-line bg-white px-2.5 text-left text-xs font-bold shadow-sm transition hover:border-field max-[380px]:max-w-[92px] max-[380px]:px-1.5 sm:h-11 sm:max-w-52 sm:gap-2 sm:px-3"
             >
               <MapPin className="size-4 shrink-0 text-field" />
               <span className="truncate">{site ? site.city : "India"}</span>
@@ -93,7 +93,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </label>
             <Link
               to="/account"
-              className="grid h-11 place-items-center rounded-xl bg-ink px-3 text-sm font-semibold text-on-ink"
+              className="grid h-11 place-items-center rounded-xl bg-ink px-3 text-sm font-semibold text-on-ink max-[380px]:hidden"
             >
               {session ? session.name.split(" ")[0] : "Login"}
             </Link>
@@ -119,6 +119,9 @@ export function Shell({ children }: { children: ReactNode }) {
               <MapPin className="size-4 text-field" />
               {site ? site.label : t(lang, "your_site")}
             </button>
+            <Link to="/account" className="flex h-11 items-center text-sm font-semibold">
+              {session ? session.name : "Login"}
+            </Link>
             {links.map((l) => (
               <Link key={l.to} to={l.to} className="flex h-11 items-center text-sm font-semibold">
                 {l.label}
