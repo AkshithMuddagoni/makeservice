@@ -31,7 +31,7 @@ const HERO_IMAGE =
 
 const SERVICE_PHOTOS: Record<string, { src: string; alt: string; title: string }> = {
   borewell: {
-    src: "https://images.pexels.com/photos/29470002/pexels-photo-29470002.jpeg?auto=compress&cs=tinysrgb&w=900",
+    src: "https://images.pexels.com/photos/7910062/pexels-photo-7910062.jpeg?auto=compress&cs=tinysrgb&w=900",
     alt: "Heavy-duty drilling rig at an Indian construction site",
     title: "Borewell Services",
   },
@@ -41,12 +41,12 @@ const SERVICE_PHOTOS: Record<string, { src: string; alt: string; title: string }
     title: "JCB & Excavators",
   },
   crane: {
-    src: "https://images.pexels.com/photos/35693058/pexels-photo-35693058.jpeg?auto=compress&cs=tinysrgb&w=900",
+    src: "https://images.pexels.com/photos/29502220/pexels-photo-29502220.jpeg?auto=compress&cs=tinysrgb&w=900",
     alt: "Mobile construction crane displayed outdoors",
     title: "Cranes",
   },
   tractor: {
-    src: "https://images.pexels.com/photos/34861587/pexels-photo-34861587.jpeg?auto=compress&cs=tinysrgb&w=900",
+    src: "https://images.pexels.com/photos/12875208/pexels-photo-12875208.jpeg?auto=compress&cs=tinysrgb&w=900",
     alt: "Red tractor working in a green paddy field in India",
     title: "Tractors",
   },
