@@ -61,7 +61,7 @@ Never put a Supabase secret/service-role key or a database password in frontend 
 
 ## Security response required
 
-A database credential was previously committed in this repository's README. That credential must be treated as compromised: rotate the database password/credential at the provider, update any legitimate deployment using it, and review Git history. Removing a credential from the latest README does not remove it from older commits. Do not restore it to this file or commit a real `.env` file.
+A database credential was previously committed in this repository's README, and an upstream preview OAuth credential was hard-coded in source. Treat exposed credentials as compromised: rotate/revoke them with the service owner, update any legitimate deployment using them, and review Git history. Removing a secret from the latest file does not remove it from older commits. The preview OAuth code now reads optional values from server environment variables instead of embedding a secret. Do not restore credentials to source files or commit a real `.env` file.
 
 ## Technology stack
 

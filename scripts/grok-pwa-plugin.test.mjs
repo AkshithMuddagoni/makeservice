@@ -484,14 +484,14 @@ test("strips install params from the app link", () => {
 });
 
 test("names the install page from host slug", () => {
-  assert.equal(appNameFromHost("localhost:8080"), "Grok App");
-  assert.equal(appNameFromHost("172.17.154.217:8080"), "Grok App");
+  assert.equal(appNameFromHost("localhost:8080"), "Fieldly");
+  assert.equal(appNameFromHost("172.17.154.217:8080"), "Fieldly");
   assert.equal(appNameFromHost("wild-race.grok.me"), "Wild Race");
 });
 
 test("rejects hosts that are not plain slugs", () => {
-  assert.equal(appNameFromHost("<script>alert(1)</script>"), "Grok App");
-  assert.equal(appNameFromHost('"><img src=x onerror=1>.grok.me'), "Grok App");
+  assert.equal(appNameFromHost("<script>alert(1)</script>"), "Fieldly");
+  assert.equal(appNameFromHost('"><img src=x onerror=1>.grok.me'), "Fieldly");
 });
 
 test("renders install page markup", () => {
@@ -512,7 +512,7 @@ test("renders the manifest with the per-app name", () => {
   const manifest = JSON.parse(renderWebManifest("wild-race.grok.me"));
   assert.equal(manifest.name, "Wild Race");
   assert.equal(manifest.short_name, "Wild Race");
-  assert.equal(manifest.icons[0].src, "/__grok/icon-180.png");
+  assert.equal(manifest.icons[0].src, "/fieldly-icon.png");
 });
 
 // Tripwires: the deployed-app path only works if Nitro scans server/ — an
@@ -539,3 +539,13 @@ test("vite plugin bakes og identity as a virtual module", () => {
   assert.match(plugin, /snapshotOgIdentity/);
 });
 
+
+
+test("uses Fieldly branding on ordinary production hosts", () => {
+  const manifest = JSON.parse(renderWebManifest("makeservice.onrender.com"));
+  assert.equal(manifest.name, "Fieldly");
+  assert.equal(manifest.short_name, "Fieldly");
+  assert.equal(manifest.background_color, "#ffffff");
+  assert.equal(manifest.theme_color, "#14283a");
+  assert.equal(manifest.icons[0].src, "/fieldly-icon.png");
+});
