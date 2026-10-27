@@ -2,7 +2,6 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { MapPin, Menu, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Toaster } from "sonner";
-import { PRESET_SITES } from "@/lib/fieldly/catalog";
 import { t } from "@/lib/fieldly/i18n";
 import { useFieldly } from "@/lib/fieldly/store";
 import type { Lang } from "@/lib/fieldly/types";
@@ -173,7 +172,6 @@ export function Shell({ children }: { children: ReactNode }) {
               </button>
             </div>
             <SitePicker
-              presets={PRESET_SITES}
               onPick={(next) => {
                 setSite(next);
                 setSiteOpen(false);
