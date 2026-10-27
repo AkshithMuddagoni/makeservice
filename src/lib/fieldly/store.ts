@@ -583,7 +583,7 @@ export const useFieldly = create<State>()(
           "Parkal",
           "Kazipet industrial",
         ]);
-        const selectedLabel = state.site?.label.replace(/^Near\\s+/, "");
+        const selectedLabel = state.site?.label.replace(/^Near\s+/, "");
         const oldLocalPin =
           state.site && kmBetween(state.site, { lat: 17.978, lng: 79.575 }) < 35;
         if (version < 2 && ((selectedLabel && oldWarangalPresets.has(selectedLabel)) || oldLocalPin)) {
