@@ -1,68 +1,68 @@
 # Fieldly — local service marketplace
 
-A responsive service-booking marketplace for borewell drilling, JCB/excavator hire, cranes, tractors, water tankers, tippers and related site services. This package is based on the supplied project source.
+Fieldly is a responsive marketplace prototype for discovering local equipment and site services: borewell drilling, JCB/excavator hire, cranes, tractors, water tankers, tippers, and related work.
+
+**Live preview:** https://makeservice.onrender.com/
+
+## Current status: prototype, not ready for real bookings
+
+The repository contains the user interface and prototype workflows. The main Fieldly marketplace store in `src/lib/fieldly/store.ts` persists sessions, provider changes, requests, quotes, bookings, messages, and reviews in browser `localStorage`. This is per-browser demo state, not a shared marketplace database.
+
+The sign-in page uses a fixed preview code. Provider records, ratings, prices, reviews, and verification flags include seeded demo data. Payment confirmation is also a local preview action; it does not move money. Do not use these flows to accept real customers, payment, identity documents, or sensitive information.
 
 ## Requirements
-- Node.js 22 LTS (Node 20.19+ may work, but Node 22 is recommended)
+
+- Node.js 22
 - npm
 - VS Code (recommended)
 
 ## Run locally
-1. Extract the ZIP.
-2. Open the extracted `fieldly-marketplace` folder in VS Code.
-3. Open Terminal → New Terminal.
-4. Run:
+
+1. Clone or download this repository.
+2. Open the repository root in VS Code.
+3. Run:
 
    ```bash
    npm install
    npm run dev
    ```
 
-5. Open the local URL printed by Vite (normally `http://localhost:8080`).
+4. Open the local URL printed by the terminal (normally `http://localhost:8080`).
 
-No API keys are required for the local demo. The app includes sample service providers and locations around Warangal/Hanamkonda. Customer/provider sessions, requests, quotes and bookings currently use browser-local persisted state, so they are a functional prototype and are not shared between different browsers/devices.
-
-## Production deployment on Render
-
-The repository includes `render.yaml` as a starting point for a Render Node web service.
-
-1. Push this folder to a GitHub repository.
-2. In Render, choose **New → Blueprint** and select the repository, or create a Node web service manually.
-3. Use the build command `npm install && npm run build`.
-4. Use the start command `npm run start`.
-5. Set `NODE_VERSION` to `22` if Render does not select Node 22 automatically.
-
-Do not add a `DATABASE_URL` until you have configured the database integration and applied the schema. The current UI's booking state is browser-local and will not become a shared database simply by adding a connection string.
-
-## Supabase
-
-Supabase is a good PostgreSQL/auth/storage choice for the production version. The `supabase/schema.sql` file is a starter schema for profiles, provider listings, bookings, quotes and reviews. To connect it for real production use, the frontend/store actions must be migrated from local browser persistence to authenticated Supabase queries, and Row Level Security policies must be tested. Never put a Supabase `service_role` key in frontend code; only the project URL and publishable/anon key may be used in a browser, with RLS enabled.
-
-## Important production checklist
-- Replace sample provider listings and sample prices with verified real data.
-- Integrate Supabase Auth and database-backed bookings/quotes.
-- Configure phone OTP through a supported Supabase Auth SMS provider (may have provider charges).
-- Configure maps/geocoding and review map-provider terms and quotas.
-- Add server-side authorization, rate limits, audit logs and booking conflict handling.
-- Add a real payment provider only after business/legal requirements are confirmed.
-- Test RLS with separate customer/provider accounts before accepting real users.
-
-## Useful commands
+## Build and checks
 
 ```bash
-npm run dev       # local development server
-npm run build     # production build
-npm run start     # serve production build
-npm run typecheck # TypeScript check
-npm test          # project tests
-```
+npm run build
+npm run typecheck
+npm test
+npm run lint
+``
 
-## Stack
-React 19, TanStack Start/Router, Vite, TypeScript, Tailwind CSS 4, Lucide icons, MapLibre GL, Zustand. Render can host the Node application; Supabase can provide PostgreSQL, authentication and file storage once the app data layer is connected.
+Run these checks locally and review the output before deploying changes. A successful GitHub push or a live Render URL is not, by itself, evidence that the production workflows are safe.
 
+## Render
 
-hptMxYDafgqcA4A6
+The repository includes `render.yaml` as a starting point for a Render Node web service. It specifies Node.js 22, `npm install && npm run build`, and `npm run start`.
 
-postgresql://postgres.tmtfrxlqujrzjxyyzwpp:hptMxYDafgqcA4A6 @aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres
+Configure production secrets only in Render's Environment settings. Do not commit database URLs, passwords, OAuth secrets, or other credentials to GitHub.
 
-https://makeservice.onrender.com/
+## Supabase integration status
+
+`supabase/schema.sql` is a starter schema, not a completed integration. The current Fieldly UI/store does not use the Supabase JavaScript client for marketplace records, and adding a URL or database connection string alone will not make bookings shared across devices. The existing database adapter and migration script serve a separate server-side database/auth setup and do not automatically apply `supabase/schema.sql`.
+
+Before enabling a real backend:
+1. Select and implement one production authentication system.
+2. Review and replace the starter database policies; test every allowed and denied action with customer, provider, and administrator identities.
+3. Move request, quote, booking, message, provider, and review writes to authenticated server/database operations.
+4. Add verified provider onboarding, secure document storage, notifications, payment-provider verification, monitoring, and backups.
+5. Add automated workflow tests and verify the deployment before launch.
+
+Never put a Supabase secret/service-role key or a database password in frontend code. Browser code may use a publishable/anon key only with appropriately secured and tested RLS policies.
+
+## Security response required
+
+A database credential was previously committed in this repository's README. That credential must be treated as compromised: rotate the database password/credential at the provider, update any legitimate deployment using it, and review Git history. Removing a credential from the latest README does not remove it from older commits. Do not restore it to this file or commit a real `.env` file.
+
+## Technology stack
+
+React 19, TanStack Start/Router, Vite, TypeScript, Tailwind CSS 4, Lucide, MapLibre GL, Zustand, Node.js, and Render. Supabase/PostgreSQL remains planned for the production marketplace and is not yet connected to the current Fieldly business workflows.
