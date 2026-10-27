@@ -111,21 +111,10 @@
   background-size: cover;
 }
 .fieldly-service-photo {
-  background-image: url("/assets/fieldly-services-sprite.webp");
-  background-repeat: no-repeat;
-  background-size: 300% 200%;
-  transition: filter 250ms ease;
-}
-.fieldly-category-card:hover .fieldly-service-photo {
-  filter: saturate(1.08);
+  transform: scale(1.001);
 }
 @media (max-width: 767px) {
   .fieldly-home-hero {
     background-position: center, 64% center;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .fieldly-service-photo {
-    transition: none;
   }
 }
