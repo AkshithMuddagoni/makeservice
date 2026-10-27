@@ -9,7 +9,7 @@ import {
   Search,
   ShieldCheck,
 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { CITY_CENTER } from "@/lib/fieldly/catalog";
 import { t } from "@/lib/fieldly/i18n";
@@ -64,6 +64,26 @@ const EMPTY_FIELDS: AddressFields = {
   state: "", district: "", city: "", pincode: "", address: "", landmark: "",
 };
 
+type LgdChoice = { code: string; name: string };
+type LgdEnvelope = { success: boolean; data?: LgdChoice[] };
+
+const LGD_API = "https://india-lgd-index-api.vercel.app/v1";
+
+function normalizePlaceName(value: string) {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function matchesStateName(apiName: string, selectedName: string) {
+  const api = normalizePlaceName(apiName);
+  const selected = normalizePlaceName(selectedName);
+  if (api === selected) return true;
+  if (selected === "delhi") return api.includes("delhi");
+  if (selected === "dadraandnagarhavelianddamananddiu") return api.includes("dadr") && api.includes("daman");
+  return false;
+}
+
+
+
 function fieldsFromResult(result: SearchResult): AddressFields {
   const a = result.address ?? {};
   const city = a.city ?? a.town ?? a.village ?? a.municipality ?? a.hamlet ?? a.city_district ?? a.suburb ?? "";
@@ -105,11 +125,78 @@ export function SitePicker({
   const [hits, setHits] = useState<SearchHit[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [gpsBusy, setGpsBusy] = useState(false);
+  const [lgdStates, setLgdStates] = useState<LgdChoice[]>([]);
+  const [districtOptions, setDistrictOptions] = useState<LgdChoice[]>([]);
+  const [districtsLoading, setDistrictsLoading] = useState(false);
+  const [districtCode, setDistrictCode] = useState("");
   const [pin, setPin] = useState<{ lat: number; lng: number } | null>(() =>
     currentSite ? { lat: currentSite.lat, lng: currentSite.lng } : null,
   );
 
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch(LGD_API + "/states", { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("State directory unavailable");
+        const payload = (await response.json()) as LgdEnvelope;
+        if (!payload.success || !Array.isArray(payload.data)) throw new Error("Invalid state directory response");
+        setLgdStates(payload.data);
+      })
+      .catch(() => {
+        // State/UT selection remains available from the local list if the directory is offline.
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const selectedState = lgdStates.find((row) => matchesStateName(row.name, fields.state));
+    if (!selectedState) {
+      setDistrictOptions([]);
+      setDistrictCode("");
+      setDistrictsLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setDistrictsLoading(true);
+    void fetch(LGD_API + "/districts?state=" + encodeURIComponent(selectedState.code), { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("District directory unavailable");
+        const payload = (await response.json()) as LgdEnvelope;
+        if (!payload.success || !Array.isArray(payload.data)) throw new Error("Invalid district directory response");
+        const options = [...payload.data].sort((a, b) => a.name.localeCompare(b.name));
+        setDistrictOptions(options);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setDistrictOptions([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDistrictsLoading(false);
+      });
+    return () => controller.abort();
+  }, [fields.state, lgdStates]);
+
+  useEffect(() => {
+    const normalized = normalizePlaceName(fields.district);
+    const match = districtOptions.find((row) => normalizePlaceName(row.name) === normalized);
+    setDistrictCode(match?.code ?? "");
+    if (match && match.name !== fields.district) {
+      setFields((previous) => ({ ...previous, district: match.name }));
+    }
+  }, [fields.district, districtOptions]);
+
+
   function patchField(key: keyof AddressFields, value: string) {
+    if (key === "state") {
+      setDistrictCode("");
+      setDistrictOptions([]);
+      setFields((previous) => previous.state === value
+        ? previous
+        : { ...previous, state: value, district: "", city: "", pincode: "", address: "" });
+      return;
+    }
+    if (key === "district" && value !== fields.district) {
+      setDistrictCode("");
+    }
     setFields((previous) => ({ ...previous, [key]: value }));
   }
 
@@ -421,14 +508,39 @@ export function SitePicker({
           </label>
           <label className="grid gap-1.5 text-sm font-semibold">
             {t(lang, "location_district")} <span className="text-field">*</span>
-            <input
-              value={fields.district}
-              onChange={(event) => patchField("district", event.target.value)}
-              placeholder={t(lang, "location_district_placeholder")}
-              required
-              autoComplete="address-level2"
-              className="h-12 w-full rounded-xl border border-line bg-card px-3 font-normal outline-none focus:border-field focus:ring-2 focus:ring-field/15"
-            />
+            {districtOptions.length > 0 ? (
+              <select
+                value={districtCode}
+                onChange={(event) => {
+                  const selected = districtOptions.find((row) => row.code === event.target.value);
+                  setDistrictCode(event.target.value);
+                  setFields((previous) => ({ ...previous, district: selected?.name ?? "", city: "" }));
+                }}
+                required
+                disabled={districtsLoading}
+                autoComplete="address-level2"
+                className="h-12 w-full rounded-xl border border-line bg-card px-3 font-normal outline-none focus:border-field focus:ring-2 focus:ring-field/15 disabled:opacity-60"
+              >
+                <option value="">{districtsLoading ? "Loading districts…" : "Select district"}</option>
+                {districtOptions.map((district) => (
+                  <option key={district.code} value={district.code}>{district.name}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={fields.district}
+                onChange={(event) => patchField("district", event.target.value)}
+                placeholder={districtsLoading ? "Loading district list…" : t(lang, "location_district_placeholder")}
+                required
+                autoComplete="address-level2"
+                className="h-12 w-full rounded-xl border border-line bg-card px-3 font-normal outline-none focus:border-field focus:ring-2 focus:ring-field/15"
+              />
+            )}
+            <span className="text-[11px] font-normal leading-4 text-muted">
+              {districtOptions.length > 0
+                ? "District options use Government of India LGD data via a community mirror."
+                : "If the district list is unavailable, enter your district manually."}
+            </span>
           </label>
           <label className="grid gap-1.5 text-sm font-semibold">
             {t(lang, "location_city")} <span className="text-field">*</span>
@@ -506,6 +618,16 @@ export function SitePicker({
         <p className="flex items-start gap-2 text-xs leading-5 text-muted">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-field" />
           {t(lang, "location_privacy_note")}
+        </p>
+        <p className="text-center text-[11px] leading-4 text-muted">
+          Administrative directory:{" "}
+          <a href="https://panchayat.gov.in/en/lgd/" target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-2">
+            Government of India LGD
+          </a>
+          {" "}·{" "}
+          <a href="https://india-lgd-index-api.vercel.app/" target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-2">
+            data mirror
+          </a>
         </p>
       </form>
     </div>
