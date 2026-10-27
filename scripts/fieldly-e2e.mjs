@@ -132,6 +132,35 @@ async function openLocationDialog(page) {
   return dialog;
 }
 
+async function testResponsiveViewportMatrix() {
+  const widths = [320, 360, 375, 390, 414, 640, 768, 820, 1024, 1280, 1440, 1920];
+  const context = await browser.newContext({ viewport: { width: 390, height: 900 } });
+  const page = await context.newPage();
+  await mockExternalServices(page);
+
+  try {
+    await page.goto(BASE_URL + "/", { waitUntil: "networkidle" });
+    await page.getByRole("heading", { name: /Construction & Field Equipment Services/i }).waitFor();
+
+    for (const width of widths) {
+      const height = width < 600 ? 844 : width < 1024 ? 900 : 1000;
+      await page.setViewportSize({ width, height });
+      await assertNoHorizontalOverflow(page, "landing at " + width + "px");
+      const locationButton = page.getByRole("button", { name: /Enter location/ });
+      await locationButton.click();
+      const dialog = page.locator('[aria-labelledby="fieldly-location-title"]');
+      await dialog.waitFor({ state: "visible" });
+      await assertNoHorizontalOverflow(page, "location dialog at " + width + "px");
+      await page.getByRole("button", { name: "Close", exact: true }).click();
+      await dialog.waitFor({ state: "hidden" });
+      await assertNoHorizontalOverflow(page, "landing after closing dialog at " + width + "px");
+      log("responsive viewport passed: " + width + "px × " + height + "px");
+    }
+  } finally {
+    await context.close();
+  }
+}
+
 async function confirmManualWorkSite(dialog) {
   await dialog.getByRole("tab", { name: /Manual/ }).click();
   await dialog.getByLabel(/State \/ Union Territory/).selectOption({ label: "Telangana" });
@@ -256,6 +285,7 @@ async function main() {
   try {
     await waitForServer();
     browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
+    await testResponsiveViewportMatrix();
     await testMobileCustomerJourney();
     await testDesktopGpsJourney();
     log("all browser smoke checks passed");
