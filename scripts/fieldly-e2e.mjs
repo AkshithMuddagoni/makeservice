@@ -99,7 +99,7 @@ async function assertNoHorizontalOverflow(page, label) {
 }
 
 async function openLocationDialog(page) {
-  await page.goto(BASE_URL + "/", { waitUntil: "domcontentloaded" });
+  await page.goto(BASE_URL + "/", { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: /Construction & Field Equipment Services/i }).waitFor();
   await page.getByRole("button", { name: /Enter location/ }).click();
   const locationHeading = page.locator("#fieldly-location-title");
