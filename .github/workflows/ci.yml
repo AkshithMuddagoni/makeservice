@@ -22,7 +22,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies
+      - name: Install dependencies (same install path as Render)
         run: npm install
 
       - name: Type-check
