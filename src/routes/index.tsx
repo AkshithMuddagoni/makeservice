@@ -3,6 +3,7 @@ import {
   ArrowRight,
   BadgeCheck,
   CheckCircle2,
+  Globe2,
   Clock3,
   LocateFixed,
   ListTree,
@@ -10,7 +11,6 @@ import {
   MapPinned,
   Search,
   ShieldCheck,
-  Sprout,
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -57,12 +57,17 @@ const SERVICE_PHOTOS: Record<string, { src: string; alt: string; title: string }
   },
   tipper: {
     src: "https://images.pexels.com/photos/14475776/pexels-photo-14475776.jpeg?auto=compress&cs=tinysrgb&w=900",
-    alt: "Yellow dump truck on a construction site",
+    alt: "Dump truck loaded with soil at a construction site",
     title: "Trucks & Tippers",
+  },
+  other: {
+    src: "https://images.pexels.com/photos/29502220/pexels-photo-29502220.jpeg?auto=compress&cs=tinysrgb&w=900",
+    alt: "Mixed heavy equipment available for construction and site work",
+    title: "Other Services",
   },
 };
 
-const POPULAR_SERVICE_IDS = ["borewell", "jcb", "crane", "tractor", "tanker", "tipper"];
+const POPULAR_SERVICE_IDS = ["borewell", "jcb", "crane", "tractor", "tanker", "other"];
 
 function Home() {
   const site = useFieldly((s) => s.site);
@@ -81,10 +86,10 @@ function Home() {
   ];
 
   const benefitOptions = [
-    { icon: MapPin, title: "Precise work-site pin", detail: "Choose the actual job location" },
-    { icon: BadgeCheck, title: "Clear provider details", detail: "Review listing information first" },
-    { icon: CheckCircle2, title: "Easy booking flow", detail: "Share needs and compare quotes" },
-    { icon: Clock3, title: "Better coordination", detail: "Give the operator useful site details" },
+    { icon: BadgeCheck, title: "Verified Providers", detail: "Review listing information first" },
+    { icon: Globe2, title: "Wide Coverage", detail: "Choose a work site across India" },
+    { icon: CheckCircle2, title: "Easy Booking", detail: "Share details and compare quotes" },
+    { icon: Clock3, title: "On-Time Service", detail: "Keep the job site details ready" },
   ];
 
   const featuredServices = SERVICES.filter((service) => POPULAR_SERVICE_IDS.includes(service.id));
@@ -101,13 +106,13 @@ function Home() {
             '")',
         }}
       >
-        <div className="relative mx-auto grid max-w-6xl gap-7 px-4 py-8 sm:py-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(260px,0.7fr)] lg:items-center lg:gap-10 lg:py-14">
-          <div className="max-w-2xl">
+        <div className="relative mx-auto max-w-6xl px-4 py-8 sm:py-10 lg:py-12">
+          <div className="max-w-[620px]">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/80 px-3 py-1.5 text-xs font-extrabold uppercase tracking-wide text-field shadow-sm backdrop-blur">
               <MapPin className="size-4" />
               {t(lang, "gate_kicker")}
             </div>
-            <h1 className="mt-4 max-w-2xl font-display text-4xl font-extrabold leading-[1.04] tracking-tight text-ink sm:text-5xl lg:text-6xl">
+            <h1 className="mt-4 max-w-[590px] font-display text-4xl font-extrabold leading-[1.04] tracking-tight text-ink sm:text-5xl lg:text-[3.35rem]">
               Construction &amp; Field Equipment Services{" "}
               <span className="text-field">Across India</span>
             </h1>
@@ -115,7 +120,7 @@ function Home() {
               Book borewell rigs, JCBs, cranes, tractors, water tankers and more — at your work site, quickly and easily.
             </p>
 
-            <div className="mt-6 max-w-2xl rounded-3xl border border-white/90 bg-white/95 p-4 shadow-[0_20px_55px_rgba(20,40,58,0.16)] backdrop-blur sm:p-5">
+            <div className="mt-6 max-w-[390px] rounded-3xl border border-white/90 bg-white/95 p-4 shadow-[0_20px_55px_rgba(20,40,58,0.16)] backdrop-blur sm:p-5">
               <h2 className="font-display text-xl font-extrabold tracking-tight sm:text-2xl">
                 Where is your work site?
               </h2>
@@ -157,26 +162,6 @@ function Home() {
             </div>
           </div>
 
-          <div className="hidden lg:flex lg:items-end lg:justify-end">
-            <div className="mb-1 max-w-xs rounded-3xl border border-white/60 bg-white/75 p-5 shadow-xl backdrop-blur-md">
-              <span className="grid size-12 place-items-center rounded-2xl bg-field-soft text-field">
-                <Sprout className="size-7" />
-              </span>
-              <h2 className="mt-4 font-display text-2xl font-extrabold leading-tight">
-                From farm fields to construction sites.
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-muted">
-                Set the exact work location, choose the equipment and compare the details before you book.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {["Construction", "Agriculture", "Water", "Transport"].map((item) => (
-                  <span key={item} className="rounded-full border border-line bg-white/90 px-3 py-1.5 text-xs font-bold text-ink">
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -233,6 +218,10 @@ function Home() {
                     alt={photo.alt}
                     loading="lazy"
                     decoding="async"
+                    onError={(event) => {
+                      event.currentTarget.onerror = null;
+                      event.currentTarget.src = HERO_IMAGE;
+                    }}
                     className="fieldly-service-photo h-full w-full object-cover transition duration-500 group-hover:scale-105"
                   />
                   <span className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/25 to-transparent" />
@@ -410,6 +399,10 @@ function Marketplace() {
                     alt={photo.alt}
                     loading="lazy"
                     decoding="async"
+                    onError={(event) => {
+                      event.currentTarget.onerror = null;
+                      event.currentTarget.src = HERO_IMAGE;
+                    }}
                     className="fieldly-service-photo h-full w-full object-cover transition duration-500 group-hover:scale-105"
                   />
                 </div>
