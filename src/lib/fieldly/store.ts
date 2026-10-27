@@ -413,9 +413,8 @@ export const useFieldly = create<State>()(
         }
         const session = get().session;
         if (to === "CANCELLED" || to === "DISPUTED") {
-          const customerPhone = session?.role === "customer" ? session.phone : get().customer?.phone;
-          const isCustomer = customerPhone === booking.customerPhone;
-          const isOperator = session?.providerId === booking.providerId;
+          const isCustomer = session?.role === "customer" && session.phone === booking.customerPhone;
+          const isOperator = session?.role === "provider" && session.providerId === booking.providerId;
           if (!isCustomer && !isOperator) {
             return { ok: false, error: "Only the customer or the operator on this job can do that." };
           }
@@ -427,7 +426,10 @@ export const useFieldly = create<State>()(
           to === "CANCELLED" || to === "DISPUTED"
             ? session?.name || booking.customerName
             : get().providerById(booking.providerId)?.name || "Operator";
-        if ((to === "ON_THE_WAY" || to === "ARRIVED" || to === "SERVICE_COMPLETED") && session?.providerId !== booking.providerId) {
+        if (
+          (to === "ON_THE_WAY" || to === "ARRIVED" || to === "SERVICE_COMPLETED") &&
+          (session?.role !== "provider" || session.providerId !== booking.providerId)
+        ) {
           return { ok: false, error: "Switch to this operator before moving the job." };
         }
         const now = Date.now();
@@ -452,7 +454,8 @@ export const useFieldly = create<State>()(
         const booking = get().bookings.find((b) => b.id === bookingId);
         if (!booking) return { ok: false, error: "Booking not found." };
         if (booking.status !== "ARRIVED") return { ok: false, error: "The code works only after the operator has arrived." };
-        if (get().session?.providerId !== booking.providerId) {
+        const session = get().session;
+        if (session?.role !== "provider" || session.providerId !== booking.providerId) {
           return { ok: false, error: "Only the operator on this job can enter the code." };
         }
         if (!booking.codeHash || !booking.codeExpiresAt) {
