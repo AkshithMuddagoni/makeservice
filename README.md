@@ -1,12 +1,14 @@
 # Fieldly — local service marketplace
 
-Fieldly is a responsive marketplace prototype for discovering local equipment and site services: borewell drilling, JCB/excavator hire, cranes, tractors, water tankers, tippers, and related work.
+Fieldly is a responsive marketplace prototype for discovering equipment and site services across India: borewell drilling, JCB/excavator hire, cranes, tractors, water tankers, tippers, and related work.
 
 **Live preview:** https://makeservice.onrender.com/
 
 ## Current status: prototype, not ready for real bookings
 
 The repository contains the user interface and prototype workflows. The main Fieldly marketplace store in `src/lib/fieldly/store.ts` persists sessions, provider changes, requests, quotes, bookings, messages, and reviews in browser `localStorage`. This is per-browser demo state, not a shared marketplace database.
+
+The location picker supports searches across India and quick shortcuts for major cities. The current seeded provider catalogue is still concentrated around Warangal/Hanamkonda, so other cities may show no example providers until real regional listings are connected.
 
 The sign-in page uses a fixed preview code. Provider records, ratings, prices, reviews, and verification flags include seeded demo data. Payment confirmation is also a local preview action; it does not move money. Do not use these flows to accept real customers, payment, identity documents, or sensitive information.
 
