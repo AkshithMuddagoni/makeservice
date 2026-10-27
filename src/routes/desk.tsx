@@ -103,7 +103,7 @@ function DeskHome({ providerId }: { providerId: string }) {
   const openJobs = useMemo(() => {
     if (!provider) return [];
     return requests
-      .filter((r) => r.status === "open" && provider.services.includes(r.serviceId))
+      .filter((r) => r.status === "open" && r.targetedProviderIds.includes(provider.id) && provider.services.includes(r.serviceId))
       .map((r) => ({ r, km: kmBetween(provider, r.site) }))
       .filter((row) => {
         const service = getService(row.r.serviceId);
