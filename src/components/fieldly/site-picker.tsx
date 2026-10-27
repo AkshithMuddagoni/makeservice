@@ -73,6 +73,10 @@ function normalizePlaceName(value: string) {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function formatDirectoryName(value: string) {
+  return value.toLowerCase().replace(/(^|[\\s-])([a-z])/g, (_match, separator: string, letter: string) => separator + letter.toUpperCase());
+}
+
 function matchesStateName(apiName: string, selectedName: string) {
   const api = normalizePlaceName(apiName);
   const selected = normalizePlaceName(selectedName);
@@ -163,7 +167,9 @@ export function SitePicker({
         if (!response.ok) throw new Error("District directory unavailable");
         const payload = (await response.json()) as LgdEnvelope;
         if (!payload.success || !Array.isArray(payload.data)) throw new Error("Invalid district directory response");
-        const options = [...payload.data].sort((a, b) => a.name.localeCompare(b.name));
+        const options = payload.data
+          .map((row) => ({ ...row, name: formatDirectoryName(row.name) }))
+          .sort((a, b) => a.name.localeCompare(b.name));
         setDistrictOptions(options);
       })
       .catch(() => {
