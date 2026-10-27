@@ -28,7 +28,7 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
-      - name: Run tests
+      - name: Run automated tests
         run: npm test
 
       - name: Build production bundle
