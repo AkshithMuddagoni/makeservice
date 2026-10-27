@@ -363,7 +363,7 @@ function Marketplace() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={t(lang, "search_ph")}
-                className="w-full bg-transparent text-base outline-none"
+                className="min-w-0 w-full bg-transparent text-base outline-none"
               />
             </label>
             <div className="mt-4 flex flex-wrap gap-2 text-sm">
