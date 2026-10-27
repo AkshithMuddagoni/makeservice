@@ -199,7 +199,7 @@ async function testMobileCustomerJourney() {
     await page.getByRole("button", { name: "Accept quote", exact: true }).waitFor();
     await page.getByRole("button", { name: "Accept quote", exact: true }).click();
     await page.getByText("FLD-1041", { exact: true }).waitFor();
-    await page.getByText("Confirmed", { exact: true }).waitFor();
+    await page.getByRole("heading", { name: "Confirmed", exact: true }).waitFor();
     await assertNoHorizontalOverflow(page, "mobile booking confirmation");
     assert.deepEqual(pageErrors, [], "mobile journey should have no uncaught page errors");
     log("mobile: location → service form → provider discovery → login → quote acceptance → booking passed");
