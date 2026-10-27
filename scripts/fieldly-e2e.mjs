@@ -199,7 +199,13 @@ async function testDesktopGpsJourney() {
     await dialog.getByRole("tab", { name: /Use my location/ }).click();
     await dialog.getByRole("button", { name: /Use my current location/ }).click();
     await page.getByText("Address details found. Review them before confirming.").waitFor({ timeout: 20_000 });
-    await dialog.getByRole("button", { name: /Confirm this location and find services/ }).click();
+    const confirmButton = dialog.getByRole("button", { name: /Confirm this location and find services/ });
+    await confirmButton.waitFor({ state: "visible" });
+    for (let attempt = 0; attempt < 50 && !(await confirmButton.isEnabled()); attempt += 1) {
+      await delay(100);
+    }
+    assert.equal(await confirmButton.isEnabled(), true, "GPS address lookup should finish before confirmation");
+    await confirmButton.click();
     await page.getByRole("heading", { name: "Choose a service" }).waitFor();
     await assertNoHorizontalOverflow(page, "desktop marketplace");
     assert.deepEqual(pageErrors, [], "desktop GPS journey should have no uncaught page errors");
