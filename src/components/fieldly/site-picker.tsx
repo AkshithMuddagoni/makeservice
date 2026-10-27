@@ -480,7 +480,7 @@ export function SitePicker({ onPick }: { onPick: (site: Site) => void }) {
           </div>
         </div>
 
-        <Button type="submit" variant="primary" className="h-12 w-full text-base">
+        <Button type="submit" variant="primary" className="h-12 w-full text-base" disabled={busy || gpsBusy}>
           {t(lang, "location_confirm_btn")}
           <Navigation className="ml-2 size-4" />
         </Button>
