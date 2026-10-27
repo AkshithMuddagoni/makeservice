@@ -88,13 +88,31 @@ async function mockExternalServices(page) {
 }
 
 async function assertNoHorizontalOverflow(page, label) {
-  const dimensions = await page.evaluate(() => ({
-    viewport: window.innerWidth,
-    document: document.documentElement.scrollWidth,
-  }));
+  const diagnostics = await page.evaluate(() => {
+    const viewport = window.innerWidth;
+    const offenders = Array.from(document.querySelectorAll("body *"))
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return {
+          tag: element.tagName.toLowerCase(),
+          className: typeof element.className === "string" ? element.className.slice(0, 100) : "",
+          right: Math.round(rect.right),
+          left: Math.round(rect.left),
+          width: Math.round(rect.width),
+          position: style.position,
+          overflowX: style.overflowX,
+          text: (element.textContent || "").trim().replace(/\\s+/g, " ").slice(0, 60),
+        };
+      })
+      .filter((element) => element.width > 0 && element.right > viewport + 1)
+      .sort((a, b) => b.right - a.right)
+      .slice(0, 12);
+    return { viewport, document: document.documentElement.scrollWidth, offenders };
+  });
   assert.ok(
-    dimensions.document <= dimensions.viewport + 1,
-    label + " has horizontal overflow: viewport=" + dimensions.viewport + ", document=" + dimensions.document,
+    diagnostics.document <= diagnostics.viewport + 1,
+    label + " has horizontal overflow: " + JSON.stringify(diagnostics),
   );
 }
 
