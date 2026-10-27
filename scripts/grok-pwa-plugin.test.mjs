@@ -379,7 +379,7 @@ test("injects into documents with no head element", () => {
 });
 
 test("streaming injector matches </HEAD> case-insensitively", () => {
-  const injector = createHeadInjector({ appName: "Wild Race" });
+  const injector = createHeadInjector({ appName: "Wild Race", site: {}, cwd: EMPTY_CWD });
   const chunks = [
     ...injector.push("<html><HEAD><title>x</title></HE"),
     ...injector.push("AD><body>hello</body></html>"),
