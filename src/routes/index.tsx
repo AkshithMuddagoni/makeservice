@@ -4,7 +4,6 @@ import {
   BadgeCheck,
   CheckCircle2,
   Clock3,
-  Crosshair,
   LocateFixed,
   ListTree,
   MapPin,
@@ -15,7 +14,6 @@ import {
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { ServiceIcon } from "@/components/fieldly/icons";
 import { MapCanvas } from "@/components/fieldly/map-canvas";
 import { SitePicker } from "@/components/fieldly/site-picker";
 import { Button } from "@/components/ui/button";
@@ -28,40 +26,15 @@ export const Route = createFileRoute("/")({ component: Home });
 
 type LocationMethod = "manual" | "map" | "gps";
 
-const HERO_IMAGE =
-  "https://images.pexels.com/photos/35565815/pexels-photo-35565815.jpeg?auto=compress&cs=tinysrgb&w=2000";
+const HERO_IMAGE = "/assets/fieldly-hero.webp";
 
-const SERVICE_PHOTOS: Record<string, { src: string; alt: string; title: string }> = {
-  borewell: {
-    src: "https://images.pexels.com/photos/29470002/pexels-photo-29470002.jpeg?auto=compress&cs=tinysrgb&w=900",
-    alt: "Heavy-duty drilling rig at an Indian construction site",
-    title: "Borewell Services",
-  },
-  jcb: {
-    src: "https://images.pexels.com/photos/35565815/pexels-photo-35565815.jpeg?auto=compress&cs=tinysrgb&w=900",
-    alt: "Yellow backhoe loader working with a tractor on a construction site",
-    title: "JCB & Excavators",
-  },
-  crane: {
-    src: "https://images.pexels.com/photos/35693058/pexels-photo-35693058.jpeg?auto=compress&cs=tinysrgb&w=900",
-    alt: "Mobile construction crane displayed outdoors",
-    title: "Cranes",
-  },
-  tractor: {
-    src: "https://images.pexels.com/photos/34861587/pexels-photo-34861587.jpeg?auto=compress&cs=tinysrgb&w=900",
-    alt: "Red tractor working in a green paddy field in India",
-    title: "Tractors",
-  },
-  tanker: {
-    src: "https://images.pexels.com/photos/17168925/pexels-photo-17168925.jpeg?auto=compress&cs=tinysrgb&w=900",
-    alt: "Water tanker truck spraying water on a work site",
-    title: "Water Tankers",
-  },
-  tipper: {
-    src: "https://images.pexels.com/photos/14475776/pexels-photo-14475776.jpeg?auto=compress&cs=tinysrgb&w=900",
-    alt: "Yellow dump truck on a construction site",
-    title: "Trucks & Tippers",
-  },
+const SERVICE_PHOTOS: Record<string, { backgroundPosition: string; alt: string; title: string }> = {
+  borewell: { backgroundPosition: "0% 0%", alt: "Yellow drilling rig at a rural work site", title: "Borewell Services" },
+  jcb: { backgroundPosition: "50% 0%", alt: "Yellow backhoe loader working at a construction site", title: "JCB & Excavators" },
+  crane: { backgroundPosition: "100% 0%", alt: "Yellow mobile crane truck", title: "Cranes" },
+  tractor: { backgroundPosition: "0% 100%", alt: "Red tractor in a green agricultural field", title: "Tractors" },
+  tanker: { backgroundPosition: "50% 100%", alt: "Water tanker truck for site supply", title: "Water Tankers" },
+  tipper: { backgroundPosition: "100% 100%", alt: "Dump truck loaded with soil at a construction site", title: "Trucks & Tippers" },
 };
 
 const POPULAR_SERVICE_IDS = ["borewell", "jcb", "crane", "tractor", "tanker", "tipper"];
@@ -229,14 +202,12 @@ function Home() {
                 params={{ slug: service.id }}
                 className="fieldly-category-card group overflow-hidden rounded-2xl border border-line bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:border-field/40 hover:shadow-lg"
               >
-                <div className="relative h-28 overflow-hidden bg-sky-50 sm:h-36">
-                  <img
-                    src={photo.src}
-                    alt={photo.alt}
-                    loading="lazy"
-                    decoding="async"
-                    className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                  />
+                <div
+                  role="img"
+                  aria-label={photo.alt}
+                  className="fieldly-service-photo relative h-28 overflow-hidden bg-sky-50 sm:h-36"
+                  style={{ backgroundPosition: photo.backgroundPosition }}
+                >
                   <span className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/25 to-transparent" />
                 </div>
                 <div className="flex items-center justify-between gap-2 p-3 sm:p-4">
@@ -406,9 +377,12 @@ function Marketplace() {
                 params={{ slug: service.id }}
                 className="fieldly-category-card group overflow-hidden rounded-2xl border border-line bg-card shadow-sm transition hover:-translate-y-1 hover:border-field/40 hover:shadow-lg"
               >
-                <div className="h-28 overflow-hidden bg-sky-50 sm:h-36">
-                  <img src={photo.src} alt={photo.alt} loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
-                </div>
+                <div
+                  role="img"
+                  aria-label={photo.alt}
+                  className="fieldly-service-photo h-28 overflow-hidden bg-sky-50 sm:h-36"
+                  style={{ backgroundPosition: photo.backgroundPosition }}
+                />
                 <div className="flex items-center justify-between gap-2 p-3 sm:p-4">
                   <span className="min-w-0">
                     <span className="block text-sm font-extrabold sm:text-base">{service.name}</span>
