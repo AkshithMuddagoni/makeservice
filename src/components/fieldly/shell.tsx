@@ -38,9 +38,6 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-paper text-ink">
-      <div role="status" className="border-b border-line bg-gold-soft px-4 py-2 text-center text-xs font-medium text-ink">
-        Preview only: some provider profiles are sample data; listings and bookings stay in this browser. No real SMS or payments are processed.
-      </div>
       <header className="sticky top-0 z-40 border-b border-line bg-card/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
           <Link to="/" className="flex items-center gap-2 font-display text-xl font-bold tracking-tight">
@@ -132,8 +129,8 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="max-w-md">
             <div className="font-display text-xl font-bold">Fieldly</div>
             <p className="mt-2 text-sm text-on-ink/80">
-              A location-first marketplace for borewell rigs, JCBs, cranes, tractors, tankers and tippers.
-              Verification says what was checked. It is not a permit.
+              Find equipment for construction, agriculture, lifting, water and transport jobs. Choose a work site,
+              review service details and compare terms before making a decision.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-8 text-sm">
@@ -161,8 +158,8 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </div>
         <div className="border-t border-on-ink/15 px-4 py-3 text-center text-xs text-on-ink/70">
-          Telangana WALTA and similar rules differ by state. Get local advice before drilling. Preview payments do not
-          move money.
+          Local requirements vary by state and service. Confirm applicable rules before work begins. Preview listings
+          are illustrative; SMS and payments are not connected.
         </div>
       </footer>
       {siteOpen && (
