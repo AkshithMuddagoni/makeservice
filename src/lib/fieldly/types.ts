@@ -193,6 +193,9 @@ export type Booking = {
   customerName: string
   amount: number
   summary: string
+  quoteNote?: string
+  quoteIncludes?: string[]
+  quoteEtaMin?: number
   terms: string
   termsAcceptedAt?: number
   siteImages?: string[]
