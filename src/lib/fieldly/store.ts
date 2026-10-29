@@ -85,11 +85,12 @@ type State = {
   addProvider: (provider: Provider) => void
   createRequest: (input: {
     serviceId: string
-    providerId?: string
+    providerId: string
+    detailsConsent: boolean
   }) => Result
   sendQuote: (requestId: string, amount: number, note: string) => Result
   declineRequest: (requestId: string) => Result
-  acceptQuote: (quoteId: string) => Result
+  acceptQuote: (quoteId: string, termsAccepted: boolean) => Result
   cancelRequest: (requestId: string) => Result
   transition: (bookingId: string, to: BookingStatus, note?: string) => Result
   verifyCode: (bookingId: string, code: string) => Result
@@ -180,32 +181,29 @@ export const useFieldly = create<State>()(
           extras: s.extras.map((p) => (p.id === id ? { ...p, online } : p)),
         })),
       addProvider: (provider) => set((s) => ({ extras: [...s.extras.filter((p) => p.id !== provider.id), provider] })),
-      createRequest: ({ serviceId, providerId }) => {
+      createRequest: ({ serviceId, providerId, detailsConsent }) => {
         const { site, draft, session } = get();
         const who = session?.role === "customer" ? session : null;
-        if (!who) return { ok: false, error: "Sign in with your mobile number before requesting a quote." };
+        if (!who) return { ok: false, error: "Sign in with your mobile number before requesting this service." };
         if (!site) return { ok: false, error: "Set the work site first." };
+        if (!detailsConsent) return { ok: false, error: "Review the service details and confirm consent before sending." };
         const service = getService(serviceId);
         if (!service) return { ok: false, error: "Unknown service." };
+        if (!providerId) return { ok: false, error: "Choose a provider before sending a request." };
+        const provider = get().providerById(providerId);
+        if (!provider || !isEligible(provider, serviceId) || !get().isOnline(providerId)) {
+          return { ok: false, error: "This provider is no longer available or eligible. Choose another provider." };
+        }
+        const km = kmBetween(site, provider);
+        if (km > service.radiusKm) {
+          return { ok: false, error: "This provider is outside the service's current travel range." };
+        }
         const requirements = draft?.serviceId === serviceId ? draft.requirements : {};
         const whenLabel = draft?.serviceId === serviceId ? draft.whenLabel : "Today";
         const notes = draft?.serviceId === serviceId ? draft.notes : "";
-        const ranked = get()
-          .allProviders()
-          .filter((p) => isEligible(p, serviceId) && get().isOnline(p.id))
-          .map((p) => ({ p, km: kmBetween(site, p) }))
-          .filter((row) => row.km <= service.radiusKm)
-          .sort((a, b) => a.km - b.km);
-        const ids: string[] = [];
-        if (providerId && ranked.some((r) => r.p.id === providerId)) ids.push(providerId);
-        for (const row of ranked) {
-          if (ids.length >= 3) break;
-          if (!ids.includes(row.p.id)) ids.push(row.p.id);
-        }
-        if (!ids.length) {
-          return { ok: false, error: "No verified operator can reach this site for that service right now." };
-        }
+        const siteImages = draft?.serviceId === serviceId ? draft.siteImages ?? [] : [];
         const id = makeId("req");
+        const now = Date.now();
         const request: JobRequest = {
           id,
           serviceId,
@@ -216,35 +214,20 @@ export const useFieldly = create<State>()(
           customerPhone: who.phone,
           customerName: who.name,
           status: "open",
-          createdAt: Date.now(),
-          targetedProviderIds: ids,
+          createdAt: now,
+          targetedProviderIds: [provider.id],
+          declinedProviderIds: [],
+          siteImages,
           messages: [
             {
               id: makeId("msg"),
               from: "system",
-              text: `Request opened for ${service.name} at ${site.label}. ${ids.length} operator${ids.length > 1 ? "s" : ""} can quote.`,
-              at: Date.now(),
+              text: `Service request sent to ${provider.name} for ${service.name} at ${site.label}. Waiting for the provider to accept with a quote or decline. No booking is confirmed yet.`,
+              at: now,
             },
           ],
         };
-        const quotes: Quote[] = ids.map((pid) => {
-          const provider = get().providerById(pid)!;
-          const priced = priceJob(serviceId, provider, requirements);
-          const km = kmBetween(site, provider);
-          return {
-            id: makeId("quo"),
-            requestId: id,
-            providerId: pid,
-            amount: priced.amount,
-            summary: priced.summary,
-            etaMin: travelMinutes(km),
-            note: priced.note,
-            includes: priced.includes,
-            status: "pending",
-            createdAt: Date.now(),
-          };
-        });
-        set((s) => ({ requests: [request, ...s.requests], quotes: [...quotes, ...s.quotes] }));
+        set((s) => ({ requests: [request, ...s.requests] }));
         return { ok: true, id };
       },
       sendQuote: (requestId, amount, note) => {
@@ -257,10 +240,16 @@ export const useFieldly = create<State>()(
         if (!request.targetedProviderIds.includes(provider.id)) {
           return { ok: false, error: "This request has not been assigned to your operator account." };
         }
+        if (request.declinedProviderIds?.includes(provider.id)) {
+          return { ok: false, error: "You already declined this request." };
+        }
         if (!isEligible(provider, request.serviceId)) {
           return { ok: false, error: "This machine is not eligible for the service. Check papers and WALTA if it is a rig." };
         }
         if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "Enter a price greater than zero." };
+        if (note.trim().length < 8) {
+          return { ok: false, error: "Add quote details covering inclusions, exclusions, extra charges, and cancellation/rescheduling terms." };
+        }
         const existing = get().quotes.find(
           (q) => q.requestId === requestId && q.providerId === provider.id && q.status === "pending",
         );
@@ -270,20 +259,30 @@ export const useFieldly = create<State>()(
           requestId,
           providerId: provider.id,
           amount: Math.round(amount),
-          summary: "Operator revised quote",
+          summary: existing ? "Updated provider quote" : "Provider quote",
           etaMin: travelMinutes(km),
-          note: note.trim() || "Revised from the operator desk.",
+          note: note.trim(),
           includes: getService(request.serviceId)?.includes ?? [],
           status: "pending",
           createdAt: Date.now(),
+        };
+        const responseMessage = {
+          id: makeId("msg"),
+          from: "system" as const,
+          text: `${provider.name} responded with a quote. Review price, inclusions, exclusions, additional charges, timing, and cancellation terms before accepting.`,
+          at: Date.now(),
         };
         set((s) => ({
           quotes: existing
             ? s.quotes.map((q) => (q.id === existing.id ? next : q))
             : [next, ...s.quotes],
           requests: s.requests.map((r) =>
-            r.id === requestId && !r.targetedProviderIds.includes(provider.id)
-              ? { ...r, targetedProviderIds: [...r.targetedProviderIds, provider.id] }
+            r.id === requestId
+              ? {
+                  ...r,
+                  declinedProviderIds: (r.declinedProviderIds ?? []).filter((id) => id !== provider.id),
+                  messages: [...r.messages, responseMessage],
+                }
               : r,
           ),
         }));
@@ -296,16 +295,32 @@ export const useFieldly = create<State>()(
         const request = get().requests.find((r) => r.id === requestId);
         if (!request || request.status !== "open") return { ok: false, error: "This request is not open." };
         if (!request.targetedProviderIds.includes(pid)) return { ok: false, error: "This request is not assigned to your operator account." };
+        const responseMessage = {
+          id: makeId("msg"),
+          from: "system" as const,
+          text: `${get().providerById(pid)?.name ?? "The provider"} declined this request. You can return to the provider list and choose someone else.`,
+          at: Date.now(),
+        };
         set((s) => ({
           quotes: s.quotes.map((q) =>
             q.requestId === requestId && q.providerId === pid && q.status === "pending"
               ? { ...q, status: "declined" }
               : q,
           ),
+          requests: s.requests.map((r) =>
+            r.id === requestId
+              ? {
+                  ...r,
+                  declinedProviderIds: Array.from(new Set([...(r.declinedProviderIds ?? []), pid!])),
+                  messages: [...r.messages, responseMessage],
+                }
+              : r,
+          ),
         }));
         return { ok: true };
       },
-      acceptQuote: (quoteId) => {
+      acceptQuote: (quoteId, termsAccepted) => {
+        if (!termsAccepted) return { ok: false, error: "Review the provider's price and terms before accepting." };
         const quote = get().quotes.find((q) => q.id === quoteId);
         if (!quote || quote.status !== "pending") return { ok: false, error: "That quote is no longer open." };
         const request = get().requests.find((r) => r.id === quote.requestId);
@@ -343,7 +358,12 @@ export const useFieldly = create<State>()(
           customerName: request.customerName,
           amount: quote.amount,
           summary: quote.summary,
+          quoteNote: quote.note,
+          quoteIncludes: quote.includes,
+          quoteEtaMin: quote.etaMin,
           terms,
+          termsAcceptedAt: Date.now(),
+          siteImages: request.siteImages ?? [],
           status: "CONFIRMED",
           startCode: null,
           codeHash: null,
@@ -556,7 +576,9 @@ export const useFieldly = create<State>()(
       },
       review: (bookingId, stars, text) => {
         const booking = get().bookings.find((b) => b.id === bookingId);
-        if (!booking || booking.status !== "PAID") return { ok: false, error: "Rate the job after payment." };
+        if (!booking || (booking.status !== "SERVICE_COMPLETED" && booking.status !== "PAID")) {
+          return { ok: false, error: "Rate the job after the service is marked complete." };
+        }
         const session = get().session;
         if (session?.role !== "customer" || session.phone !== booking.customerPhone) {
           return { ok: false, error: "Only the customer on this booking can leave a review." };
@@ -580,6 +602,8 @@ export const useFieldly = create<State>()(
         if (kind === "request") {
           const request = get().requests.find((r) => r.id === id);
           if (!request) return { ok: false, error: "Request not found." };
+          const responded = get().quotes.some((q) => q.requestId === id);
+          if (!responded) return { ok: false, error: "Chat opens after the selected provider responds to your request." };
           const isCustomer = session.role === "customer" && session.phone === request.customerPhone;
           const isAssignedProvider = session.role === "provider" && Boolean(session.providerId) && request.targetedProviderIds.includes(session.providerId!);
           if (!isCustomer && !isAssignedProvider) return { ok: false, error: "Only participants in this request can send messages." };

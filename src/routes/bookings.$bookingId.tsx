@@ -132,8 +132,9 @@ function BookingPage() {
         <div className="mt-5 h-72">
           <MapCanvas center={booking.site} markers={markers} />
         </div>
-        <p className="mt-2 text-xs text-muted">
-          Estimated position only. Live GPS runs during an active job in production, not in this preview.
+        <p className="mt-2 rounded-xl bg-sky-50 p-3 text-xs leading-5 text-sky-950">
+          Tracking status: {booking.status === "CONFIRMED" ? "Provider has confirmed the booking." : booking.status === "ON_THE_WAY" ? "Provider marked themselves on the way." : booking.status === "ARRIVED" ? "Provider marked arrival; verify the start code before work." : booking.status === "SERVICE_STARTED" ? "Work has started after code verification." : booking.status === "SERVICE_COMPLETED" || booking.status === "PAID" ? "Work marked complete." : labels[booking.status] ?? booking.status}.
+          The map position is an estimate in this prototype, not live GPS. Live vehicle tracking requires provider location sharing and a production backend.
         </p>
         {(booking.status === "CANCELLED" || booking.status === "DISPUTED") && (
           <p className="mt-3 rounded-2xl bg-danger-soft p-4 text-sm text-danger">
@@ -177,6 +178,28 @@ function BookingPage() {
           <section className="rounded-3xl border border-line bg-card p-5">
             <h2 className="font-display text-2xl font-bold">{inr(booking.amount)}</h2>
             <p className="text-sm text-muted">{booking.summary}</p>
+            {booking.quoteEtaMin != null && (
+              <p className="mt-1 text-sm text-muted">Provider arrival estimate at quote time: about {booking.quoteEtaMin} minutes. This is an estimate, not live tracking.</p>
+            )}
+            {booking.quoteIncludes?.length ? (
+              <div className="mt-3">
+                <p className="text-sm font-semibold">Included in the accepted offer</p>
+                <ul className="mt-1 grid gap-1 text-sm text-muted">
+                  {booking.quoteIncludes.map((item) => <li key={item}>• {item}</li>)}
+                </ul>
+              </div>
+            ) : null}
+            {booking.quoteNote && (
+              <p className="mt-2 rounded-xl bg-paper p-3 text-sm leading-5">Provider note: {booking.quoteNote}</p>
+            )}
+            {booking.status !== "CANCELLED" && booking.status !== "DISPUTED" && provider && (
+              <a
+                href={`tel:${provider.phone}`}
+                className="mt-3 inline-flex h-10 items-center justify-center rounded-xl bg-field px-4 text-sm font-semibold text-on-field hover:bg-ink"
+              >
+                Call operator · {provider.phone}
+              </a>
+            )}
             <ul className="mt-3 grid gap-1 text-sm text-muted">
               {requirementLines(booking.serviceId, booking.requirements).map((row) => (
                 <li key={row.label}>
@@ -186,6 +209,16 @@ function BookingPage() {
               <li>When: {booking.whenLabel}</li>
             </ul>
             <p className="mt-3 text-xs text-muted">{booking.terms}</p>
+            {booking.siteImages?.length ? (
+              <div className="mt-4">
+                <div className="mb-2 text-sm font-semibold">Work-site photos</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {booking.siteImages.map((image, index) => (
+                    <img key={image.slice(-36)} src={image} alt={`Work-site photo ${index + 1}`} className="h-24 w-full rounded-xl border border-line object-cover" />
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {booking.status === "ARRIVED" && booking.startCode && (
               <div className="mt-4 rounded-2xl bg-paper p-4">
@@ -245,7 +278,7 @@ function BookingPage() {
               </div>
             )}
 
-            {booking.status === "PAID" && !booking.review && (
+            {(booking.status === "SERVICE_COMPLETED" || booking.status === "PAID") && !booking.review && (
               <form
                 className="mt-4 grid gap-2"
                 onSubmit={(e) => {
@@ -256,6 +289,7 @@ function BookingPage() {
                 }}
               >
                 <div className="font-semibold">Rate {provider?.name}</div>
+                <p className="text-xs text-muted">You can leave feedback once the provider marks the work complete.</p>
                 <div className="flex gap-1">
                   {[1, 2, 3, 4, 5].map((n) => (
                     <button key={n} type="button" onClick={() => setStars(n)} aria-label={`${n} stars`}>
@@ -314,6 +348,14 @@ function BookingPage() {
             <p className="text-sm text-muted">
               Only the assigned operator can update this job. Status changes are restricted to this operator session.
             </p>
+            {booking.status !== "CANCELLED" && booking.status !== "DISPUTED" && (
+              <a
+                href={`tel:${booking.customerPhone}`}
+                className="mt-3 inline-flex h-10 items-center justify-center rounded-xl bg-field px-4 text-sm font-semibold text-on-field hover:bg-ink"
+              >
+                Call customer · {booking.customerPhone}
+              </a>
+            )}
             <div className="mt-4 grid gap-2">
               {booking.status === "CONFIRMED" && (
                 <Button onClick={() => act(transition(booking.id, "ON_THE_WAY"))}>Mark on the way</Button>

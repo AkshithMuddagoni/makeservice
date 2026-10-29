@@ -37,6 +37,15 @@ export function priceJob(
   const accessMul = access === "Difficult terrain" ? 1.15 : access === "Narrow road" ? 1.08 : 1;
 
   if (serviceId === "borewell") {
+    const borewellType = req.service_type || "Drilling a new borewell";
+    if (borewellType !== "Drilling a new borewell") {
+      return {
+        amount: 0,
+        summary: "Provider quote required after scope / inspection",
+        includes,
+        note: "The listed per-foot drilling rate does not apply to cleaning, deepening, camera inspection, pump repair, or recharge work. Enter a service-specific quote after confirming the actual scope.",
+      };
+    }
     const assumed = !req.depth_ft;
     const depth = num(req.depth_ft, 450);
     const amount = Math.round(depth * rate.rate * accessMul);

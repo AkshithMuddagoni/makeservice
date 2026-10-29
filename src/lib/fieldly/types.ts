@@ -31,6 +31,7 @@ export type FieldDef =
       options: string[]
       required?: boolean
       hint?: string
+      showWhen?: { key: string; values: string[] }
     }
   | {
       key: string
@@ -40,6 +41,7 @@ export type FieldDef =
       required?: boolean
       placeholder?: string
       hint?: string
+      showWhen?: { key: string; values: string[] }
     }
   | {
       key: string
@@ -48,6 +50,7 @@ export type FieldDef =
       required?: boolean
       placeholder?: string
       hint?: string
+      showWhen?: { key: string; values: string[] }
     };
 
 export type ServiceIconName =
@@ -118,6 +121,7 @@ export type Draft = {
   requirements: Record<string, string>
   whenLabel: string
   notes: string
+  siteImages?: string[]
 };
 
 export type Session = {
@@ -148,6 +152,8 @@ export type JobRequest = {
   status: "open" | "booked" | "cancelled"
   createdAt: number
   targetedProviderIds: string[]
+  declinedProviderIds?: string[]
+  siteImages?: string[]
   messages: ChatMessage[]
 };
 
@@ -187,7 +193,12 @@ export type Booking = {
   customerName: string
   amount: number
   summary: string
+  quoteNote?: string
+  quoteIncludes?: string[]
+  quoteEtaMin?: number
   terms: string
+  termsAcceptedAt?: number
+  siteImages?: string[]
   status: BookingStatus
   startCode: string | null
   codeHash: string | null
