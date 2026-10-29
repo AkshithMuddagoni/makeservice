@@ -16,6 +16,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { MapCanvas } from "@/components/fieldly/map-canvas";
 import { SitePicker } from "@/components/fieldly/site-picker";
+import { CustomerSignInDialog } from "@/components/fieldly/customer-sign-in-dialog";
 import { Button } from "@/components/ui/button";
 import { SERVICES } from "@/lib/fieldly/catalog";
 import { formatKm, kmBetween } from "@/lib/fieldly/geo";
@@ -31,28 +32,34 @@ const HERO_IMAGE =
 
 const HERO_BACKGROUNDS = [
   {
-    id: "construction",
-    label: "Construction",
-    image: HERO_IMAGE,
-    alt: "Construction equipment working at a soil excavation site",
+    id: "borewell",
+    label: "Borewell",
+    image: "https://images.pexels.com/photos/7910062/pexels-photo-7910062.jpeg?auto=compress&cs=tinysrgb&w=2000",
   },
   {
-    id: "farming",
-    label: "Farming",
-    image: "https://images.pexels.com/photos/12875208/pexels-photo-12875208.jpeg?auto=compress&cs=tinysrgb&w=2000",
-    alt: "Tractor in a green agricultural field",
+    id: "jcb",
+    label: "JCB & excavators",
+    image: "https://images.pexels.com/photos/35565815/pexels-photo-35565815.jpeg?auto=compress&cs=tinysrgb&w=2000",
   },
   {
-    id: "cranes",
+    id: "crane",
     label: "Cranes",
     image: "https://images.pexels.com/photos/29502220/pexels-photo-29502220.jpeg?auto=compress&cs=tinysrgb&w=2000",
-    alt: "Mobile crane at an industrial construction site",
   },
   {
-    id: "water",
-    label: "Water",
+    id: "tractor",
+    label: "Tractors",
+    image: "https://images.pexels.com/photos/12875208/pexels-photo-12875208.jpeg?auto=compress&cs=tinysrgb&w=2000",
+  },
+  {
+    id: "tanker",
+    label: "Water tankers",
     image: "https://images.pexels.com/photos/17168925/pexels-photo-17168925.jpeg?auto=compress&cs=tinysrgb&w=2000",
-    alt: "Water tanker spraying water at a work site",
+  },
+  {
+    id: "other",
+    label: "Other services",
+    image: "https://images.pexels.com/photos/14475776/pexels-photo-14475776.jpeg?auto=compress&cs=tinysrgb&w=2000",
   },
 ] as const;
 
@@ -90,8 +97,8 @@ const SERVICE_PHOTOS: Record<string, { src: string; alt: string; title: string }
     title: "Trucks & Tippers",
   },
   other: {
-    src: "https://images.pexels.com/photos/29502220/pexels-photo-29502220.jpeg?auto=compress&cs=tinysrgb&w=900",
-    alt: "Mixed heavy equipment available for construction and site work",
+    src: "https://images.pexels.com/photos/14475776/pexels-photo-14475776.jpeg?auto=compress&cs=tinysrgb&w=900",
+    alt: "Tipper truck hauling soil at a construction site",
     title: "Other Services",
   },
 };
@@ -105,8 +112,15 @@ function Home() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerMethod, setPickerMethod] = useState<LocationMethod>("manual");
   const [showAllServices, setShowAllServices] = useState(false);
-  const [heroBackgroundId, setHeroBackgroundId] = useState<HeroBackgroundId>("construction");
-  const heroBackground = HERO_BACKGROUNDS.find((scene) => scene.id === heroBackgroundId) ?? HERO_BACKGROUNDS[0];
+  const [heroSlideIndex, setHeroSlideIndex] = useState(0);
+  const heroBackground = HERO_BACKGROUNDS[heroSlideIndex] ?? HERO_BACKGROUNDS[0];
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setHeroSlideIndex((current) => (current + 1) % HERO_BACKGROUNDS.length);
+    }, 6500);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -140,15 +154,27 @@ function Home() {
       <section
         data-testid="hero-section"
         data-background={heroBackground.id}
-        className="fieldly-home-hero relative overflow-hidden"
-        style={{
-          backgroundImage:
-            'linear-gradient(90deg, rgba(226, 243, 255, 0.97) 0%, rgba(235, 247, 255, 0.9) 37%, rgba(235, 247, 255, 0.38) 68%, rgba(235, 247, 255, 0.08) 100%), url("' +
-            heroBackground.image +
-            '")',
-        }}
+        className="fieldly-home-hero relative isolate overflow-hidden"
       >
-        <div className="relative mx-auto max-w-6xl px-4 py-8 sm:py-10 lg:py-12">
+        <div className="fieldly-hero-backdrops pointer-events-none absolute inset-0 z-0" aria-hidden="true">
+          {HERO_BACKGROUNDS.map((scene, index) => (
+            <img
+              key={scene.id}
+              data-testid="hero-background-slide"
+              data-slide={scene.id}
+              src={scene.image}
+              alt=""
+              loading={index === 0 ? "eager" : "lazy"}
+              decoding="async"
+              onError={(event) => {
+                event.currentTarget.style.display = "none";
+              }}
+              className={"fieldly-hero-slide absolute inset-0 h-full w-full object-cover " + (index === heroSlideIndex ? "is-active" : "")}
+            />
+          ))}
+          <div className="fieldly-hero-overlay absolute inset-0" />
+        </div>
+        <div className="relative z-10 mx-auto max-w-6xl px-4 py-8 sm:py-10 lg:py-12">
           <div className="max-w-[620px]">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/80 px-3 py-1.5 text-xs font-extrabold uppercase tracking-wide text-field shadow-sm backdrop-blur">
               <MapPin className="size-4" />
@@ -202,50 +228,7 @@ function Home() {
                 {t(lang, "gate_privacy")}
               </p>
             </div>
-            <div className="mt-3 max-w-[390px] rounded-2xl border border-white/70 bg-white/85 p-2.5 shadow-sm backdrop-blur-sm">
-              <div className="mb-2 flex items-center justify-between gap-2 px-1">
-                <span className="text-xs font-extrabold text-ink">Hero background</span>
-                <span className="text-[10px] text-muted">Choose a scene</span>
-              </div>
-              <div className="grid grid-cols-4 gap-2" role="group" aria-label="Choose hero background">
-                {HERO_BACKGROUNDS.map((scene) => (
-                  <button
-                    key={scene.id}
-                    type="button"
-                    aria-label={"Use " + scene.label.toLowerCase() + " background"}
-                    aria-pressed={heroBackgroundId === scene.id}
-                    onClick={() => setHeroBackgroundId(scene.id)}
-                    className={
-                      "min-w-0 rounded-xl border p-1 text-center transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-field " +
-                      (heroBackgroundId === scene.id
-                        ? "border-field bg-field-soft ring-1 ring-field/30"
-                        : "border-transparent hover:border-field/40 hover:bg-white/90")
-                    }
-                  >
-                    <span className="block h-9 overflow-hidden rounded-lg bg-sky-100 sm:h-11">
-                      <img
-                        src={scene.image}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        onError={(event) => {
-                          if (event.currentTarget.dataset.fallback === "true") {
-                            event.currentTarget.style.display = "none";
-                            return;
-                          }
-                          event.currentTarget.dataset.fallback = "true";
-                          event.currentTarget.src = HERO_IMAGE;
-                        }}
-                        className="h-full w-full object-cover"
-                      />
-                    </span>
-                    <span className="mt-1 block truncate text-[10px] font-bold leading-tight text-ink sm:text-[11px]">
-                      {scene.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
+
           </div>
 
         </div>
