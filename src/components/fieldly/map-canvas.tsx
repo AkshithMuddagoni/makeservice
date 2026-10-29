@@ -46,18 +46,9 @@ export function MapCanvas({ center, markers, zoom = 12, onPick, className }: Pro
         libRef.current = maplibregl;
         const map = new maplibregl.Map({
           container: wrapRef.current,
-          style: {
-            version: 8,
-            sources: {
-              carto: {
-                type: "raster",
-                tiles: ["https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"],
-                tileSize: 256,
-                attribution: "© OpenStreetMap © CARTO",
-              },
-            },
-            layers: [{ id: "carto", type: "raster", source: "carto" }],
-          },
+          // OpenFreeMap's hosted styles do not require an API key.
+          // The provider style supplies its OpenMapTiles/OpenStreetMap attribution.
+          style: "https://tiles.openfreemap.org/styles/positron",
           center: [center.lng, center.lat],
           zoom,
         });
@@ -70,7 +61,9 @@ export function MapCanvas({ center, markers, zoom = 12, onPick, className }: Pro
         });
         map.on("error", (event: { error?: { message?: string } }) => {
           const message = event.error?.message ?? "";
-          if (/worker/i.test(message) && !dead) setFailed(true);
+          if (/worker|style|source|failed to fetch|network|401|403|404/i.test(message) && !dead) {
+            setFailed(true);
+          }
         });
         mapRef.current = map;
       } catch {
