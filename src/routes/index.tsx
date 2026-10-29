@@ -29,6 +29,35 @@ type LocationMethod = "manual" | "map" | "gps";
 const HERO_IMAGE =
   "https://images.pexels.com/photos/35565815/pexels-photo-35565815.jpeg?auto=compress&cs=tinysrgb&w=2000";
 
+const HERO_BACKGROUNDS = [
+  {
+    id: "construction",
+    label: "Construction",
+    image: HERO_IMAGE,
+    alt: "Construction equipment working at a soil excavation site",
+  },
+  {
+    id: "farming",
+    label: "Farming",
+    image: "https://images.pexels.com/photos/12875208/pexels-photo-12875208.jpeg?auto=compress&cs=tinysrgb&w=2000",
+    alt: "Tractor in a green agricultural field",
+  },
+  {
+    id: "cranes",
+    label: "Cranes",
+    image: "https://images.pexels.com/photos/29502220/pexels-photo-29502220.jpeg?auto=compress&cs=tinysrgb&w=2000",
+    alt: "Mobile crane at an industrial construction site",
+  },
+  {
+    id: "water",
+    label: "Water",
+    image: "https://images.pexels.com/photos/17168925/pexels-photo-17168925.jpeg?auto=compress&cs=tinysrgb&w=2000",
+    alt: "Water tanker spraying water at a work site",
+  },
+] as const;
+
+type HeroBackgroundId = (typeof HERO_BACKGROUNDS)[number]["id"];
+
 const SERVICE_PHOTOS: Record<string, { src: string; alt: string; title: string }> = {
   borewell: {
     src: "https://images.pexels.com/photos/7910062/pexels-photo-7910062.jpeg?auto=compress&cs=tinysrgb&w=900",
@@ -76,6 +105,8 @@ function Home() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerMethod, setPickerMethod] = useState<LocationMethod>("manual");
   const [showAllServices, setShowAllServices] = useState(false);
+  const [heroBackgroundId, setHeroBackgroundId] = useState<HeroBackgroundId>("construction");
+  const heroBackground = HERO_BACKGROUNDS.find((scene) => scene.id === heroBackgroundId) ?? HERO_BACKGROUNDS[0];
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -107,11 +138,13 @@ function Home() {
   return (
     <div className="fieldly-landing">
       <section
+        data-testid="hero-section"
+        data-background={heroBackground.id}
         className="fieldly-home-hero relative overflow-hidden"
         style={{
           backgroundImage:
             'linear-gradient(90deg, rgba(226, 243, 255, 0.97) 0%, rgba(235, 247, 255, 0.9) 37%, rgba(235, 247, 255, 0.38) 68%, rgba(235, 247, 255, 0.08) 100%), url("' +
-            HERO_IMAGE +
+            heroBackground.image +
             '")',
         }}
       >
@@ -168,6 +201,50 @@ function Home() {
                 <ShieldCheck className="mt-0.5 size-4 shrink-0 text-field" />
                 {t(lang, "gate_privacy")}
               </p>
+            </div>
+            <div className="mt-3 max-w-[390px] rounded-2xl border border-white/70 bg-white/85 p-2.5 shadow-sm backdrop-blur-sm">
+              <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                <span className="text-xs font-extrabold text-ink">Hero background</span>
+                <span className="text-[10px] text-muted">Choose a scene</span>
+              </div>
+              <div className="grid grid-cols-4 gap-2" role="group" aria-label="Choose hero background">
+                {HERO_BACKGROUNDS.map((scene) => (
+                  <button
+                    key={scene.id}
+                    type="button"
+                    aria-label={"Use " + scene.label.toLowerCase() + " background"}
+                    aria-pressed={heroBackgroundId === scene.id}
+                    onClick={() => setHeroBackgroundId(scene.id)}
+                    className={
+                      "min-w-0 rounded-xl border p-1 text-center transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-field " +
+                      (heroBackgroundId === scene.id
+                        ? "border-field bg-field-soft ring-1 ring-field/30"
+                        : "border-transparent hover:border-field/40 hover:bg-white/90")
+                    }
+                  >
+                    <span className="block h-9 overflow-hidden rounded-lg bg-sky-100 sm:h-11">
+                      <img
+                        src={scene.image}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        onError={(event) => {
+                          if (event.currentTarget.dataset.fallback === "true") {
+                            event.currentTarget.style.display = "none";
+                            return;
+                          }
+                          event.currentTarget.dataset.fallback = "true";
+                          event.currentTarget.src = HERO_IMAGE;
+                        }}
+                        className="h-full w-full object-cover"
+                      />
+                    </span>
+                    <span className="mt-1 block truncate text-[10px] font-bold leading-tight text-ink sm:text-[11px]">
+                      {scene.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
