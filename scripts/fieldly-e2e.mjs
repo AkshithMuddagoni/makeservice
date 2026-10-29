@@ -411,6 +411,7 @@ async function testMobileCustomerJourney() {
     await page.getByRole("link", { name: /Borewell drilling/ }).first().click();
     await page.getByRole("heading", { name: "Borewell drilling", exact: true }).waitFor();
 
+    await page.getByRole("button", { name: "New borewell drilling", exact: true }).click();
     const purposeOption = page.locator("button").filter({ hasText: /^Home$/ }).first();
     await purposeOption.waitFor({ state: "visible" });
     await purposeOption.click();
@@ -429,13 +430,29 @@ async function testMobileCustomerJourney() {
 
     await page.getByRole("button", { name: "Request quotes", exact: true }).click();
     await page.getByRole("heading", { name: "Borewell drilling", exact: true }).waitFor();
-    await page.getByRole("button", { name: "Accept quote", exact: true }).waitFor();
-    await page.getByRole("button", { name: "Accept quote", exact: true }).click();
+    const requestUrl = page.url();
+    await page.getByText(/Waiting for operators to respond/).waitFor();
+
+    // Submit a real quote from the operator account instead of accepting an auto-generated estimate.
+    await page.goto(BASE_URL + "/desk");
+    await page.locator("input").nth(1).fill("482609");
+    await page.getByRole("button", { name: "Open desk", exact: true }).click();
+    await page.getByRole("heading", { name: "Sri Sai Borewell Works", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Send quote", exact: true }).first().click();
+
+    // Switch back to the customer who created the request, then review and explicitly confirm the quote.
+    await page.goto(BASE_URL + "/account");
+    await page.getByRole("button", { name: "Back to customer", exact: true }).click();
+    await page.goto(requestUrl);
+    await page.getByRole("button", { name: "Review and choose", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Review and choose", exact: true }).click();
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: "Confirm booking", exact: true }).click();
     await page.getByText("FLD-1041", { exact: true }).waitFor();
     await page.getByRole("heading", { name: "Confirmed", exact: true }).waitFor();
     await assertNoHorizontalOverflow(page, "mobile booking confirmation");
     assert.deepEqual(pageErrors, [], "mobile journey should have no uncaught page errors");
-    log("mobile: location → service form → provider discovery → login → quote acceptance → booking passed");
+    log("mobile: location → service form → capability-matched providers → operator quote → customer review/consent → booking passed");
   } finally {
     await context.close();
   }
