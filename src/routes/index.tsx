@@ -91,6 +91,8 @@ function Home() {
   const heroBackground = HERO_BACKGROUNDS[heroSlideIndex] ?? HERO_BACKGROUNDS[0];
 
   useEffect(() => {
+    // Do not auto-animate the hero for visitors who request reduced motion.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const interval = window.setInterval(() => {
       setHeroSlideIndex((current) => (current + 1) % HERO_BACKGROUNDS.length);
     }, 6500);
@@ -210,7 +212,7 @@ function Home() {
         </div>
         <div
           aria-label="Hero image selection"
-          className="fieldly-hero-controls absolute bottom-4 right-4 z-10 hidden items-center gap-3 rounded-full border border-white/75 bg-white/85 px-3 py-2 shadow-lg backdrop-blur-md sm:flex"
+          className="fieldly-hero-controls absolute bottom-3 right-3 z-10 flex items-center gap-3 rounded-full border border-white/75 bg-white/90 px-3 py-2 shadow-lg backdrop-blur-md sm:bottom-4 sm:right-4"
         >
           <span className="max-w-32 truncate text-xs font-extrabold text-ink">{heroBackground.label}</span>
           <div className="flex items-center gap-1">
