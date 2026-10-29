@@ -63,7 +63,7 @@ function ServiceForm() {
       : initial?.whenLabel || "",
   );
   const [date, setDate] = useState(
-    initial && !WHEN_OPTIONS.includes(initial.whenLabel as (typeof WHEN_OPTIONS)[number]) ? initial.whenLabel : "",
+    initial && /^\d{4}-\d{2}-\d{2}$/.test(initial.whenLabel) ? initial.whenLabel : "",
   );
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [siteImages, setSiteImages] = useState<string[]>(initial?.siteImages ?? []);
