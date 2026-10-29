@@ -31,32 +31,30 @@ const HERO_IMAGE =
 
 const HERO_BACKGROUNDS = [
   {
-    id: "construction",
-    label: "Construction",
-    image: HERO_IMAGE,
-    alt: "Construction equipment working at a soil excavation site",
+    id: "borewell",
+    image: "https://images.pexels.com/photos/7910062/pexels-photo-7910062.jpeg?auto=compress&cs=tinysrgb&w=1600",
   },
   {
-    id: "farming",
-    label: "Farming",
-    image: "https://images.pexels.com/photos/12875208/pexels-photo-12875208.jpeg?auto=compress&cs=tinysrgb&w=2000",
-    alt: "Tractor in a green agricultural field",
+    id: "jcb",
+    image: "https://images.pexels.com/photos/35565815/pexels-photo-35565815.jpeg?auto=compress&cs=tinysrgb&w=1600",
   },
   {
-    id: "cranes",
-    label: "Cranes",
-    image: "https://images.pexels.com/photos/29502220/pexels-photo-29502220.jpeg?auto=compress&cs=tinysrgb&w=2000",
-    alt: "Mobile crane at an industrial construction site",
+    id: "crane",
+    image: "https://images.pexels.com/photos/29502220/pexels-photo-29502220.jpeg?auto=compress&cs=tinysrgb&w=1600",
   },
   {
-    id: "water",
-    label: "Water",
-    image: "https://images.pexels.com/photos/17168925/pexels-photo-17168925.jpeg?auto=compress&cs=tinysrgb&w=2000",
-    alt: "Water tanker spraying water at a work site",
+    id: "tractor",
+    image: "https://images.pexels.com/photos/12875208/pexels-photo-12875208.jpeg?auto=compress&cs=tinysrgb&w=1600",
+  },
+  {
+    id: "water-tanker",
+    image: "https://images.pexels.com/photos/17168925/pexels-photo-17168925.jpeg?auto=compress&cs=tinysrgb&w=1600",
+  },
+  {
+    id: "tipper",
+    image: "https://images.pexels.com/photos/14475776/pexels-photo-14475776.jpeg?auto=compress&cs=tinysrgb&w=1600",
   },
 ] as const;
-
-type HeroBackgroundId = (typeof HERO_BACKGROUNDS)[number]["id"];
 
 const SERVICE_PHOTOS: Record<string, { src: string; alt: string; title: string }> = {
   borewell: {
@@ -105,8 +103,16 @@ function Home() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerMethod, setPickerMethod] = useState<LocationMethod>("manual");
   const [showAllServices, setShowAllServices] = useState(false);
-  const [heroBackgroundId, setHeroBackgroundId] = useState<HeroBackgroundId>("construction");
-  const heroBackground = HERO_BACKGROUNDS.find((scene) => scene.id === heroBackgroundId) ?? HERO_BACKGROUNDS[0];
+  const [heroSlideIndex, setHeroSlideIndex] = useState(0);
+  const heroBackground = HERO_BACKGROUNDS[heroSlideIndex] ?? HERO_BACKGROUNDS[0];
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const interval = window.setInterval(() => {
+      setHeroSlideIndex((current) => (current + 1) % HERO_BACKGROUNDS.length);
+    }, 6000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -140,33 +146,49 @@ function Home() {
       <section
         data-testid="hero-section"
         data-background={heroBackground.id}
-        className="fieldly-home-hero relative overflow-hidden"
-        style={{
-          backgroundImage:
-            'linear-gradient(90deg, rgba(226, 243, 255, 0.97) 0%, rgba(235, 247, 255, 0.9) 37%, rgba(235, 247, 255, 0.38) 68%, rgba(235, 247, 255, 0.08) 100%), url("' +
-            heroBackground.image +
-            '")',
-        }}
+        className="fieldly-home-hero relative isolate overflow-hidden"
       >
-        <div className="relative mx-auto max-w-6xl px-4 py-8 sm:py-10 lg:py-12">
-          <div className="max-w-[620px]">
+        <div className="fieldly-hero-backdrops pointer-events-none absolute inset-0 z-0" aria-hidden="true">
+          {HERO_BACKGROUNDS.map((scene, index) => (
+            <img
+              key={scene.id}
+              data-testid="hero-background-slide"
+              data-slide={scene.id}
+              src={scene.image}
+              alt=""
+              loading={index === 0 ? "eager" : "lazy"}
+              decoding="async"
+              fetchPriority={index === 0 ? "high" : "auto"}
+              onError={(event) => {
+                event.currentTarget.style.display = "none";
+              }}
+              className={
+                "fieldly-hero-slide absolute inset-0 h-full w-full object-cover " +
+                (index === heroSlideIndex ? "opacity-100" : "opacity-0")
+              }
+            />
+          ))}
+          <div className="absolute inset-0 bg-gradient-to-b from-sky-50/90 via-sky-50/75 to-white/85" />
+        </div>
+        <div className="relative z-10 mx-auto flex max-w-6xl flex-col items-center px-4 py-8 text-center sm:py-10 lg:py-12">
+          <div className="flex w-full max-w-[940px] flex-col items-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/80 px-3 py-1.5 text-xs font-extrabold uppercase tracking-wide text-field shadow-sm backdrop-blur">
               <MapPin className="size-4" />
               {t(lang, "gate_kicker")}
             </div>
-            <h1 className="mt-4 max-w-[590px] font-display text-4xl font-extrabold leading-[1.04] tracking-tight text-ink sm:text-5xl lg:text-[3.35rem]">
+            <h1 className="mt-4 max-w-[900px] font-display text-4xl font-extrabold leading-[1.04] tracking-tight text-ink sm:text-5xl lg:text-6xl">
               Construction &amp; Field Equipment Services{" "}
               <span className="text-field">Across India</span>
             </h1>
-            <p className="mt-4 max-w-xl text-base font-medium leading-7 text-ink/90 sm:text-lg">
+            <p className="mt-4 max-w-3xl text-base font-medium leading-7 text-ink/90 sm:text-lg">
               Book borewell rigs, JCBs, cranes, tractors, water tankers and more — at your work site, quickly and easily.
             </p>
 
-            <div className="mt-6 max-w-[390px] rounded-3xl border border-white/90 bg-white/95 p-4 shadow-[0_20px_55px_rgba(20,40,58,0.16)] backdrop-blur sm:p-5">
-              <h2 className="font-display text-xl font-extrabold tracking-tight sm:text-2xl">
+            <div data-testid="location-hero-card" className="mt-6 w-full max-w-[720px] rounded-3xl border border-white/90 bg-white/95 p-4 text-left shadow-[0_20px_55px_rgba(20,40,58,0.16)] backdrop-blur sm:p-5">
+              <h2 className="text-center font-display text-xl font-extrabold tracking-tight sm:text-2xl">
                 Where is your work site?
               </h2>
-              <p className="mt-1 text-sm leading-6 text-muted">
+              <p className="mt-1 text-center text-sm leading-6 text-muted">
                 Choose how you want to set the location.
               </p>
               <div className="mt-4 grid grid-cols-3 gap-2">
@@ -197,55 +219,12 @@ function Home() {
               >
                 Enter location <ArrowRight className="ml-2 size-4" />
               </Button>
-              <p className="mt-3 flex items-start gap-2 text-xs leading-5 text-muted">
+              <p className="mt-3 flex items-start justify-center gap-2 text-center text-xs leading-5 text-muted">
                 <ShieldCheck className="mt-0.5 size-4 shrink-0 text-field" />
                 {t(lang, "gate_privacy")}
               </p>
             </div>
-            <div className="mt-3 max-w-[390px] rounded-2xl border border-white/70 bg-white/85 p-2.5 shadow-sm backdrop-blur-sm">
-              <div className="mb-2 flex items-center justify-between gap-2 px-1">
-                <span className="text-xs font-extrabold text-ink">Hero background</span>
-                <span className="text-[10px] text-muted">Choose a scene</span>
-              </div>
-              <div className="grid grid-cols-4 gap-2" role="group" aria-label="Choose hero background">
-                {HERO_BACKGROUNDS.map((scene) => (
-                  <button
-                    key={scene.id}
-                    type="button"
-                    aria-label={"Use " + scene.label.toLowerCase() + " background"}
-                    aria-pressed={heroBackgroundId === scene.id}
-                    onClick={() => setHeroBackgroundId(scene.id)}
-                    className={
-                      "min-w-0 rounded-xl border p-1 text-center transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-field " +
-                      (heroBackgroundId === scene.id
-                        ? "border-field bg-field-soft ring-1 ring-field/30"
-                        : "border-transparent hover:border-field/40 hover:bg-white/90")
-                    }
-                  >
-                    <span className="block h-9 overflow-hidden rounded-lg bg-sky-100 sm:h-11">
-                      <img
-                        src={scene.image}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        onError={(event) => {
-                          if (event.currentTarget.dataset.fallback === "true") {
-                            event.currentTarget.style.display = "none";
-                            return;
-                          }
-                          event.currentTarget.dataset.fallback = "true";
-                          event.currentTarget.src = HERO_IMAGE;
-                        }}
-                        className="h-full w-full object-cover"
-                      />
-                    </span>
-                    <span className="mt-1 block truncate text-[10px] font-bold leading-tight text-ink sm:text-[11px]">
-                      {scene.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
+
           </div>
 
         </div>
