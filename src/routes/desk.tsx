@@ -189,7 +189,7 @@ function DeskHome({ providerId }: { providerId: string }) {
               whenLabel={r.whenLabel}
               notes={r.notes}
               suggested={priceJob(r.serviceId, provider, r.requirements).amount}
-              existing={quotes.find((q) => q.requestId === r.id && q.providerId === provider.id && q.status === "pending")}
+              existing={quotes.find((q) => q.requestId === r.id && q.providerId === provider.id && (q.status === "draft" || q.status === "pending"))}
               onSend={(amount, note) => {
                 const result = sendQuote(r.id, amount, note);
                 if (!result.ok) toast.error(result.error);
@@ -263,7 +263,7 @@ function QuoteCard({
   onSend: (amount: number, note: string) => void
   onDecline: () => void
 }) {
-  const [amount, setAmount] = useState(String(existing?.amount ?? suggested));
+  const [amount, setAmount] = useState(String(existing?.amount && existing.amount > 0 ? existing.amount : suggested));
   const [note, setNote] = useState(existing?.note ?? "");
   return (
     <article className="rounded-3xl border border-line bg-card p-5">
@@ -299,7 +299,7 @@ function QuoteCard({
         />
       </div>
       <div className="mt-3 flex gap-2">
-        <Button onClick={() => onSend(Number(amount), note)}>{existing ? "Update quote" : "Send quote"}</Button>
+        <Button onClick={() => onSend(Number(amount), note)}>{existing && existing.amount > 0 ? "Update quote" : "Send quote"}</Button>
         <Button variant="secondary" onClick={onDecline}>
           Decline
         </Button>
