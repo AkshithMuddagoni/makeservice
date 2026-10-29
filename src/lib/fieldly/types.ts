@@ -71,7 +71,6 @@ export type ServiceDef = {
   radiusKm: number
   includes: string[]
   fields: FieldDef[]
-  capabilities?: Record<string, string[]>
 };
 
 export type Rate = { rate: number; unit: string };
@@ -93,6 +92,7 @@ export type Provider = {
   lat: number
   lng: number
   services: string[]
+  capabilities?: Record<string, string[]>
   equipment: string
   machines: string[]
   years: number
@@ -169,7 +169,7 @@ export type Quote = {
   etaMin: number
   note: string
   includes: string[]
-  status: "pending" | "accepted" | "declined"
+  status: "draft" | "pending" | "accepted" | "declined"
   createdAt: number
 };
 
