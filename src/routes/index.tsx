@@ -190,13 +190,9 @@ function Home() {
       <section className="mx-auto max-w-6xl px-4 py-8 sm:py-10 lg:py-12">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-field">Explore Fieldly</p>
-            <h2 className="mt-2 font-display text-2xl font-extrabold tracking-tight sm:text-3xl">
+            <h2 className="font-display text-2xl font-extrabold tracking-tight sm:text-3xl">
               Popular Services
             </h2>
-            <p className="mt-1 text-sm leading-6 text-muted">
-              Equipment for construction, agriculture and everyday site work.
-            </p>
           </div>
           <button
             type="button"
@@ -237,7 +233,7 @@ function Home() {
                   <span className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/25 to-transparent" />
                 </div>
                 <div className="min-w-0 p-2 sm:p-3">
-                  <span className="block break-words text-[10px] font-extrabold leading-tight sm:text-sm">
+                  <span className="block break-words text-[11px] font-extrabold leading-tight sm:text-sm">
                     {photo.title}
                   </span>
                 </div>
