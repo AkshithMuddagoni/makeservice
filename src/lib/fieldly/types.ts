@@ -118,6 +118,7 @@ export type Draft = {
   requirements: Record<string, string>
   whenLabel: string
   notes: string
+  siteImages?: string[]
 };
 
 export type Session = {
@@ -148,6 +149,8 @@ export type JobRequest = {
   status: "open" | "booked" | "cancelled"
   createdAt: number
   targetedProviderIds: string[]
+  declinedProviderIds?: string[]
+  siteImages?: string[]
   messages: ChatMessage[]
 };
 
@@ -188,6 +191,8 @@ export type Booking = {
   amount: number
   summary: string
   terms: string
+  termsAcceptedAt?: number
+  siteImages?: string[]
   status: BookingStatus
   startCode: string | null
   codeHash: string | null
