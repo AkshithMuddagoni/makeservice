@@ -30,6 +30,7 @@ function RequestPage() {
   const sendMessage = useFieldly((s) => s.sendMessage);
   const providers = useProviders();
   const [shown, setShown] = useState(1);
+  const [quoteConsent, setQuoteConsent] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!request) return;
@@ -57,6 +58,10 @@ function RequestPage() {
   const service = getService(request.serviceId);
   const visible = quotes.slice(0, shown);
   const pending = quotes.filter((q) => q.status === "pending");
+  const selectedProvider = providers.find((p) => p.id === request.targetedProviderIds[0]);
+  const providerDeclined = Boolean(
+    selectedProvider && request.declinedProviderIds?.includes(selectedProvider.id),
+  );
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -67,6 +72,34 @@ function RequestPage() {
       <p className="mt-2 text-sm text-muted">
         {request.site.label}, {request.site.area} · {request.whenLabel} · opened {timeAgo(request.createdAt)}
       </p>
+      <section className="mt-4 rounded-2xl border border-line bg-card p-4">
+        <div className="text-xs font-extrabold uppercase tracking-wider text-muted">Selected provider</div>
+        {selectedProvider ? (
+          <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-bold">{selectedProvider.name}</p>
+              <div className="mt-1 flex items-center gap-2 text-xs text-muted">
+                <Stars value={selectedProvider.rating} />
+                {selectedProvider.rating.toFixed(1)} · {selectedProvider.reviewCount} reviews · {formatKm(kmBetween(request.site, selectedProvider))} away
+              </div>
+            </div>
+            <span className={providerDeclined ? "rounded-lg bg-danger-soft px-2 py-1 text-xs font-semibold text-danger" : request.status === "booked" ? "rounded-lg bg-field-soft px-2 py-1 text-xs font-semibold text-field" : "rounded-lg bg-gold-soft px-2 py-1 text-xs font-semibold text-gold"}>
+              {providerDeclined ? "Declined" : request.status === "booked" ? "Booking confirmed" : quotes.length ? "Responded" : "Awaiting response"}
+            </span>
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-muted">Provider details are unavailable.</p>
+        )}
+        <p className="mt-2 text-sm text-muted">{request.site.address || request.site.label}, {request.site.area}, {request.site.city}, {request.site.state}</p>
+        {request.site.pincode && <p className="text-sm text-muted">PIN {request.site.pincode}</p>}
+        {request.siteImages?.length ? (
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {request.siteImages.map((image, index) => (
+              <img key={image.slice(-36)} src={image} alt={`Work-site photo ${index + 1}`} className="h-24 w-full rounded-xl border border-line object-cover" />
+            ))}
+          </div>
+        ) : null}
+      </section>
       <ul className="mt-3 flex flex-wrap gap-2 text-sm">
         {requirementLines(request.serviceId, request.requirements).map((row) => (
           <li key={row.label} className="rounded-full bg-card px-3 py-1">
@@ -110,20 +143,34 @@ function RequestPage() {
                 ))}
               </ul>
               <p className="mt-2 text-sm text-muted">{quote.note}</p>
+              {quote.status === "pending" && request.status === "open" && (
+                <label className="mt-4 flex items-start gap-3 rounded-xl border border-line bg-white p-3 text-sm leading-5">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(quoteConsent[quote.id])}
+                    onChange={(event) => setQuoteConsent((current) => ({ ...current, [quote.id]: event.target.checked }))}
+                    className="mt-1 size-4 shrink-0 accent-emerald-600"
+                  />
+                  <span>
+                    I have reviewed this provider's price, included work, note, arrival estimate and the details I submitted. I agree to proceed on these quoted terms. Any change in scope or price must be agreed before extra work starts.
+                  </span>
+                </label>
+              )}
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 {quote.status === "pending" && request.status === "open" && (
                   <Button
+                    disabled={!quoteConsent[quote.id]}
                     onClick={() => {
                       const result = acceptQuote(quote.id);
                       if (!result.ok || !result.id) {
                         toast.error(!result.ok ? result.error : "Could not book.");
                         return;
                       }
-                      toast.success("Booking confirmed.");
+                      toast.success("Quote accepted. Booking confirmed.");
                       void navigate({ to: "/bookings/$bookingId", params: { bookingId: result.id } });
                     }}
                   >
-                    Accept quote
+                    Accept quote & confirm booking
                   </Button>
                 )}
                 {quote.status === "accepted" && <span className="text-sm font-semibold text-field">Accepted</span>}
@@ -137,7 +184,23 @@ function RequestPage() {
             Another operator is pricing this job…
           </p>
         )}
-        {quotes.length === 0 && <p className="text-sm text-muted">No quotes yet.</p>}
+        {quotes.length === 0 && !providerDeclined && request.status === "open" && (
+          <div className="rounded-2xl border border-line bg-card p-4">
+            <p className="font-semibold">Waiting for {selectedProvider?.name ?? "the selected provider"} to respond.</p>
+            <p className="mt-1 text-sm leading-5 text-muted">
+              The provider may accept by sending a quote or decline. You will not be charged or booked while this request is waiting.
+            </p>
+          </div>
+        )}
+        {providerDeclined && request.status === "open" && (
+          <div className="rounded-2xl border border-danger/25 bg-danger-soft p-4">
+            <p className="font-semibold text-danger">The selected provider declined this request.</p>
+            <p className="mt-1 text-sm leading-5 text-muted">You can choose another nearby provider. Your service details remain saved.</p>
+            <Button asChild className="mt-3">
+              <Link to="/find/$slug" params={{ slug: request.serviceId }}>Choose another provider</Link>
+            </Button>
+          </div>
+        )}
       </div>
 
       {request.status === "open" && (
@@ -158,9 +221,18 @@ function RequestPage() {
       )}
 
       <h2 className="mt-8 font-display text-xl font-bold">Job chat</h2>
-      <div className="mt-3">
-        <ChatBox messages={request.messages} onSend={(text) => sendMessage("request", request.id, text)} />
-      </div>
+      {quotes.length > 0 ? (
+        <div className="mt-3">
+          <ChatBox messages={request.messages} onSend={(text) => {
+            const result = sendMessage("request", request.id, text);
+            if (!result.ok) toast.error(result.error);
+          }} />
+        </div>
+      ) : (
+        <p className="mt-2 rounded-xl bg-paper p-3 text-sm leading-5 text-muted">
+          Chat opens after the selected provider responds. Phone numbers stay private until a quote is accepted and the booking is confirmed.
+        </p>
+      )}
     </div>
   );
 }
