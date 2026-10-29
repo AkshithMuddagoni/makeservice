@@ -35,6 +35,11 @@ export function StatusPill({ status }: { status: string }) {
   return <span className={cn("inline-flex rounded-lg px-2 py-1 text-xs font-semibold", tone)}>{label}</span>;
 }
 
+function isFieldVisible(field: FieldDef, value: Record<string, string>) {
+  if (!field.showWhen) return true;
+  return field.showWhen.values.includes(value[field.showWhen.key] ?? "");
+}
+
 export function FieldList({
   service,
   value,
@@ -46,7 +51,7 @@ export function FieldList({
 }) {
   return (
     <div className="grid gap-5">
-      {service.fields.map((field) => (
+      {service.fields.filter((field) => isFieldVisible(field, value)).map((field) => (
         <Field key={field.key} field={field} value={value[field.key] ?? ""} onChange={(v) => onChange(field.key, v)} />
       ))}
     </div>
@@ -108,7 +113,9 @@ function Field({
 }
 
 export function missingFields(service: ServiceDef, value: Record<string, string>, whenLabel: string) {
-  const missing = service.fields.filter((f) => f.required && !(value[f.key] ?? "").trim()).map((f) => f.label);
+  const missing = service.fields
+    .filter((field) => isFieldVisible(field, value) && field.required && !(value[field.key] ?? "").trim())
+    .map((field) => field.label);
   if (!whenLabel || whenLabel === "Pick a date") missing.push("When the work should happen");
   return missing;
 }
@@ -117,7 +124,7 @@ export function requirementLines(serviceId: string, req: Record<string, string>)
   const service = getService(serviceId);
   if (!service) return [];
   return service.fields
-    .filter((f) => (req[f.key] ?? "").trim())
+    .filter((field) => isFieldVisible(field, req) && (req[field.key] ?? "").trim())
     .map((f) => ({
       label: f.label,
       value: f.type === "number" && f.unit ? `${req[f.key]} ${f.unit}` : req[f.key],
