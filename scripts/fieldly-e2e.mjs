@@ -449,6 +449,7 @@ async function testMobileCustomerJourney() {
     assert.ok(providerDeskText.includes("Mockup smoke test work site"),
       "the selected provider must see the customer request in the operator desk");
     await page.getByRole("button", { name: "Accept request & send quote", exact: true }).waitFor();
+    await page.getByLabel("Quote details and terms").fill("Includes rig, operator and travel; extra casing and major repairs are extra; rescheduling must be agreed before booking.");
     await page.getByRole("button", { name: "Accept request & send quote", exact: true }).click();
 
     await page.goto(new URL("/account", page.url()).href);
