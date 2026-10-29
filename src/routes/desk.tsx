@@ -103,14 +103,19 @@ function DeskHome({ providerId }: { providerId: string }) {
   const openJobs = useMemo(() => {
     if (!provider) return [];
     return requests
-      .filter((r) => r.status === "open" && r.targetedProviderIds.includes(provider.id) && provider.services.includes(r.serviceId))
+      .filter((r) =>
+        r.status === "open" &&
+        r.targetedProviderIds.includes(provider.id) &&
+        provider.services.includes(r.serviceId) &&
+        !quotes.some((q) => q.requestId === r.id && q.providerId === provider.id && q.status === "declined"),
+      )
       .map((r) => ({ r, km: kmBetween(provider, r.site) }))
       .filter((row) => {
         const service = getService(row.r.serviceId);
         return service ? row.km <= service.radiusKm + 10 : false;
       })
       .sort((a, b) => a.km - b.km);
-  }, [requests, provider]);
+  }, [requests, provider, quotes]);
 
   const mine = bookings.filter((b) => b.providerId === providerId);
   const earned = mine.filter((b) => b.status === "PAID").reduce((sum, b) => sum + b.amount, 0);
@@ -273,6 +278,11 @@ function QuoteCard({
           <p className="text-sm text-muted">
             {place} · {whenLabel}
           </p>
+          {existing?.amount === 0 && (
+            <p className="mt-2 rounded-lg bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-950">
+              New request: check the details, then send your own price and included work. The suggested amount is only a preview starting point, not a customer offer.
+            </p>
+          )}
         </div>
         <span className="text-xs text-muted">{requestId.slice(-4)}</span>
       </div>
