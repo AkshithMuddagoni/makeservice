@@ -374,8 +374,10 @@ function Home() {
 function Marketplace() {
   const lang = useFieldly((s) => s.lang);
   const site = useFieldly((s) => s.site)!;
+  const session = useFieldly((s) => s.session);
   const providers = useProviders();
   const [query, setQuery] = useState("");
+  const [signInOpen, setSignInOpen] = useState(true);
   const services = SERVICES.filter((service) =>
     `${service.name} ${service.blurb}`.toLowerCase().includes(query.trim().toLowerCase()),
   );
@@ -388,6 +390,35 @@ function Marketplace() {
         .slice(0, 4),
     [providers, site],
   );
+
+  if (!session || session.role !== "customer") {
+    return (
+      <main className="min-h-[calc(100vh-4rem)] bg-paper px-4 py-10 sm:py-16">
+        <section className="mx-auto max-w-2xl rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-8">
+          <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-field">Work site confirmed</p>
+          <h1 className="mt-3 font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
+            Sign in before choosing a service.
+          </h1>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-muted">
+            Your work site is saved as <strong>{site.city}, {site.state}</strong>. Sign in to continue to service selection and job details.
+          </p>
+          <div className="mt-5 flex flex-wrap items-center gap-2 rounded-2xl bg-field-soft p-3 text-sm">
+            <MapPin className="size-4 shrink-0 text-field" />
+            <span className="font-semibold">{site.address || site.label}</span>
+            <span className="text-muted">· {site.pincode}</span>
+          </div>
+          <Button className="mt-5" onClick={() => setSignInOpen(true)}>
+            Sign in to choose services <ArrowRight className="ml-2 size-4" />
+          </Button>
+        </section>
+        <CustomerSignInDialog
+          open={signInOpen}
+          onClose={() => setSignInOpen(false)}
+          onSuccess={() => setSignInOpen(false)}
+        />
+      </main>
+    );
+  }
 
   return (
     <div>
