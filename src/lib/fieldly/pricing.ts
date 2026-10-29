@@ -37,6 +37,15 @@ export function priceJob(
   const accessMul = access === "Difficult terrain" ? 1.15 : access === "Narrow road" ? 1.08 : 1;
 
   if (serviceId === "borewell") {
+    const borewellService = req.borewell_service || "New borewell drilling";
+    if (borewellService !== "New borewell drilling") {
+      return {
+        amount: 2500,
+        summary: "Quote required",
+        includes,
+        note: "No standard price is assumed for this work type. The amount shown to operators is only a draft input; the operator must replace it with a real quote and scope before sending it to the customer.",
+      };
+    }
     const assumed = !req.depth_ft;
     const depth = num(req.depth_ft, 450);
     const amount = Math.round(depth * rate.rate * accessMul);

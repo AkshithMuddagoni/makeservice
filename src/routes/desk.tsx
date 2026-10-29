@@ -9,6 +9,7 @@ import { formatKm, kmBetween } from "@/lib/fieldly/geo";
 import { priceJob } from "@/lib/fieldly/pricing";
 import { t } from "@/lib/fieldly/i18n";
 import { useFieldly, useProviders } from "@/lib/fieldly/store";
+import type { SiteImage } from "@/lib/fieldly/types";
 import { z } from "zod";
 
 export const Route = createFileRoute("/desk")({ component: DeskPage });
@@ -103,14 +104,19 @@ function DeskHome({ providerId }: { providerId: string }) {
   const openJobs = useMemo(() => {
     if (!provider) return [];
     return requests
-      .filter((r) => r.status === "open" && r.targetedProviderIds.includes(provider.id) && provider.services.includes(r.serviceId))
+      .filter((r) =>
+        r.status === "open" &&
+        r.targetedProviderIds.includes(provider.id) &&
+        provider.services.includes(r.serviceId) &&
+        !quotes.some((q) => q.requestId === r.id && q.providerId === provider.id && q.status === "declined"),
+      )
       .map((r) => ({ r, km: kmBetween(provider, r.site) }))
       .filter((row) => {
         const service = getService(row.r.serviceId);
         return service ? row.km <= service.radiusKm + 10 : false;
       })
       .sort((a, b) => a.km - b.km);
-  }, [requests, provider]);
+  }, [requests, provider, quotes]);
 
   const mine = bookings.filter((b) => b.providerId === providerId);
   const earned = mine.filter((b) => b.status === "PAID").reduce((sum, b) => sum + b.amount, 0);
@@ -184,12 +190,13 @@ function DeskHome({ providerId }: { providerId: string }) {
               key={r.id}
               requestId={r.id}
               title={getService(r.serviceId)?.name ?? r.serviceId}
-              place={`${r.site.label} · ${formatKm(km)}`}
+              place={`${r.site.address || r.site.label}, ${r.site.city}, ${r.site.state} · ${formatKm(km)} straight-line`}
               lines={requirementLines(r.serviceId, r.requirements)}
               whenLabel={r.whenLabel}
               notes={r.notes}
+              siteImages={r.siteImages ?? []}
               suggested={priceJob(r.serviceId, provider, r.requirements).amount}
-              existing={quotes.find((q) => q.requestId === r.id && q.providerId === provider.id && q.status === "pending")}
+              existing={quotes.find((q) => q.requestId === r.id && q.providerId === provider.id && (q.status === "draft" || q.status === "pending"))}
               onSend={(amount, note) => {
                 const result = sendQuote(r.id, amount, note);
                 if (!result.ok) toast.error(result.error);
@@ -247,6 +254,7 @@ function QuoteCard({
   lines,
   whenLabel,
   notes,
+  siteImages,
   suggested,
   existing,
   onSend,
@@ -258,12 +266,13 @@ function QuoteCard({
   lines: { label: string; value: string }[]
   whenLabel: string
   notes: string
+  siteImages: SiteImage[]
   suggested: number
   existing?: { amount: number; note: string }
   onSend: (amount: number, note: string) => void
   onDecline: () => void
 }) {
-  const [amount, setAmount] = useState(String(existing?.amount ?? suggested));
+  const [amount, setAmount] = useState(String(existing?.amount && existing.amount > 0 ? existing.amount : suggested));
   const [note, setNote] = useState(existing?.note ?? "");
   return (
     <article className="rounded-3xl border border-line bg-card p-5">
@@ -273,6 +282,11 @@ function QuoteCard({
           <p className="text-sm text-muted">
             {place} · {whenLabel}
           </p>
+          {existing?.amount === 0 && (
+            <p className="mt-2 rounded-lg bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-950">
+              New request: check the details, then send your own price and included work. The suggested amount is only a preview starting point, not a customer offer.
+            </p>
+          )}
         </div>
         <span className="text-xs text-muted">{requestId.slice(-4)}</span>
       </div>
@@ -284,6 +298,19 @@ function QuoteCard({
         ))}
         {notes && <li>Note: {notes}</li>}
       </ul>
+      {siteImages.length > 0 && (
+        <section className="mt-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Customer site photos</h3>
+          <div className="mt-2 grid grid-cols-3 gap-2 sm:max-w-xs">
+            {siteImages.map((photo, index) => (
+              <a key={photo.name + index} href={photo.dataUrl} target="_blank" rel="noreferrer" className="overflow-hidden rounded-xl border border-line">
+                <img src={photo.dataUrl} alt={photo.name} className="h-20 w-full object-cover" />
+                <span className="block truncate px-2 py-1 text-[10px] text-muted">{photo.name}</span>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="mt-3 flex flex-wrap gap-2">
         <input
           value={amount}
@@ -299,7 +326,7 @@ function QuoteCard({
         />
       </div>
       <div className="mt-3 flex gap-2">
-        <Button onClick={() => onSend(Number(amount), note)}>{existing ? "Update quote" : "Send quote"}</Button>
+        <Button onClick={() => onSend(Number(amount), note)}>{existing && existing.amount > 0 ? "Update quote" : "Send quote"}</Button>
         <Button variant="secondary" onClick={onDecline}>
           Decline
         </Button>

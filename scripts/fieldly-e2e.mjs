@@ -411,6 +411,7 @@ async function testMobileCustomerJourney() {
     await page.getByRole("link", { name: /Borewell drilling/ }).first().click();
     await page.getByRole("heading", { name: "Borewell drilling", exact: true }).waitFor();
 
+    await page.getByRole("button", { name: "New borewell drilling", exact: true }).click();
     const purposeOption = page.locator("button").filter({ hasText: /^Home$/ }).first();
     await purposeOption.waitFor({ state: "visible" });
     await purposeOption.click();
@@ -429,13 +430,63 @@ async function testMobileCustomerJourney() {
 
     await page.getByRole("button", { name: "Request quotes", exact: true }).click();
     await page.getByRole("heading", { name: "Borewell drilling", exact: true }).waitFor();
-    await page.getByRole("button", { name: "Accept quote", exact: true }).waitFor();
-    await page.getByRole("button", { name: "Accept quote", exact: true }).click();
+    const requestUrl = page.url();
+    await page.getByText(/Waiting for operators to respond/).waitFor();
+
+    // Submit a real quote from the operator account instead of accepting an auto-generated estimate.
+    await page.goto(BASE_URL + "/desk");
+    await page.locator("input").nth(1).fill("482609");
+    await page.getByRole("button", { name: "Open desk", exact: true }).click();
+    await page.getByRole("heading", { name: "Sri Sai Borewell Works", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Send quote", exact: true }).first().click();
+
+    // Switch back to the customer who created the request, then review and explicitly confirm the quote.
+    await page.goto(BASE_URL + "/account");
+    await page.getByRole("button", { name: "Back to customer", exact: true }).click();
+    await page.goto(requestUrl);
+    await page.getByRole("button", { name: "Review and choose", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Review and choose", exact: true }).click();
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: "Confirm booking", exact: true }).click();
+    const bookingUrl = page.url();
     await page.getByText("FLD-1041", { exact: true }).waitFor();
     await page.getByRole("heading", { name: "Confirmed", exact: true }).waitFor();
     await assertNoHorizontalOverflow(page, "mobile booking confirmation");
+
+    // Provider marks travel and arrival; the arrival transition creates the customer start OTP.
+    await page.goto(BASE_URL + "/desk");
+    await page.locator("input").nth(1).fill("482609");
+    await page.getByRole("button", { name: "Open desk", exact: true }).click();
+    await page.goto(bookingUrl);
+    await page.getByRole("button", { name: "Mark on the way", exact: true }).click();
+    await page.getByRole("button", { name: "Mark arrived", exact: true }).click();
+
+    // Only the customer sees the code. Switch back to customer, read it, then verify it in the operator view.
+    await page.goto(BASE_URL + "/account");
+    await page.getByRole("button", { name: "Back to customer", exact: true }).click();
+    await page.goto(bookingUrl);
+    const startCode = (await page.locator(".otp-digit").allTextContents()).join("").trim();
+    assert.match(startCode, /^\\d{4}$/, "arrival should generate the customer start OTP");
+
+    await page.goto(BASE_URL + "/desk");
+    await page.locator("input").nth(1).fill("482609");
+    await page.getByRole("button", { name: "Open desk", exact: true }).click();
+    await page.goto(bookingUrl);
+    await page.getByPlaceholder("••••").fill(startCode);
+    await page.getByRole("button", { name: "Start work", exact: true }).click();
+    await page.getByRole("button", { name: "Mark work done", exact: true }).click();
+
+    // Feedback becomes available on completion, without requiring the prototype payment button first.
+    await page.goto(BASE_URL + "/account");
+    await page.getByRole("button", { name: "Back to customer", exact: true }).click();
+    await page.goto(bookingUrl);
+    await page.getByPlaceholder("What should the next customer know?").fill("Completed the work as agreed.");
+    await page.getByRole("button", { name: "Submit review", exact: true }).click();
+    await page.getByText("You rated this 5 stars.", { exact: true }).waitFor();
+
+    await assertNoHorizontalOverflow(page, "mobile completed booking");
     assert.deepEqual(pageErrors, [], "mobile journey should have no uncaught page errors");
-    log("mobile: location → service form → provider discovery → login → quote acceptance → booking passed");
+    log("mobile: location → service form → provider quote → customer confirmation → arrival OTP → completion → feedback passed");
   } finally {
     await context.close();
   }

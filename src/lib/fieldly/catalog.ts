@@ -23,6 +23,14 @@ const access = {
 
 const whenHint = "Operators quote against this window. You can still message them.";
 
+export const BOREWELL_SERVICE_OPTIONS = [
+  "New borewell drilling",
+  "Flushing / cleaning an existing borewell",
+  "Deepening an existing borewell",
+  "Groundwater / site suitability survey",
+  "Pump installation / repair",
+] as const;
+
 export const SERVICES: ServiceDef[] = [
   {
     id: "borewell",
@@ -33,6 +41,14 @@ export const SERVICES: ServiceDef[] = [
     radiusKm: 45,
     includes: ["Operator on the rig", "Rig and compressor", "Travel inside this quote"],
     fields: [
+      {
+        key: "borewell_service",
+        label: "Which borewell service do you need?",
+        type: "select",
+        required: true,
+        options: [...BOREWELL_SERVICE_OPTIONS],
+        hint: "Choose the work first; the operator confirms scope and price before you accept.",
+      },
       {
         key: "purpose",
         label: "What is this borewell for?",
@@ -309,7 +325,7 @@ export const SERVICES: ServiceDef[] = [
   },
 ];
 
-export const WHEN_OPTIONS = ["Today", "Tomorrow", "This week", "Pick a date"] as const;
+export const WHEN_OPTIONS = ["Today", "Tomorrow", "Pick a date"] as const;
 
 export const WHEN_HINT = whenHint;
 
@@ -328,6 +344,7 @@ export const CATALOG_PROVIDERS: Provider[] = [
     lat: 17.9722,
     lng: 79.588,
     services: ["borewell"],
+    capabilities: { borewell: ["New borewell drilling", "Deepening an existing borewell"] },
     equipment: "Hydraulic rig · 1,000 ft",
     machines: ["Hydraulic borewell rig · 1,000 ft", "High-pressure compressor", "Operator, 11 years"],
     years: 11,
@@ -361,6 +378,7 @@ export const CATALOG_PROVIDERS: Provider[] = [
     lat: 17.984,
     lng: 79.6125,
     services: ["borewell"],
+    capabilities: { borewell: ["New borewell drilling", "Flushing / cleaning an existing borewell"] },
     equipment: "Drilling rig · 800 ft",
     machines: ["Drilling rig · 800 ft", "Support truck", "Operator, 7 years"],
     years: 7,
@@ -394,6 +412,7 @@ export const CATALOG_PROVIDERS: Provider[] = [
     lat: 18.0072,
     lng: 79.557,
     services: ["borewell", "jcb"],
+    capabilities: { borewell: [...BOREWELL_SERVICE_OPTIONS] },
     equipment: "Rotary rig · 1,200 ft",
     machines: ["Rotary rig · 1,200 ft", "JCB 3DX", "Two operators"],
     years: 15,
@@ -710,11 +729,37 @@ export function getService(id: string | undefined) {
   return SERVICES.find((s) => s.id === id);
 }
 
-export function isEligible(provider: Provider, serviceId: string) {
+export function isEligible(
+  provider: Provider,
+  serviceId: string,
+  requirements: Record<string, string> = {},
+) {
   if (!provider.approved || !provider.verified.identity || !provider.verified.equipment) return false;
   if (!provider.services.includes(serviceId)) return false;
-  if (serviceId === "borewell" && !provider.verified.walta) return false;
+  if (serviceId === "borewell") {
+    const workType = requirements.borewell_service;
+    // New drilling and deepening are treated as rig work: require the WALTA entry on the listing.
+    // Other borewell-related services still require identity/equipment checks and a declared capability.
+    const requiresRigRegistration =
+      !workType ||
+      workType === "New borewell drilling" ||
+      workType === "Deepening an existing borewell";
+    if (requiresRigRegistration && !provider.verified.walta) return false;
+  }
   return true;
+}
+
+export function supportsServiceRequest(
+  provider: Provider,
+  serviceId: string,
+  requirements: Record<string, string>,
+) {
+  if (serviceId !== "borewell") return true;
+  const requestedCapability = requirements.borewell_service;
+  return Boolean(
+    requestedCapability &&
+      provider.capabilities?.borewell?.includes(requestedCapability),
+  );
 }
 
 export function verificationLines(provider: Provider) {

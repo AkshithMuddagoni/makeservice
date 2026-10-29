@@ -7,7 +7,7 @@ import { MapCanvas, type MapMarker } from "@/components/fieldly/map-canvas";
 import { Button } from "@/components/ui/button";
 import { getService } from "@/lib/fieldly/catalog";
 import { inr, whenClock } from "@/lib/fieldly/format";
-import { midway } from "@/lib/fieldly/geo";
+import { formatKm, kmBetween, midway } from "@/lib/fieldly/geo";
 import { STATUS_LABEL } from "@/lib/fieldly/i18n";
 import { useFieldly, useProviders } from "@/lib/fieldly/store";
 import type { BookingStatus } from "@/lib/fieldly/types";
@@ -130,10 +130,15 @@ function BookingPage() {
           })}
         </ol>
         <div className="mt-5 h-72">
-          <MapCanvas center={booking.site} markers={markers} />
+          <MapCanvas center={booking.site} markers={markers} showDistanceLines />
         </div>
-        <p className="mt-2 text-xs text-muted">
-          Estimated position only. Live GPS runs during an active job in production, not in this preview.
+        <p className="mt-2 text-xs leading-5 text-muted">
+          {booking.status === "CONFIRMED"
+            ? "Provider starting point · "
+            : booking.status === "ON_THE_WAY"
+              ? "Estimated mid-route position · "
+              : "Site position · "}
+          {formatKm(kmBetween(vehicle, booking.site))} straight-line distance remaining. This preview does not receive live GPS or calculate road routes.
         </p>
         {(booking.status === "CANCELLED" || booking.status === "DISPUTED") && (
           <p className="mt-3 rounded-2xl bg-danger-soft p-4 text-sm text-danger">
@@ -186,6 +191,27 @@ function BookingPage() {
               <li>When: {booking.whenLabel}</li>
             </ul>
             <p className="mt-3 text-xs text-muted">{booking.terms}</p>
+            {booking.siteImages?.length ? (
+              <div className="mt-4">
+                <h3 className="text-sm font-semibold">Work-site photos</h3>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {booking.siteImages.map((photo, index) => (
+                    <img key={photo.name + index} src={photo.dataUrl} alt={photo.name} className="h-20 w-full rounded-lg object-cover" />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {provider && (
+              <div className="mt-4 rounded-2xl border border-line bg-white p-3">
+                <h3 className="text-sm font-semibold">Operator contact</h3>
+                {provider.phone.startsWith("900000000") ? (
+                  <p className="mt-1 text-xs leading-5 text-muted">This is a seeded preview number, so direct calling is disabled. Use the booking chat in this prototype.</p>
+                ) : (
+                  <a href={"tel:" + provider.phone} className="mt-2 inline-flex h-10 items-center rounded-xl bg-field px-4 text-sm font-semibold text-on-field">Call operator · {provider.phone}</a>
+                )}
+                <p className="mt-2 text-xs text-muted">Chat is stored in this browser in the preview; production needs a shared backend for real-time messages.</p>
+              </div>
+            )}
 
             {booking.status === "ARRIVED" && booking.startCode && (
               <div className="mt-4 rounded-2xl bg-paper p-4">
@@ -245,7 +271,7 @@ function BookingPage() {
               </div>
             )}
 
-            {booking.status === "PAID" && !booking.review && (
+            {(booking.status === "SERVICE_COMPLETED" || booking.status === "PAID") && !booking.review && (
               <form
                 className="mt-4 grid gap-2"
                 onSubmit={(e) => {
@@ -314,6 +340,15 @@ function BookingPage() {
             <p className="text-sm text-muted">
               Only the assigned operator can update this job. Status changes are restricted to this operator session.
             </p>
+            <div className="mt-3 rounded-2xl border border-line bg-white p-3">
+              <h3 className="text-sm font-semibold">Customer contact</h3>
+              {booking.customerPhone.startsWith("900000000") ? (
+                <p className="mt-1 text-xs text-muted">Preview number · use the booking chat here.</p>
+              ) : (
+                <a href={"tel:" + booking.customerPhone} className="mt-2 inline-flex h-10 items-center rounded-xl bg-field px-4 text-sm font-semibold text-on-field">Call customer · {booking.customerPhone}</a>
+              )}
+              <p className="mt-2 text-xs text-muted">Use the arrival OTP before starting work. Chat is local to this browser in the prototype.</p>
+            </div>
             <div className="mt-4 grid gap-2">
               {booking.status === "CONFIRMED" && (
                 <Button onClick={() => act(transition(booking.id, "ON_THE_WAY"))}>Mark on the way</Button>

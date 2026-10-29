@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { controlClass } from "@/components/fieldly/bits";
 import { ServiceIcon } from "@/components/fieldly/icons";
-import { SERVICES } from "@/lib/fieldly/catalog";
+import { BOREWELL_SERVICE_OPTIONS, SERVICES } from "@/lib/fieldly/catalog";
 import { useFieldly } from "@/lib/fieldly/store";
 import type { Provider } from "@/lib/fieldly/types";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,7 @@ function JoinPage() {
   const [years, setYears] = useState("5");
   const [rate, setRate] = useState("1500");
   const [walta, setWalta] = useState("");
+  const [borewellCapabilities, setBorewellCapabilities] = useState<string[]>(["New borewell drilling"]);
   const [papers, setPapers] = useState({ identity: true, equipment: true, insurance: false });
   const [created, setCreated] = useState<string | null>(null);
 
@@ -34,11 +35,20 @@ function JoinPage() {
     setServices((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
   }
 
+  function toggleBorewellCapability(capability: string) {
+    setBorewellCapabilities((prev) =>
+      prev.includes(capability) ? prev.filter((item) => item !== capability) : [...prev, capability],
+    );
+  }
+
   function submit() {
     if (name.trim().length < 3) return toast.error("Add the business name.");
     if (!phoneSchema.safeParse(phone).success) return toast.error("Enter a valid mobile number.");
     if (!services.length) return toast.error("Pick at least one service.");
     if (!equipment.trim()) return toast.error("Describe the machine.");
+    if (services.includes("borewell") && !borewellCapabilities.length) {
+      return toast.error("Select at least one borewell service capability.");
+    }
     const id = `yard_${phone}`;
     const numeric = Number(rate) || 1500;
     const rates: Provider["rates"] = {};
@@ -57,6 +67,7 @@ function JoinPage() {
       lat: site?.lat ?? 17.978,
       lng: site?.lng ?? 79.575,
       services,
+      capabilities: services.includes("borewell") ? { borewell: borewellCapabilities } : undefined,
       equipment: equipment.trim(),
       machines: [equipment.trim()],
       years: Number(years) || 1,
@@ -147,12 +158,31 @@ function JoinPage() {
             <input value={rate} onChange={(e) => setRate(e.target.value.replace(/\D/g, ""))} className={controlClass} aria-label="Base rate" />
           </div>
           {services.includes("borewell") && (
-            <input
-              value={walta}
-              onChange={(e) => setWalta(e.target.value)}
-              placeholder="WALTA rig number"
-              className={controlClass + " mt-3"}
-            />
+            <>
+              <input
+                value={walta}
+                onChange={(e) => setWalta(e.target.value)}
+                placeholder="WALTA rig number"
+                className={controlClass + " mt-3"}
+              />
+              <section className="mt-4 rounded-2xl border border-line bg-paper p-4">
+                <h3 className="text-sm font-semibold">Which borewell services do you offer?</h3>
+                <p className="mt-1 text-xs leading-5 text-muted">Customers will only see your listing for the service types you select. These are your declarations and are not independent verification.</p>
+                <div className="mt-3 grid gap-2">
+                  {BOREWELL_SERVICE_OPTIONS.map((capability) => (
+                    <label key={capability} className="flex items-start gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={borewellCapabilities.includes(capability)}
+                        onChange={() => toggleBorewellCapability(capability)}
+                        className="mt-0.5 size-4"
+                      />
+                      <span>{capability}</span>
+                    </label>
+                  ))}
+                </div>
+              </section>
+            </>
           )}
           <div className="mt-4 flex gap-2">
             <Button variant="secondary" onClick={() => setStep(1)}>

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { useMemo } from "react";
-import { CATALOG_PROVIDERS, getService, isEligible } from "./catalog";
+import { CATALOG_PROVIDERS, getService, isEligible, supportsServiceRequest } from "./catalog";
 import { kmBetween, travelMinutes } from "./geo";
 import { priceJob } from "./pricing";
 import type {
@@ -190,9 +190,10 @@ export const useFieldly = create<State>()(
         const requirements = draft?.serviceId === serviceId ? draft.requirements : {};
         const whenLabel = draft?.serviceId === serviceId ? draft.whenLabel : "Today";
         const notes = draft?.serviceId === serviceId ? draft.notes : "";
+        const siteImages = draft?.serviceId === serviceId ? draft.siteImages ?? [] : [];
         const ranked = get()
           .allProviders()
-          .filter((p) => isEligible(p, serviceId) && get().isOnline(p.id))
+          .filter((p) => isEligible(p, serviceId, requirements) && supportsServiceRequest(p, serviceId, requirements) && get().isOnline(p.id))
           .map((p) => ({ p, km: kmBetween(site, p) }))
           .filter((row) => row.km <= service.radiusKm)
           .sort((a, b) => a.km - b.km);
@@ -213,6 +214,7 @@ export const useFieldly = create<State>()(
           requirements,
           whenLabel,
           notes,
+          siteImages,
           customerPhone: who.phone,
           customerName: who.name,
           status: "open",
@@ -222,11 +224,12 @@ export const useFieldly = create<State>()(
             {
               id: makeId("msg"),
               from: "system",
-              text: `Request opened for ${service.name} at ${site.label}. ${ids.length} operator${ids.length > 1 ? "s" : ""} can quote.`,
+              text: `Request opened for ${service.name} at ${site.label}. ${ids.length} operator${ids.length > 1 ? "s" : ""} have been invited to respond. You can compare their confirmed quotes when they reply.`,
               at: Date.now(),
             },
           ],
         };
+        // Draft quote rows are visible only to operators. Customers see a quote only after an operator sends it.
         const quotes: Quote[] = ids.map((pid) => {
           const provider = get().providerById(pid)!;
           const priced = priceJob(serviceId, provider, requirements);
@@ -235,12 +238,12 @@ export const useFieldly = create<State>()(
             id: makeId("quo"),
             requestId: id,
             providerId: pid,
-            amount: priced.amount,
-            summary: priced.summary,
+            amount: 0,
+            summary: "Waiting for operator response",
             etaMin: travelMinutes(km),
-            note: priced.note,
+            note: "",
             includes: priced.includes,
-            status: "pending",
+            status: "draft",
             createdAt: Date.now(),
           };
         });
@@ -257,12 +260,12 @@ export const useFieldly = create<State>()(
         if (!request.targetedProviderIds.includes(provider.id)) {
           return { ok: false, error: "This request has not been assigned to your operator account." };
         }
-        if (!isEligible(provider, request.serviceId)) {
+        if (!isEligible(provider, request.serviceId, request.requirements) || !supportsServiceRequest(provider, request.serviceId, request.requirements)) {
           return { ok: false, error: "This machine is not eligible for the service. Check papers and WALTA if it is a rig." };
         }
         if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "Enter a price greater than zero." };
         const existing = get().quotes.find(
-          (q) => q.requestId === requestId && q.providerId === provider.id && q.status === "pending",
+          (q) => q.requestId === requestId && q.providerId === provider.id && (q.status === "draft" || q.status === "pending"),
         );
         const km = kmBetween(request.site, provider);
         const next: Quote = {
@@ -270,7 +273,7 @@ export const useFieldly = create<State>()(
           requestId,
           providerId: provider.id,
           amount: Math.round(amount),
-          summary: "Operator revised quote",
+          summary: "Operator quote",
           etaMin: travelMinutes(km),
           note: note.trim() || "Revised from the operator desk.",
           includes: getService(request.serviceId)?.includes ?? [],
@@ -298,7 +301,7 @@ export const useFieldly = create<State>()(
         if (!request.targetedProviderIds.includes(pid)) return { ok: false, error: "This request is not assigned to your operator account." };
         set((s) => ({
           quotes: s.quotes.map((q) =>
-            q.requestId === requestId && q.providerId === pid && q.status === "pending"
+            q.requestId === requestId && q.providerId === pid && (q.status === "draft" || q.status === "pending")
               ? { ...q, status: "declined" }
               : q,
           ),
@@ -339,6 +342,7 @@ export const useFieldly = create<State>()(
           requirements: request.requirements,
           whenLabel: request.whenLabel,
           notes: request.notes,
+          siteImages: request.siteImages,
           customerPhone: request.customerPhone,
           customerName: request.customerName,
           amount: quote.amount,
@@ -372,7 +376,7 @@ export const useFieldly = create<State>()(
           quotes: s.quotes.map((q) => {
             if (q.requestId !== request.id) return q;
             if (q.id === quote.id) return { ...q, status: "accepted" };
-            if (q.status === "pending") return { ...q, status: "declined" };
+            if (q.status === "pending" || q.status === "draft") return { ...q, status: "declined" };
             return q;
           }),
           requests: s.requests.map((r) => (r.id === request.id ? { ...r, status: "booked" } : r)),
@@ -390,7 +394,7 @@ export const useFieldly = create<State>()(
         set((s) => ({
           requests: s.requests.map((r) => (r.id === requestId ? { ...r, status: "cancelled" } : r)),
           quotes: s.quotes.map((q) =>
-            q.requestId === requestId && q.status === "pending" ? { ...q, status: "declined" } : q,
+            q.requestId === requestId && (q.status === "draft" || q.status === "pending") ? { ...q, status: "declined" } : q,
           ),
         }));
         return { ok: true };
@@ -556,7 +560,7 @@ export const useFieldly = create<State>()(
       },
       review: (bookingId, stars, text) => {
         const booking = get().bookings.find((b) => b.id === bookingId);
-        if (!booking || booking.status !== "PAID") return { ok: false, error: "Rate the job after payment." };
+        if (!booking || (booking.status !== "SERVICE_COMPLETED" && booking.status !== "PAID")) return { ok: false, error: "Rate the job after it is marked completed." };
         const session = get().session;
         if (session?.role !== "customer" || session.phone !== booking.customerPhone) {
           return { ok: false, error: "Only the customer on this booking can leave a review." };

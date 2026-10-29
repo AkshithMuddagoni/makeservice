@@ -1,5 +1,5 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ImagePlus, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { FieldList, missingFields, controlClass } from "@/components/fieldly/bits";
@@ -10,6 +10,7 @@ import { WHEN_OPTIONS, getService } from "@/lib/fieldly/catalog";
 import { t } from "@/lib/fieldly/i18n";
 import { useFieldly } from "@/lib/fieldly/store";
 import { cn } from "@/lib/utils";
+import type { SiteImage } from "@/lib/fieldly/types";
 
 export const Route = createFileRoute("/services/$slug")({ component: ServiceForm });
 
@@ -34,6 +35,57 @@ function ServiceForm() {
     initial && !WHEN_OPTIONS.includes(initial.whenLabel as (typeof WHEN_OPTIONS)[number]) ? initial.whenLabel : "",
   );
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [siteImages, setSiteImages] = useState<SiteImage[]>(initial?.siteImages ?? []);
+
+  async function compressSiteImage(file: File): Promise<SiteImage> {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      throw new Error("Use a JPG, PNG, or WebP image.");
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      throw new Error("Each selected image must be under 8 MB before compression.");
+    }
+    const bitmap = await createImageBitmap(file);
+    try {
+      const scale = Math.min(1, 1280 / bitmap.width, 1280 / bitmap.height);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("This browser could not prepare that image.");
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.72));
+      if (!blob) throw new Error("This image could not be processed.");
+      if (blob.size > 550 * 1024) throw new Error("That image is too detailed. Choose a smaller image.");
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Image read failed."));
+        reader.onerror = () => reject(new Error("Image read failed."));
+        reader.readAsDataURL(blob);
+      });
+      return { name: file.name.slice(0, 100), dataUrl };
+    } finally {
+      bitmap.close();
+    }
+  }
+
+  async function addSiteImages(files: FileList | null) {
+    if (!files?.length) return;
+    const remaining = 3 - siteImages.length;
+    if (remaining <= 0) {
+      toast.error("You can add up to 3 site photos.");
+      return;
+    }
+    const selected = Array.from(files).slice(0, remaining);
+    const next: SiteImage[] = [];
+    for (const file of selected) {
+      try {
+        next.push(await compressSiteImage(file));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not add that image.");
+      }
+    }
+    if (next.length) setSiteImages((current) => [...current, ...next].slice(0, 3));
+  }
 
   if (!service) {
     return (
@@ -91,7 +143,7 @@ function ServiceForm() {
       toast.error(`Add ${missing[0]}.`);
       return;
     }
-    setDraft({ serviceId: service!.id, requirements, whenLabel, notes });
+    setDraft({ serviceId: service!.id, requirements, whenLabel, notes, siteImages });
     void navigate({ to: "/find/$slug", params: { slug: service!.id } });
   }
 
@@ -117,6 +169,23 @@ function ServiceForm() {
           value={requirements}
           onChange={(key, next) => setRequirements((prev) => ({ ...prev, [key]: next }))}
         />
+        {service.id === "borewell" &&
+          ["New borewell drilling", "Deepening an existing borewell"].includes(requirements.borewell_service ?? "") && (
+            <aside className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+              <h2 className="font-semibold">Permission and site safety reminder</h2>
+              <p className="mt-1 leading-6">
+                Borewell drilling or deepening may require approval under applicable groundwater and WALTA rules. Confirm the exact site permission and safe access before work starts; a Fieldly listing or booking does not grant permission.
+              </p>
+              <a
+                href="https://ipass.telangana.gov.in/"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-block font-semibold underline underline-offset-2"
+              >
+                Telangana TS-iPASS information
+              </a>
+            </aside>
+          )}
         <div className="mt-5 grid gap-2">
           <span className="text-sm font-semibold">When should they come?</span>
           <span className="flex flex-wrap gap-2">
@@ -135,9 +204,59 @@ function ServiceForm() {
             ))}
           </span>
           {whenChoice === "Pick a date" && (
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={controlClass} />
+            <input
+              type="date"
+              value={date}
+              min={new Date().toLocaleDateString("en-CA")}
+              onChange={(e) => setDate(e.target.value)}
+              className={controlClass}
+            />
           )}
         </div>
+        <section className="mt-5 grid gap-2">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold">Site photos <span className="font-normal text-muted">(optional)</span></h2>
+              <p className="mt-1 text-xs leading-5 text-muted">Add up to 3 photos of the access road, work area, or existing borewell. Images are compressed in this preview.</p>
+            </div>
+            <ImagePlus className="size-5 shrink-0 text-field" />
+          </div>
+          <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-paper px-3 py-3 text-sm font-semibold hover:border-field">
+            <ImagePlus className="size-4" />
+            Add photos ({siteImages.length}/3)
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              disabled={siteImages.length >= 3}
+              onChange={(event) => {
+                void addSiteImages(event.currentTarget.files);
+                event.currentTarget.value = "";
+              }}
+              className="sr-only"
+            />
+          </label>
+          {siteImages.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {siteImages.map((photo, index) => (
+                <figure key={photo.name + index} className="relative overflow-hidden rounded-xl border border-line bg-card">
+                  <img src={photo.dataUrl} alt={photo.name} className="h-24 w-full object-cover" />
+                  <figcaption className="truncate px-2 py-1 text-[11px] text-muted">{photo.name}</figcaption>
+                  <button
+                    type="button"
+                    onClick={() => setSiteImages((current) => current.filter((_, i) => i !== index))}
+                    aria-label={`Remove ${photo.name}`}
+                    className="absolute right-1 top-1 grid size-7 place-items-center rounded-full bg-white/95 text-ink shadow"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </figure>
+              ))}
+            </div>
+          )}
+          <p className="text-[11px] leading-4 text-muted">Preview only: photos stay in this browser. Production needs authenticated uploads to private storage.</p>
+        </section>
+
         <label className="mt-5 grid gap-2">
           <span className="text-sm font-semibold">Anything the operator should know?</span>
           <textarea
