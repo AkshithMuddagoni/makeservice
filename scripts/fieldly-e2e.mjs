@@ -81,7 +81,7 @@ async function mockExternalServices(page) {
       body: JSON.stringify(reverseResult),
     });
   });
-  await page.route("https://basemaps.cartocdn.com/**", (route) => route.abort());
+  await page.route("https://tiles.openfreemap.org/**", (route) => route.abort());
   await page.route("https://images.pexels.com/**", (route) => route.abort());
   await page.route("https://fonts.googleapis.com/**", (route) => route.abort());
   await page.route("https://fonts.gstatic.com/**", (route) => route.abort());
@@ -176,6 +176,46 @@ async function assertHomepageSectionLayout(page, width) {
   }
 }
 
+async function assertHeaderLayout(page, width) {
+  const desktopNav = page.locator('nav[aria-label="Desktop navigation"]');
+  const mobileToggle = page.getByRole("button", { name: "Open menu" });
+
+  if (width >= 1024) {
+    assert.equal(await desktopNav.isVisible(), true, "Desktop navigation should be visible at " + width + "px");
+    assert.equal(await mobileToggle.isVisible(), false, "Hamburger should be hidden at " + width + "px");
+    assert.ok(await desktopNav.locator("a").count() >= 4, "Desktop navigation should expose all main links");
+    return;
+  }
+
+  assert.equal(await desktopNav.isVisible(), false, "Inline desktop navigation should be hidden at " + width + "px");
+  assert.equal(await mobileToggle.isVisible(), true, "Hamburger should be visible at " + width + "px");
+  await mobileToggle.click();
+  const mobileNav = page.locator("#fieldly-navigation-menu");
+  await mobileNav.waitFor({ state: "visible" });
+  assert.ok(await mobileNav.locator("a").count() >= 5, "Mobile menu should contain account and main navigation links");
+  await page.getByRole("button", { name: "Close menu" }).click();
+  await mobileNav.waitFor({ state: "hidden" });
+}
+
+async function assertHeroBackgroundChoices(page, width) {
+  const hero = page.locator('[data-testid="hero-section"]');
+  const choices = [
+    ["farming", "Use farming background"],
+    ["cranes", "Use cranes background"],
+    ["water", "Use water background"],
+    ["construction", "Use construction background"],
+  ];
+
+  for (const [id, accessibleName] of choices) {
+    await page.getByRole("button", { name: accessibleName }).click();
+    assert.equal(
+      await hero.getAttribute("data-background"),
+      id,
+      "Hero background selection should change to " + id + " at " + width + "px",
+    );
+  }
+}
+
 async function testResponsiveViewportMatrix() {
   const widths = [320, 360, 375, 390, 414, 640, 768, 820, 1024, 1280, 1440, 1920];
   const context = await browser.newContext({ viewport: { width: 390, height: 900 } });
@@ -189,8 +229,12 @@ async function testResponsiveViewportMatrix() {
     for (const width of widths) {
       const height = width < 600 ? 844 : width < 1024 ? 900 : 1000;
       await page.setViewportSize({ width, height });
+      await page.mouse.move(2, 2);
       await assertNoHorizontalOverflow(page, "landing at " + width + "px");
       await assertHomepageSectionLayout(page, width);
+      await assertHeaderLayout(page, width);
+      await assertHeroBackgroundChoices(page, width);
+      await assertNoHorizontalOverflow(page, "landing after background selection at " + width + "px");
       const locationButton = page.getByRole("button", { name: /Enter location/ });
       await locationButton.click();
       const dialog = page.locator('[aria-labelledby="fieldly-location-title"]');
