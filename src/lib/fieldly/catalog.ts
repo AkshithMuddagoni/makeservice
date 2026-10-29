@@ -729,10 +729,23 @@ export function getService(id: string | undefined) {
   return SERVICES.find((s) => s.id === id);
 }
 
-export function isEligible(provider: Provider, serviceId: string) {
+export function isEligible(
+  provider: Provider,
+  serviceId: string,
+  requirements: Record<string, string> = {},
+) {
   if (!provider.approved || !provider.verified.identity || !provider.verified.equipment) return false;
   if (!provider.services.includes(serviceId)) return false;
-  if (serviceId === "borewell" && !provider.verified.walta) return false;
+  if (serviceId === "borewell") {
+    const workType = requirements.borewell_service;
+    // New drilling and deepening are treated as rig work: require the WALTA entry on the listing.
+    // Other borewell-related services still require identity/equipment checks and a declared capability.
+    const requiresRigRegistration =
+      !workType ||
+      workType === "New borewell drilling" ||
+      workType === "Deepening an existing borewell";
+    if (requiresRigRegistration && !provider.verified.walta) return false;
+  }
   return true;
 }
 
