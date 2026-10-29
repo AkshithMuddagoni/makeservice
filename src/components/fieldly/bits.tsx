@@ -63,13 +63,13 @@ function Field({
   onChange: (v: string) => void
 }) {
   return (
-    <label className="grid gap-2">
-      <span className="flex items-baseline justify-between gap-3">
+    <div className="grid gap-2">
+      <div className="flex items-baseline justify-between gap-3">
         <span className="text-sm font-semibold">{field.label}</span>
         {field.hint && <span className="text-xs text-muted">{field.hint}</span>}
-      </span>
+      </div>
       {field.type === "select" ? (
-        <span className="flex flex-wrap gap-2">
+        <div role="group" aria-label={field.label} className="flex flex-wrap gap-2">
           {field.options.map((opt) => (
             <button
               key={opt}
@@ -83,7 +83,7 @@ function Field({
               {opt}
             </button>
           ))}
-        </span>
+        </div>
       ) : field.type === "number" ? (
         <span className={controlClass + " flex items-center gap-2"}>
           <input
@@ -98,12 +98,13 @@ function Field({
       ) : (
         <textarea
           value={value}
+          aria-label={field.label}
           placeholder={field.placeholder}
           onChange={(e) => onChange(e.target.value)}
           className="min-h-28 w-full rounded-xl border border-line bg-card p-3 text-base outline-none focus-visible:border-ink"
         />
       )}
-    </label>
+    </div>
   );
 }
 
