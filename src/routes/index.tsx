@@ -387,7 +387,7 @@ function Marketplace() {
           <h2 className="font-display text-2xl font-bold md:text-3xl">{t(lang, "services_title")}</h2>
           <p className="mt-1 text-sm text-muted">{t(lang, "services_sub")}</p>
         </div>
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3">
+        <div data-testid="marketplace-services-grid" className="mt-5 grid grid-cols-3 gap-2 sm:gap-4">
           {services.map((service) => {
             const photo = SERVICE_PHOTOS[service.id] ?? SERVICE_PHOTOS.jcb;
             return (
@@ -397,26 +397,27 @@ function Marketplace() {
                 params={{ slug: service.id }}
                 className="fieldly-category-card group overflow-hidden rounded-2xl border border-line bg-card shadow-sm transition hover:-translate-y-1 hover:border-field/40 hover:shadow-lg"
               >
-                <div className="h-28 overflow-hidden bg-sky-50 sm:h-36">
+                <div className="relative h-20 overflow-hidden bg-sky-50 sm:h-28 lg:h-32">
                   <img
                     src={photo.src}
                     alt={photo.alt}
                     loading="lazy"
                     decoding="async"
                     onError={(event) => {
-                      event.currentTarget.onerror = null;
+                      if (event.currentTarget.dataset.fallback === "true") {
+                        event.currentTarget.style.display = "none";
+                        return;
+                      }
+                      event.currentTarget.dataset.fallback = "true";
                       event.currentTarget.src = HERO_IMAGE;
                     }}
                     className="fieldly-service-photo h-full w-full object-cover transition duration-500 group-hover:scale-105"
                   />
                 </div>
-                <div className="flex items-center justify-between gap-2 p-3 sm:p-4">
-                  <span className="min-w-0">
-                    <span className="block text-sm font-extrabold sm:text-base">{service.name}</span>
-                    <span className="mt-1 block text-xs leading-4 text-muted sm:text-sm">{service.blurb}</span>
-                    <span className="mt-2 block text-xs font-bold text-field">{t(lang, "service_card_cta")}</span>
+                <div className="min-w-0 p-2 sm:p-3">
+                  <span className="block break-words text-[11px] font-extrabold leading-tight sm:text-sm">
+                    {service.name}
                   </span>
-                  <ArrowRight className="size-4 shrink-0 text-field transition group-hover:translate-x-1" />
                 </div>
               </Link>
             );
