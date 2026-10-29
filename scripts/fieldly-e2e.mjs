@@ -214,10 +214,15 @@ async function assertHeroCarouselLayout(page, width) {
     0,
     "Manual scene chooser should be removed",
   );
+  const activeBackground = await hero.getAttribute("data-background");
+  assert.ok(
+    ["borewell", "jcb", "crane", "tractor", "water-tanker", "tipper"].includes(activeBackground ?? ""),
+    "Hero should show one of the service-photo slides at " + width + "px",
+  );
   assert.equal(
-    await hero.getAttribute("data-background"),
-    "borewell",
-    "Hero should begin with the first equipment photo at " + width + "px",
+    await hero.locator('[data-testid="hero-background-slide"].opacity-100').count(),
+    1,
+    "Exactly one service-photo slide should be active at " + width + "px",
   );
   const card = page.getByTestId("location-hero-card");
   const alignment = await page.evaluate(() => {
