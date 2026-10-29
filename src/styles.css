@@ -286,3 +286,34 @@
     border-radius: 1.5rem;
   }
 }
+
+
+/* Compress only the mobile header on very narrow phones (for example, 320px). */
+@media (max-width: 359px) {
+  .fieldly-mobile-brand {
+    gap: 0.35rem;
+    font-size: 1.1rem;
+  }
+  .fieldly-mobile-brand-icon {
+    width: 2rem;
+    height: 2rem;
+  }
+  .fieldly-mobile-header-actions {
+    gap: 0.25rem;
+  }
+  .fieldly-mobile-location {
+    max-width: 3.75rem;
+    gap: 0.15rem;
+    padding-inline: 0.35rem;
+    font-size: 0.68rem;
+  }
+  .fieldly-mobile-login {
+    padding-inline: 0.4rem;
+    font-size: 0.68rem;
+  }
+  .fieldly-mobile-menu {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.65rem;
+  }
+}
