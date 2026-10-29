@@ -452,10 +452,12 @@ async function testMobileCustomerJourney() {
     await page.getByRole("button", { name: "Accept request & send quote", exact: true }).waitFor();
     await page.getByLabel("Quote details and terms").fill("Includes rig, operator and travel; extra casing and major repairs are extra; rescheduling must be agreed before booking.");
     await page.getByRole("button", { name: "Accept request & send quote", exact: true }).click();
+    await page.getByRole("link", { name: /Call customer/ }).waitFor();
 
     await page.goto(new URL("/account", page.url()).href);
     await page.getByRole("button", { name: "Back to customer", exact: true }).click();
     await page.goto(requestUrl);
+    await page.getByRole("link", { name: /Call operator/ }).waitFor();
     await page.getByRole("button", { name: "Accept quote & confirm booking", exact: true }).waitFor();
     await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Accept quote & confirm booking", exact: true }).click();

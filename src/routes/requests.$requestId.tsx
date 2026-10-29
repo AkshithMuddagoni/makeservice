@@ -162,6 +162,14 @@ function RequestPage() {
               </ul>
               <p className="mt-2 text-sm text-muted">{quote.note}</p>
               {quote.status === "pending" && request.status === "open" && (
+                <a
+                  href={`tel:${provider.phone}`}
+                  className="mt-3 inline-flex h-10 items-center justify-center rounded-xl bg-field px-4 text-sm font-semibold text-on-field hover:bg-ink"
+                >
+                  Call operator · {provider.phone}
+                </a>
+              )}
+              {quote.status === "pending" && request.status === "open" && (
                 <label className="mt-4 flex items-start gap-3 rounded-xl border border-line bg-white p-3 text-sm leading-5">
                   <input
                     type="checkbox"

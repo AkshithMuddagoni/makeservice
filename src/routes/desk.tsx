@@ -191,6 +191,7 @@ function DeskHome({ providerId }: { providerId: string }) {
               lines={requirementLines(r.serviceId, r.requirements)}
               whenLabel={r.whenLabel}
               notes={r.notes}
+              customerPhone={r.customerPhone}
               siteImages={r.siteImages ?? []}
               suggested={priceJob(r.serviceId, provider, r.requirements).amount}
               existing={quotes.find((q) => q.requestId === r.id && q.providerId === provider.id && q.status === "pending")}
@@ -251,6 +252,7 @@ function QuoteCard({
   lines,
   whenLabel,
   notes,
+  customerPhone,
   siteImages,
   suggested,
   existing,
@@ -263,6 +265,7 @@ function QuoteCard({
   lines: { label: string; value: string }[]
   whenLabel: string
   notes: string
+  customerPhone: string
   siteImages: string[]
   suggested: number
   existing?: { amount: number; note: string }
@@ -290,6 +293,14 @@ function QuoteCard({
         ))}
         {notes && <li>Note: {notes}</li>}
       </ul>
+      {existing && (
+        <a
+          href={`tel:${customerPhone}`}
+          className="mt-3 inline-flex h-10 items-center justify-center rounded-xl bg-field px-4 text-sm font-semibold text-on-field hover:bg-ink"
+        >
+          Call customer · {customerPhone}
+        </a>
+      )}
       {siteImages.length > 0 && (
         <div className="mt-3">
           <p className="mb-2 text-xs font-semibold text-muted">Customer site photos</p>
