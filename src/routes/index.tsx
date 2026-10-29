@@ -114,11 +114,12 @@ function Home() {
   const heroBackground = HERO_BACKGROUNDS[heroSlideIndex] ?? HERO_BACKGROUNDS[0];
 
   useEffect(() => {
+    if (site || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const interval = window.setInterval(() => {
       setHeroSlideIndex((current) => (current + 1) % HERO_BACKGROUNDS.length);
     }, 6500);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [site]);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -375,7 +376,7 @@ function Marketplace() {
   const session = useFieldly((s) => s.session);
   const providers = useProviders();
   const [query, setQuery] = useState("");
-  const [signInOpen, setSignInOpen] = useState(true);
+  const [signInOpen, setSignInOpen] = useState(false);
   const services = SERVICES.filter((service) =>
     `${service.name} ${service.blurb}`.toLowerCase().includes(query.trim().toLowerCase()),
   );
@@ -391,22 +392,22 @@ function Marketplace() {
 
   if (!session || session.role !== "customer") {
     return (
-      <main className="min-h-[calc(100vh-4rem)] bg-paper px-4 py-10 sm:py-16">
-        <section className="mx-auto max-w-2xl rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-8">
+      <main className="min-h-[calc(100vh-4rem)] bg-paper px-4 py-8 sm:py-12">
+        <section className="mx-auto max-w-3xl rounded-3xl border border-line bg-white p-5 shadow-sm sm:p-8">
           <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-field">Work site confirmed</p>
-          <h1 className="mt-3 font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
-            Sign in before choosing a service.
+          <h1 className="mt-2 font-display text-2xl font-extrabold tracking-tight sm:text-3xl">
+            Ready to choose your service?
           </h1>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-muted">
-            Your work site is saved as <strong>{site.city}, {site.state}</strong>. Sign in to continue to service selection and job details.
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+            Sign in first, then browse borewell rigs, JCBs, cranes, tractors, water tankers and other services for your work site.
           </p>
-          <div className="mt-5 flex flex-wrap items-center gap-2 rounded-2xl bg-field-soft p-3 text-sm">
+          <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl bg-field-soft p-3 text-sm">
             <MapPin className="size-4 shrink-0 text-field" />
-            <span className="font-semibold">{site.address || site.label}</span>
+            <span className="font-semibold">{site.city}, {site.state}</span>
             <span className="text-muted">· {site.pincode}</span>
           </div>
           <Button className="mt-5" onClick={() => setSignInOpen(true)}>
-            Sign in to choose services <ArrowRight className="ml-2 size-4" />
+            Continue to choose services <ArrowRight className="ml-2 size-4" />
           </Button>
         </section>
         <CustomerSignInDialog
