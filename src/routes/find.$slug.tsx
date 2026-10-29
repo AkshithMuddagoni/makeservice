@@ -6,7 +6,7 @@ import { MapCanvas } from "@/components/fieldly/map-canvas";
 import { Stars } from "@/components/fieldly/bits";
 import { CustomerSignInDialog } from "@/components/fieldly/customer-sign-in-dialog";
 import { Button } from "@/components/ui/button";
-import { getService, isEligible } from "@/lib/fieldly/catalog";
+import { getService, isEligible, supportsServiceRequest } from "@/lib/fieldly/catalog";
 import { formatKm, kmBetween, travelMinutes } from "@/lib/fieldly/geo";
 import { inr } from "@/lib/fieldly/format";
 import { priceJob } from "@/lib/fieldly/pricing";
@@ -39,7 +39,7 @@ function FindPage() {
   const rows = useMemo(() => {
     if (!service || !site) return [];
     return providers
-      .filter((p) => p.services.includes(service.id))
+      .filter((p) => p.services.includes(service.id) && supportsServiceRequest(p, service.id, req))
       .map((p) => {
         const km = kmBetween(site, p);
         const priced = priceJob(service.id, p, req);
@@ -52,6 +52,9 @@ function FindPage() {
   }, [providers, service, site, req, q]);
 
   const hidden = rows.filter((r) => !r.eligible).length;
+  const requiresManualQuote = service.id === "borewell" &&
+    Boolean(req.borewell_service) &&
+    req.borewell_service !== "New borewell drilling";
   const visible = rows
     .filter((r) => (verifiedOnly ? r.eligible : true))
     .sort((a, b) => {
@@ -135,8 +138,11 @@ function FindPage() {
           </Link>
           <h1 className="mt-2 font-display text-3xl font-bold tracking-tight">{service.name}</h1>
           <p className="text-sm text-muted">
-            {site.label}, {site.area}. {visible.length} shown
+            {site.label}, {site.area}. {visible.length} matching operators
             {draft?.serviceId === slug ? ` · ${draft.whenLabel}` : ""}.
+          </p>
+          <p className="mt-1 text-xs leading-5 text-muted">
+            Map lines and distances are approximate straight-line distances, not road routes or live vehicle tracking. Ask the operator to confirm travel time.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button size="lg" onClick={askQuotes}>
@@ -192,7 +198,7 @@ function FindPage() {
           )}
         </div>
         <div className="h-64 px-4 lg:hidden">
-          <MapCanvas center={site} markers={markers} />
+          <MapCanvas center={site} markers={markers} showDistanceLines />
         </div>
         <div className="grid gap-2 px-4 py-4">
           {visible.map((row) => (
@@ -229,8 +235,8 @@ function FindPage() {
                   <p className="mt-2 text-sm text-muted">{row.p.equipment}</p>
                 </div>
                 <div className="text-right">
-                  <div className="font-display text-lg font-bold">{inr(row.priced.amount)}</div>
-                  <div className="text-xs text-muted">{row.priced.summary}</div>
+                  <div className="font-display text-lg font-bold">{requiresManualQuote ? "Quote required" : inr(row.priced.amount)}</div>
+                  <div className="text-xs text-muted">{requiresManualQuote ? "Operator must confirm scope and price" : row.priced.summary}</div>
                 </div>
               </div>
             </Link>
@@ -243,7 +249,7 @@ function FindPage() {
         </div>
       </div>
       <div className="sticky top-16 hidden h-screen p-4 lg:block">
-        <MapCanvas center={site} markers={markers} className="h-full min-h-0" />
+        <MapCanvas center={site} markers={markers} showDistanceLines className="h-full min-h-0" />
       </div>
     </div>
   );
