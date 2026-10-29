@@ -34,11 +34,33 @@ export const SERVICES: ServiceDef[] = [
     includes: ["Operator on the rig", "Rig and compressor", "Travel inside this quote"],
     fields: [
       {
+        key: "service_type",
+        label: "What borewell service do you need?",
+        type: "select",
+        required: true,
+        options: [
+          "Drilling a new borewell",
+          "Flushing / cleaning an existing borewell",
+          "Deepening / re-boring",
+          "Camera inspection",
+          "Pump installation / repair",
+          "Recharge / maintenance",
+        ],
+      },
+      {
         key: "purpose",
         label: "What is this borewell for?",
         type: "select",
         required: true,
-        options: ["Home", "Farm", "Construction", "Business"],
+        options: ["Home", "Farm", "Construction", "Business", "Community / public use"],
+      },
+      {
+        key: "permission_status",
+        label: "Permission status",
+        type: "select",
+        required: true,
+        options: ["Approvals confirmed", "Need to confirm with local authority"],
+        hint: "The platform and provider do not grant drilling permission.",
       },
       {
         key: "depth_ft",
@@ -82,6 +104,15 @@ export const SERVICES: ServiceDef[] = [
         required: true,
         options: ["Yes", "No — machine only"],
       },
+      access,
+      {
+        key: "utilities",
+        label: "Underground cables / pipes",
+        type: "select",
+        required: true,
+        options: ["Located and marked", "No known utilities", "Not sure — need site check"],
+        hint: "Do not excavate until underground services are checked.",
+      },
     ],
   },
   {
@@ -116,6 +147,22 @@ export const SERVICES: ServiceDef[] = [
         required: true,
         placeholder: "3",
       },
+      {
+        key: "lift_height_m",
+        label: "Approximate lifting height",
+        type: "number",
+        unit: "m",
+        required: true,
+        placeholder: "8",
+      },
+      access,
+      {
+        key: "overhead_hazards",
+        label: "Overhead wires / obstacles",
+        type: "select",
+        required: true,
+        options: ["None known", "Present", "Not sure — requires assessment"],
+      },
     ],
   },
   {
@@ -149,6 +196,21 @@ export const SERVICES: ServiceDef[] = [
         unit: "hr",
         placeholder: "3",
       },
+      {
+        key: "field_condition",
+        label: "Field condition",
+        type: "select",
+        required: true,
+        options: ["Dry / firm", "Normal", "Wet / soft", "Uneven / sloped"],
+      },
+      {
+        key: "implement",
+        label: "Implement / attachment",
+        type: "text",
+        required: true,
+        placeholder: "Rotavator, plough, trailer…",
+      },
+      access,
     ],
   },
   {
@@ -181,6 +243,15 @@ export const SERVICES: ServiceDef[] = [
         required: true,
         placeholder: "1",
       },
+      {
+        key: "water_quality",
+        label: "Water quality needed",
+        type: "select",
+        required: true,
+        options: ["Non-potable / construction use", "Potable drinking water", "Unsure — please clarify"],
+        hint: "Drinking water safety must be confirmed with the supplier.",
+      },
+      access,
     ],
   },
   {
@@ -213,6 +284,14 @@ export const SERVICES: ServiceDef[] = [
         required: true,
         options: ["Under 10 km", "10–25 km", "25–50 km"],
       },
+      access,
+      {
+        key: "unloading",
+        label: "Unloading / dumping permission",
+        type: "select",
+        required: true,
+        options: ["Site and disposal location confirmed", "Need to confirm location / permissions"],
+      },
     ],
   },
   {
@@ -238,6 +317,21 @@ export const SERVICES: ServiceDef[] = [
         unit: "acre",
         placeholder: "3",
       },
+      {
+        key: "field_condition",
+        label: "Ground condition",
+        type: "select",
+        required: true,
+        options: ["Dry / firm", "Normal", "Wet / soft", "Uneven / sloped"],
+      },
+      {
+        key: "implement",
+        label: "Implement / attachment",
+        type: "text",
+        required: true,
+        placeholder: "Rotavator, plough, seeder…",
+      },
+      access,
     ],
   },
   {
@@ -263,6 +357,14 @@ export const SERVICES: ServiceDef[] = [
         unit: "hr",
         placeholder: "4",
       },
+      access,
+      {
+        key: "site_hazards",
+        label: "Known site hazards",
+        type: "text",
+        required: true,
+        placeholder: "Overhead wires, soft ground, nearby structures…",
+      },
     ],
   },
   {
@@ -285,7 +387,23 @@ export const SERVICES: ServiceDef[] = [
         key: "days",
         label: "Days",
         type: "number",
+        required: true,
         placeholder: "1",
+      },
+      {
+        key: "operator",
+        label: "Operator included?",
+        type: "select",
+        required: true,
+        options: ["Operator included", "Machine only"],
+      },
+      access,
+      {
+        key: "handover",
+        label: "Handover / delivery",
+        type: "select",
+        required: true,
+        options: ["Deliver to work site", "Collect from provider yard"],
       },
     ],
   },
@@ -305,11 +423,19 @@ export const SERVICES: ServiceDef[] = [
         required: true,
         placeholder: "Compressor and two helpers for a day",
       },
+      {
+        key: "duration",
+        label: "Expected duration",
+        type: "select",
+        required: true,
+        options: ["Under 2 hours", "2–4 hours", "Half day", "Full day", "Multiple days", "Need advice"],
+      },
+      access,
     ],
   },
 ];
 
-export const WHEN_OPTIONS = ["Today", "Tomorrow", "This week", "Pick a date"] as const;
+export const WHEN_OPTIONS = ["Today", "Tomorrow", "Pick a date"] as const;
 
 export const WHEN_HINT = whenHint;
 
