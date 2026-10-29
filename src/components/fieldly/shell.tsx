@@ -55,13 +55,13 @@ export function Shell({ children }: { children: ReactNode }) {
             <span className="grid size-9 place-items-center rounded-xl bg-white text-field"><Sprout className="size-6" aria-hidden /></span>
             Fieldly
           </Link>
-          <nav className="hidden items-center gap-1">
+          <nav aria-label="Desktop navigation" className="ml-4 hidden min-w-0 flex-1 items-center gap-1 lg:flex">
             {links.map((l) => (
               <Link
                 key={l.to}
                 to={l.to}
                 className={cn(
-                  "rounded-lg px-3 py-2 text-sm font-semibold text-muted hover:text-ink",
+                  "whitespace-nowrap rounded-lg px-2.5 py-2 text-sm font-semibold text-muted transition hover:bg-paper hover:text-ink xl:px-3",
                   path === l.to && "bg-paper text-ink",
                 )}
               >
@@ -69,22 +69,22 @@ export function Shell({ children }: { children: ReactNode }) {
               </Link>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto hidden shrink-0 items-center gap-2 lg:flex">
             <button
               type="button"
               onClick={() => setSiteOpen(true)}
-              className="inline-flex h-10 min-w-0 max-w-[142px] items-center gap-1.5 rounded-xl border border-line bg-white px-2.5 text-left text-xs font-bold shadow-sm transition hover:border-field max-[380px]:max-w-[92px] max-[380px]:px-1.5 sm:h-11 sm:max-w-52 sm:gap-2 sm:px-3"
+              className="inline-flex h-10 min-w-0 max-w-40 items-center gap-1.5 rounded-xl border border-line bg-white px-3 text-left text-xs font-bold shadow-sm transition hover:border-field sm:h-11 sm:max-w-48"
             >
               <MapPin className="size-4 shrink-0 text-field" />
               <span className="truncate">{site ? site.city : "India"}</span>
               <ChevronDown className="size-3.5 shrink-0 text-muted" />
             </button>
-            <label className="hidden items-center sm:flex">
+            <label className="flex items-center">
               <span className="sr-only">{t(lang, "language")}</span>
               <select
                 value={lang}
                 onChange={(e) => setLang(e.target.value as Lang)}
-                className="h-11 rounded-xl border border-line bg-card px-2 text-sm font-semibold"
+                className="h-10 rounded-xl border border-line bg-card px-2 text-sm font-semibold sm:h-11"
               >
                 <option value="en">EN</option>
                 <option value="te">తె</option>
@@ -93,27 +93,30 @@ export function Shell({ children }: { children: ReactNode }) {
             </label>
             <Link
               to="/account"
-              className="grid h-11 place-items-center rounded-xl bg-ink px-3 text-sm font-semibold text-on-ink max-[380px]:hidden"
+              className="grid h-10 place-items-center rounded-xl bg-ink px-3 text-sm font-semibold text-on-ink transition hover:bg-field sm:h-11"
             >
               {session ? session.name.split(" ")[0] : "Login"}
             </Link>
-            <button
-              type="button"
-              className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-white transition hover:border-field sm:size-11"
-              onClick={() => setMenu((v) => !v)}
-              aria-label={menu ? "Close menu" : "Open menu"}
-              aria-expanded={menu}
-              aria-controls="fieldly-navigation-menu"
-            >
-              {menu ? <X className="size-5" /> : <Menu className="size-5" />}
-            </button>
           </div>
+          <button
+            type="button"
+            className="ml-auto grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-white transition hover:border-field lg:hidden"
+            onClick={() => setMenu((v) => !v)}
+            aria-label={menu ? "Close menu" : "Open menu"}
+            aria-expanded={menu}
+            aria-controls="fieldly-navigation-menu"
+          >
+            {menu ? <X className="size-5" /> : <Menu className="size-5" />}
+          </button>
         </div>
         {menu && (
-          <nav id="fieldly-navigation-menu" aria-label="Main navigation" className="border-t border-line bg-card px-4 py-3 shadow-sm">
+          <nav id="fieldly-navigation-menu" aria-label="Main navigation" className="border-t border-line bg-card px-4 py-3 shadow-sm lg:hidden">
             <button
               type="button"
-              onClick={() => setSiteOpen(true)}
+              onClick={() => {
+                setMenu(false);
+                setSiteOpen(true);
+              }}
               className="flex h-11 w-full items-center gap-2 text-sm font-semibold"
             >
               <MapPin className="size-4 text-field" />
