@@ -169,6 +169,23 @@ function ServiceForm() {
           value={requirements}
           onChange={(key, next) => setRequirements((prev) => ({ ...prev, [key]: next }))}
         />
+        {service.id === "borewell" &&
+          ["New borewell drilling", "Deepening an existing borewell"].includes(requirements.borewell_service ?? "") && (
+            <aside className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+              <h2 className="font-semibold">Permission and site safety reminder</h2>
+              <p className="mt-1 leading-6">
+                Borewell drilling or deepening may require approval under applicable groundwater and WALTA rules. Confirm the exact site permission and safe access before work starts; a Fieldly listing or booking does not grant permission.
+              </p>
+              <a
+                href="https://ipass.telangana.gov.in/"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-block font-semibold underline underline-offset-2"
+              >
+                Telangana TS-iPASS information
+              </a>
+            </aside>
+          )}
         <div className="mt-5 grid gap-2">
           <span className="text-sm font-semibold">When should they come?</span>
           <span className="flex flex-wrap gap-2">
