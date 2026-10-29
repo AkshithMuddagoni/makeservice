@@ -278,6 +278,7 @@ async function testMarketplaceServicesMatrix() {
     for (const width of widths) {
       const height = width < 600 ? 844 : width < 1024 ? 900 : 1000;
       await page.setViewportSize({ width, height });
+      await page.mouse.move(2, 2);
       await assertNoHorizontalOverflow(page, "location-selected marketplace at " + width + "px");
       await assertMarketplaceServicesLayout(page, width);
       log("marketplace service-card layout passed: " + width + "px × " + height + "px");
