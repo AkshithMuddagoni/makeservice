@@ -224,6 +224,72 @@ async function confirmManualWorkSite(dialog) {
   await dialog.getByRole("button", { name: /Confirm this location and find services/ }).click();
 }
 
+async function assertMarketplaceServicesLayout(page, width) {
+  const result = await page.evaluate(() => {
+    const grid = document.querySelector('[data-testid="marketplace-services-grid"]');
+    if (!grid) return { error: "Marketplace services grid is missing" };
+    const cards = Array.from(grid.children).filter((element) => element.matches("a"));
+    return {
+      columns: getComputedStyle(grid).gridTemplateColumns.split(" ").length,
+      cards: cards.map((card) => ({
+        rect: (() => {
+          const r = card.getBoundingClientRect();
+          return { x: r.x, y: r.y, width: r.width, height: r.height };
+        })(),
+        text: (card.textContent || "").trim().replace(/\s+/g, " "),
+        imageCount: card.querySelectorAll("img").length,
+        titleCount: card.querySelectorAll("div > span").length,
+      })),
+    };
+  });
+
+  assert.equal(result.error, undefined, "The location-selected services grid should render at " + width + "px");
+  assert.equal(result.columns, 3, "Location-selected services must use three columns at " + width + "px");
+  assert.ok(result.cards.length >= 3, "The location-selected services view should show service cards");
+  for (const card of result.cards) {
+    assert.equal(card.imageCount, 1, "Each marketplace service card should have exactly one image");
+    assert.ok(card.text.length > 0, "Each marketplace service card should retain its service title");
+    assert.ok(
+      !/Explore service and request a quote|Rigs, compressors|Digging, earthwork|Lifting for slabs/i.test(card.text),
+      "Marketplace service cards should not show description or CTA copy",
+    );
+  }
+  for (let i = 1; i < Math.min(3, result.cards.length); i += 1) {
+    assert.ok(
+      Math.abs(result.cards[i].rect.y - result.cards[0].rect.y) <= 2,
+      "The first three marketplace cards should be in one row at " + width + "px. Positions: " + JSON.stringify(result.cards.map((card) => card.rect)),
+    );
+  }
+}
+
+async function testMarketplaceServicesMatrix() {
+  const widths = [320, 360, 375, 390, 414, 640, 768, 820, 1024, 1280, 1440, 1920];
+  const context = await browser.newContext({ viewport: { width: 390, height: 900 } });
+  const page = await context.newPage();
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await mockExternalServices(page);
+
+  try {
+    const dialog = await openLocationDialog(page);
+    await confirmManualWorkSite(dialog);
+    await page.getByRole("heading", { name: "Choose a service" }).waitFor();
+
+    for (const width of widths) {
+      const height = width < 600 ? 844 : width < 1024 ? 900 : 1000;
+      await page.setViewportSize({ width, height });
+      await page.mouse.move(2, 2);
+      await assertNoHorizontalOverflow(page, "location-selected marketplace at " + width + "px");
+      await assertMarketplaceServicesLayout(page, width);
+      log("marketplace service-card layout passed: " + width + "px × " + height + "px");
+    }
+
+    assert.deepEqual(pageErrors, [], "marketplace service-card view should have no uncaught page errors");
+  } finally {
+    await context.close();
+  }
+}
+
 async function testMobileCustomerJourney() {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
@@ -331,6 +397,7 @@ async function main() {
     await waitForServer();
     browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
     await testResponsiveViewportMatrix();
+    await testMarketplaceServicesMatrix();
     await testMobileCustomerJourney();
     await testDesktopGpsJourney();
     log("all browser smoke checks passed");
