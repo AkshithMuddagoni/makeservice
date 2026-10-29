@@ -307,12 +307,15 @@ function QuoteCard({
         <input
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Note to the customer"
+          placeholder="Included work, exclusions, fees, rescheduling"
+          aria-label="Quote details and terms"
+          required
+          minLength={8}
           className="h-11 min-w-48 flex-1 rounded-xl border border-line px-3 text-base outline-none"
         />
       </div>
       <div className="mt-3 flex gap-2">
-        <Button onClick={() => onSend(Number(amount), note)}>{existing ? "Update quote" : "Accept request & send quote"}</Button>
+        <Button disabled={!Number(amount) || !note.trim() || note.trim().length < 8} onClick={() => onSend(Number(amount), note)}>{existing ? "Update quote" : "Accept request & send quote"}</Button>
         <Button variant="secondary" onClick={onDecline}>
           Decline request
         </Button>
