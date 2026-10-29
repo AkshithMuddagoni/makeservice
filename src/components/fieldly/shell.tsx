@@ -49,10 +49,10 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-paper text-ink">
-      <header className="sticky top-0 z-40 border-b border-line bg-card/95 backdrop-blur">
+      <header className="fieldly-site-header sticky top-0 z-40 border-b border-line bg-card/95 text-ink shadow-sm backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
-          <Link to="/" className="flex items-center gap-2 font-display text-xl font-bold tracking-tight">
-            <span className="grid size-9 place-items-center rounded-xl bg-white text-field"><Sprout className="size-6" aria-hidden /></span>
+          <Link to="/" className="fieldly-mobile-brand flex items-center gap-2 font-display text-xl font-bold tracking-tight">
+            <span className="fieldly-mobile-brand-icon grid size-9 place-items-center rounded-full bg-white text-field"><Sprout className="size-6" aria-hidden /></span>
             Fieldly
           </Link>
           <nav aria-label="Desktop navigation" className="ml-4 hidden min-w-0 flex-1 items-center gap-1 lg:flex">
@@ -86,9 +86,9 @@ export function Shell({ children }: { children: ReactNode }) {
                 onChange={(e) => setLang(e.target.value as Lang)}
                 className="h-10 rounded-xl border border-line bg-card px-2 text-sm font-semibold sm:h-11"
               >
-                <option value="en">EN</option>
-                <option value="te">తె</option>
-                <option value="hi">हि</option>
+                <option value="en" className="text-ink">EN</option>
+                <option value="te" className="text-ink">తె</option>
+                <option value="hi" className="text-ink">हि</option>
               </select>
             </label>
             <Link
@@ -98,9 +98,27 @@ export function Shell({ children }: { children: ReactNode }) {
               {session ? session.name.split(" ")[0] : "Login"}
             </Link>
           </div>
+          <div className="fieldly-mobile-header-actions ml-auto flex shrink-0 items-center gap-1.5 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setSiteOpen(true)}
+              aria-label="Choose location"
+              className="fieldly-mobile-location inline-flex h-9 max-w-[78px] items-center gap-1 rounded-lg border border-line bg-white px-2 text-xs font-bold shadow-sm"
+            >
+              <MapPin className="size-3.5 shrink-0 text-field" />
+              <span className="truncate">{site ? site.city : "India"}</span>
+              <ChevronDown className="size-3 shrink-0 text-muted" />
+            </button>
+            <Link
+              to="/account"
+              className="fieldly-mobile-login grid h-9 place-items-center rounded-lg border border-line bg-white px-2.5 text-xs font-semibold text-ink shadow-sm transition hover:border-field"
+            >
+              {session ? session.name.split(" ")[0] : "Login"}
+            </Link>
+          </div>
           <button
             type="button"
-            className="ml-auto grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-white transition hover:border-field lg:hidden"
+            className="fieldly-mobile-menu grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-white text-ink transition hover:border-field lg:hidden"
             onClick={() => setMenu((v) => !v)}
             aria-label={menu ? "Close menu" : "Open menu"}
             aria-expanded={menu}
@@ -126,7 +144,7 @@ export function Shell({ children }: { children: ReactNode }) {
               {session ? session.name : "Login"}
             </Link>
             {links.map((l) => (
-              <Link key={l.to} to={l.to} className="flex h-11 items-center text-sm font-semibold">
+              <Link key={l.to} to={l.to} className="flex h-11 items-center text-sm font-semibold hover:text-field">
                 {l.label}
               </Link>
             ))}
@@ -136,9 +154,9 @@ export function Shell({ children }: { children: ReactNode }) {
               className="mb-2 h-11 w-full rounded-xl border border-line bg-card px-2 text-sm font-semibold"
               aria-label={t(lang, "language")}
             >
-              <option value="en">English</option>
-              <option value="te">తెలుగు</option>
-              <option value="hi">हिन्दी</option>
+              <option value="en" className="text-ink">English</option>
+              <option value="te" className="text-ink">తెలుగు</option>
+              <option value="hi" className="text-ink">हिन्दी</option>
             </select>
           </nav>
         )}

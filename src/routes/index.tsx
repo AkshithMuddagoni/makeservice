@@ -30,39 +30,6 @@ type LocationMethod = "manual" | "map" | "gps";
 const HERO_IMAGE =
   "https://images.pexels.com/photos/35565815/pexels-photo-35565815.jpeg?auto=compress&cs=tinysrgb&w=2000";
 
-const HERO_BACKGROUNDS = [
-  {
-    id: "borewell",
-    label: "Borewell",
-    image: "https://images.pexels.com/photos/7910062/pexels-photo-7910062.jpeg?auto=compress&cs=tinysrgb&w=2000",
-  },
-  {
-    id: "jcb",
-    label: "JCB & excavators",
-    image: "https://images.pexels.com/photos/35565815/pexels-photo-35565815.jpeg?auto=compress&cs=tinysrgb&w=2000",
-  },
-  {
-    id: "crane",
-    label: "Cranes",
-    image: "https://images.pexels.com/photos/29502220/pexels-photo-29502220.jpeg?auto=compress&cs=tinysrgb&w=2000",
-  },
-  {
-    id: "tractor",
-    label: "Tractors",
-    image: "https://images.pexels.com/photos/12875208/pexels-photo-12875208.jpeg?auto=compress&cs=tinysrgb&w=2000",
-  },
-  {
-    id: "tanker",
-    label: "Water tankers",
-    image: "https://images.pexels.com/photos/17168925/pexels-photo-17168925.jpeg?auto=compress&cs=tinysrgb&w=2000",
-  },
-  {
-    id: "other",
-    label: "Other services",
-    image: "https://images.pexels.com/photos/14475776/pexels-photo-14475776.jpeg?auto=compress&cs=tinysrgb&w=2000",
-  },
-] as const;
-
 const SERVICE_PHOTOS: Record<string, { src: string; alt: string; title: string }> = {
   borewell: {
     src: "https://images.pexels.com/photos/7910062/pexels-photo-7910062.jpeg?auto=compress&cs=tinysrgb&w=900",
@@ -103,6 +70,16 @@ const SERVICE_PHOTOS: Record<string, { src: string; alt: string; title: string }
 
 const POPULAR_SERVICE_IDS = ["borewell", "jcb", "crane", "tractor", "tanker", "other"];
 
+const HERO_BACKGROUNDS = POPULAR_SERVICE_IDS.map((id) => {
+  const photo = SERVICE_PHOTOS[id] ?? SERVICE_PHOTOS.jcb;
+  return {
+    id,
+    label: photo.title,
+    // Use the same underlying photograph as the Popular Services card, served at hero resolution.
+    image: photo.src.replace("w=900", "w=2000"),
+  };
+});
+
 function Home() {
   const site = useFieldly((s) => s.site);
   const setSite = useFieldly((s) => s.setSite);
@@ -114,6 +91,8 @@ function Home() {
   const heroBackground = HERO_BACKGROUNDS[heroSlideIndex] ?? HERO_BACKGROUNDS[0];
 
   useEffect(() => {
+    // Do not auto-animate the hero for visitors who request reduced motion.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const interval = window.setInterval(() => {
       setHeroSlideIndex((current) => (current + 1) % HERO_BACKGROUNDS.length);
     }, 6500);
@@ -162,7 +141,8 @@ function Home() {
               data-slide={scene.id}
               src={scene.image}
               alt=""
-              loading={index === 0 ? "eager" : "lazy"}
+              loading={index < 2 ? "eager" : "lazy"}
+              fetchPriority={index === heroSlideIndex ? "high" : "auto"}
               decoding="async"
               onError={(event) => {
                 event.currentTarget.style.display = "none";
@@ -172,21 +152,21 @@ function Home() {
           ))}
           <div className="fieldly-hero-overlay absolute inset-0" />
         </div>
-        <div className="relative z-10 mx-auto max-w-6xl px-4 py-8 sm:py-10 lg:py-12">
+        <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:py-10 lg:py-12">
           <div className="max-w-[620px]">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/80 px-3 py-1.5 text-xs font-extrabold uppercase tracking-wide text-field shadow-sm backdrop-blur">
               <MapPin className="size-4" />
               {t(lang, "gate_kicker")}
             </div>
-            <h1 className="mt-4 max-w-[590px] font-display text-4xl font-extrabold leading-[1.04] tracking-tight text-ink sm:text-5xl lg:text-[3.35rem]">
+            <h1 className="mt-4 max-w-[13ch] font-display text-3xl font-extrabold leading-[1.08] tracking-tight text-ink sm:max-w-[590px] sm:text-5xl lg:text-[3.35rem]">
               Construction &amp; Field Equipment Services{" "}
               <span className="text-field">Across India</span>
             </h1>
-            <p className="mt-4 max-w-xl text-base font-medium leading-7 text-ink/90 sm:text-lg">
+            <p className="mt-3 max-w-xl text-sm font-medium leading-6 text-ink/90 sm:mt-4 sm:text-lg sm:leading-7">
               Book borewell rigs, JCBs, cranes, tractors, water tankers and more — at your work site, quickly and easily.
             </p>
 
-            <div data-testid="location-hero-card" className="mt-6 max-w-[390px] rounded-3xl border border-white/90 bg-white/95 p-4 shadow-[0_20px_55px_rgba(20,40,58,0.16)] backdrop-blur sm:p-5">
+            <div data-testid="location-hero-card" className="mt-5 max-w-[390px] rounded-3xl border border-white/95 bg-white/95 p-4 shadow-[0_20px_55px_rgba(20,40,58,0.16)] backdrop-blur sm:mt-6 sm:p-5">
               <h2 className="font-display text-xl font-extrabold tracking-tight sm:text-2xl">
                 Where is your work site?
               </h2>
@@ -216,7 +196,7 @@ function Home() {
               <Button
                 type="button"
                 variant="primary"
-                className="mt-4 h-12 w-full rounded-xl text-base font-bold shadow-sm"
+                className="mt-4 h-12 w-full rounded-xl bg-[#009b57] text-base font-bold text-white shadow-sm hover:bg-[#00864b]"
                 onClick={() => setPickerOpen(true)}
               >
                 Enter location <ArrowRight className="ml-2 size-4" />
@@ -229,6 +209,33 @@ function Home() {
 
           </div>
 
+        </div>
+        <div
+          aria-label="Hero image selection"
+          className="fieldly-hero-controls absolute bottom-3 right-3 z-10 flex items-center gap-2 rounded-full border border-white/75 bg-white/90 px-2.5 py-1.5 shadow-lg backdrop-blur-md sm:bottom-4 sm:right-4 sm:gap-3 sm:px-3 sm:py-2"
+        >
+          <span className="max-w-24 truncate text-[11px] font-extrabold text-ink sm:max-w-32 sm:text-xs">{heroBackground.label}</span>
+          <div className="flex items-center gap-1">
+            {HERO_BACKGROUNDS.map((scene, index) => (
+              <button
+                key={scene.id}
+                type="button"
+                aria-label={`Show ${scene.label} background`}
+                aria-pressed={index === heroSlideIndex}
+                onClick={() => setHeroSlideIndex(index)}
+                className="grid size-5 place-items-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-field"
+              >
+                <span
+                  className={
+                    "rounded-full transition-all " +
+                    (index === heroSlideIndex
+                      ? "h-2 w-4 bg-field"
+                      : "size-2 bg-ink/30 hover:bg-ink/60")
+                  }
+                />
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
