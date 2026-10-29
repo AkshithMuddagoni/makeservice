@@ -271,7 +271,7 @@ function BookingPage() {
               </div>
             )}
 
-            {booking.status === "PAID" && !booking.review && (
+            {(booking.status === "SERVICE_COMPLETED" || booking.status === "PAID") && !booking.review && (
               <form
                 className="mt-4 grid gap-2"
                 onSubmit={(e) => {
