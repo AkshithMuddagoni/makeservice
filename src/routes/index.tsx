@@ -175,16 +175,13 @@ function Home() {
       </section>
 
       <section className="border-b border-line bg-white">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-3 px-4 py-5 sm:grid-cols-4 sm:gap-4 sm:py-6">
+        <div data-testid="benefit-strip" className="mx-auto grid max-w-6xl grid-cols-4 gap-1.5 px-2 py-4 sm:gap-3 sm:px-4 sm:py-6">
           {benefitOptions.map(({ icon: Icon, title, detail }) => (
-            <div key={title} className="flex items-center gap-3 rounded-2xl p-2 sm:gap-3 sm:p-3">
-              <span className="grid size-11 shrink-0 place-items-center rounded-full bg-sky-50 text-field ring-1 ring-sky-100 sm:size-12">
-                <Icon className="size-5 sm:size-6" />
+            <div key={title} className="flex min-w-0 flex-col items-center justify-center gap-2 rounded-xl px-0.5 py-2 text-center sm:gap-2 sm:p-3">
+              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-sky-50 text-field ring-1 ring-sky-100 sm:size-11">
+                <Icon className="size-4 sm:size-5" />
               </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-extrabold leading-tight text-ink">{title}</span>
-                <span className="mt-1 hidden text-xs leading-4 text-muted sm:block">{detail}</span>
-              </span>
+              <span className="block max-w-full text-[10px] font-extrabold leading-tight text-ink sm:text-sm">{title}</span>
             </div>
           ))}
         </div>
@@ -193,13 +190,9 @@ function Home() {
       <section className="mx-auto max-w-6xl px-4 py-8 sm:py-10 lg:py-12">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-field">Explore Fieldly</p>
-            <h2 className="mt-2 font-display text-2xl font-extrabold tracking-tight sm:text-3xl">
+            <h2 className="font-display text-2xl font-extrabold tracking-tight sm:text-3xl">
               Popular Services
             </h2>
-            <p className="mt-1 text-sm leading-6 text-muted">
-              Equipment for construction, agriculture and everyday site work.
-            </p>
           </div>
           <button
             type="button"
@@ -211,7 +204,7 @@ function Home() {
           </button>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-3">
+        <div data-testid="popular-services-grid" className="mt-5 grid grid-cols-3 gap-2 sm:gap-4">
           {displayedServices.map((service) => {
             const photo = SERVICE_PHOTOS[service.id] ?? SERVICE_PHOTOS.jcb;
             return (
@@ -221,7 +214,7 @@ function Home() {
                 params={{ slug: service.id }}
                 className="fieldly-category-card group overflow-hidden rounded-2xl border border-line bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:border-field/40 hover:shadow-lg"
               >
-                <div className="relative h-28 overflow-hidden bg-sky-50 sm:h-36">
+                <div className="relative h-20 overflow-hidden bg-sky-50 sm:h-28 lg:h-32">
                   <img
                     src={photo.src}
                     alt={photo.alt}
@@ -237,19 +230,11 @@ function Home() {
                     }}
                     className="fieldly-service-photo h-full w-full object-cover transition duration-500 group-hover:scale-105"
                   />
-                  <span className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/25 to-transparent" />
+                  <span className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/25 to-transparent" />
                 </div>
-                <div className="flex items-center justify-between gap-2 p-3 sm:p-4">
-                  <span className="min-w-0">
-                    <span className="block text-sm font-extrabold leading-tight sm:text-base">
-                      {photo.title}
-                    </span>
-                    <span className="mt-1 block text-xs leading-4 text-muted sm:text-sm">
-                      {service.blurb}
-                    </span>
-                  </span>
-                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-field-soft text-field transition group-hover:bg-field group-hover:text-white">
-                    <ArrowRight className="size-4" />
+                <div className="min-w-0 p-2 sm:p-3">
+                  <span className="block break-words text-[11px] font-extrabold leading-tight sm:text-sm">
+                    {photo.title}
                   </span>
                 </div>
               </Link>
