@@ -247,6 +247,9 @@ export const useFieldly = create<State>()(
           return { ok: false, error: "This machine is not eligible for the service. Check papers and WALTA if it is a rig." };
         }
         if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "Enter a price greater than zero." };
+        if (note.trim().length < 8) {
+          return { ok: false, error: "Add quote details covering inclusions, exclusions, extra charges, and cancellation/rescheduling terms." };
+        }
         const existing = get().quotes.find(
           (q) => q.requestId === requestId && q.providerId === provider.id && q.status === "pending",
         );
@@ -258,7 +261,7 @@ export const useFieldly = create<State>()(
           amount: Math.round(amount),
           summary: existing ? "Updated provider quote" : "Provider quote",
           etaMin: travelMinutes(km),
-          note: note.trim() || "Offer based on the submitted details. Confirm inclusions and exclusions before booking.",
+          note: note.trim(),
           includes: getService(request.serviceId)?.includes ?? [],
           status: "pending",
           createdAt: Date.now(),
@@ -266,7 +269,7 @@ export const useFieldly = create<State>()(
         const responseMessage = {
           id: makeId("msg"),
           from: "system" as const,
-          text: `${provider.name} responded with a quote. Review the amount, inclusions, timing, and terms before accepting.`,
+          text: `${provider.name} responded with a quote. Review price, inclusions, exclusions, additional charges, timing, and cancellation terms before accepting.`,
           at: Date.now(),
         };
         set((s) => ({
