@@ -170,7 +170,7 @@ function RequestPage() {
                     className="mt-1 size-4 shrink-0 accent-emerald-600"
                   />
                   <span>
-                    I have reviewed this provider's price, included work, note, arrival estimate and the details I submitted. I agree to proceed on these quoted terms. Any change in scope or price must be agreed before extra work starts.
+                    I have reviewed the total price, included work, exclusions, extra fees, rescheduling terms, arrival estimate and the details I submitted. I agree to proceed on these quoted terms. Any scope or price change must be agreed before extra work starts.
                   </span>
                 </label>
               )}
