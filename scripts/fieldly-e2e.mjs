@@ -441,8 +441,11 @@ async function testMobileCustomerJourney() {
     await page.locator("form input").first().fill("9000000001");
     await page.getByPlaceholder("482609").fill("482609");
     await page.getByRole("button", { name: "Open desk", exact: true }).click();
-    await page.getByRole("heading", { name: "Sri Sai Borewell Works", exact: true }).waitFor();
+    await page.waitForTimeout(500);
     const providerDeskText = await page.locator("body").innerText();
+    log("operator desk after explicit login: " + providerDeskText.replace(/\\s+/g, " ").slice(-1200));
+    assert.ok(await page.getByRole("heading", { name: "Sri Sai Borewell Works", exact: true }).count() === 1,
+      "provider sign-in should leave the operator login form");
     assert.ok(providerDeskText.includes("Mockup smoke test work site"),
       "the selected provider must see the customer request in the operator desk");
     await page.getByRole("button", { name: "Accept request & send quote", exact: true }).waitFor();
