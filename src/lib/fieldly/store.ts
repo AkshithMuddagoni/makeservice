@@ -86,6 +86,7 @@ type State = {
   createRequest: (input: {
     serviceId: string
     providerId: string
+    detailsConsent: boolean
   }) => Result
   sendQuote: (requestId: string, amount: number, note: string) => Result
   declineRequest: (requestId: string) => Result
@@ -180,11 +181,12 @@ export const useFieldly = create<State>()(
           extras: s.extras.map((p) => (p.id === id ? { ...p, online } : p)),
         })),
       addProvider: (provider) => set((s) => ({ extras: [...s.extras.filter((p) => p.id !== provider.id), provider] })),
-      createRequest: ({ serviceId, providerId }) => {
+      createRequest: ({ serviceId, providerId, detailsConsent }) => {
         const { site, draft, session } = get();
         const who = session?.role === "customer" ? session : null;
         if (!who) return { ok: false, error: "Sign in with your mobile number before requesting this service." };
         if (!site) return { ok: false, error: "Set the work site first." };
+        if (!detailsConsent) return { ok: false, error: "Review the service details and confirm consent before sending." };
         const service = getService(serviceId);
         if (!service) return { ok: false, error: "Unknown service." };
         if (!providerId) return { ok: false, error: "Choose a provider before sending a request." };
@@ -314,7 +316,8 @@ export const useFieldly = create<State>()(
         }));
         return { ok: true };
       },
-      acceptQuote: (quoteId) => {
+      acceptQuote: (quoteId, termsAccepted) => {
+        if (!termsAccepted) return { ok: false, error: "Review the provider's price and terms before accepting." };
         const quote = get().quotes.find((q) => q.id === quoteId);
         if (!quote || quote.status !== "pending") return { ok: false, error: "That quote is no longer open." };
         const request = get().requests.find((r) => r.id === quote.requestId);
@@ -567,7 +570,9 @@ export const useFieldly = create<State>()(
       },
       review: (bookingId, stars, text) => {
         const booking = get().bookings.find((b) => b.id === bookingId);
-        if (!booking || booking.status !== "PAID") return { ok: false, error: "Rate the job after payment." };
+        if (!booking || (booking.status !== "SERVICE_COMPLETED" && booking.status !== "PAID")) {
+          return { ok: false, error: "Rate the job after the service is marked complete." };
+        }
         const session = get().session;
         if (session?.role !== "customer" || session.phone !== booking.customerPhone) {
           return { ok: false, error: "Only the customer on this booking can leave a review." };
