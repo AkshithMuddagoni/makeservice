@@ -146,6 +146,23 @@ function ProviderPage() {
             </p>
           </section>
 
+          {provider.capabilities?.borewell?.length ? (
+            <section className="mt-6 rounded-2xl border border-line bg-card p-4">
+              <h2 className="font-display text-xl font-bold">Declared borewell services</h2>
+              <ul className="mt-3 grid gap-2 text-sm">
+                {provider.capabilities.borewell.map((capability) => (
+                  <li key={capability} className="flex items-start gap-2">
+                    <BadgeCheck className="mt-0.5 size-4 shrink-0 text-field" />
+                    <span>{capability}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-xs leading-5 text-muted">
+                Service capabilities are declared by the listing owner. Fieldly must verify the actual scope, documents, and equipment before treating these as independently verified.
+              </p>
+            </section>
+          ) : null}
+
           <section className="mt-6">
             <h2 className="font-display text-xl font-bold">Equipment</h2>
             <ul className="mt-3 divide-y divide-line rounded-2xl border border-line bg-card">
