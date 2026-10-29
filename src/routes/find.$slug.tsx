@@ -38,7 +38,7 @@ function FindPage() {
       .map((p) => {
         const km = kmBetween(site, p);
         const priced = priceJob(service.id, p, req);
-        const eligible = isEligible(p, service.id) && p.online;
+        const eligible = isEligible(p, service.id) && p.online && km <= service.radiusKm;
         const score = p.rating * 20 - km * 1.1 + (eligible ? 6 : -30) + (p.verified.insurance ? 1 : 0);
         return { p, km, priced, eligible, score };
       })
