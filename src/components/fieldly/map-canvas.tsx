@@ -98,7 +98,7 @@ export function MapCanvas({ center, markers, zoom = 12, onPick, showDistanceLine
       const sitePin = markers.find((marker) => marker.kind === "site");
       const features = sitePin
         ? markers
-            .filter((marker) => marker.kind === "provider")
+            .filter((marker) => marker.kind === "provider" || marker.kind === "vehicle")
             .map((marker) => ({
               type: "Feature" as const,
               properties: { id: marker.id, label: marker.label },
@@ -150,7 +150,7 @@ export function MapCanvas({ center, markers, zoom = 12, onPick, showDistanceLine
     }
     // markerKey is the stable identity of the pin set.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [markerKey, ready]);
+  }, [markerKey, ready, showDistanceLines]);
 
   return (
     <div className={className ? `map-wrap ${className}` : "map-wrap"}>
