@@ -185,10 +185,10 @@
   background:
     linear-gradient(
       90deg,
-      rgba(207, 237, 255, 0.91) 0%,
-      rgba(213, 240, 255, 0.78) 34%,
-      rgba(213, 240, 255, 0.28) 63%,
-      rgba(213, 240, 255, 0.04) 100%
+      rgba(207, 237, 255, 0.86) 0%,
+      rgba(213, 240, 255, 0.66) 34%,
+      rgba(213, 240, 255, 0.22) 63%,
+      rgba(213, 240, 255, 0.02) 100%
     ),
     linear-gradient(
       180deg,
@@ -208,9 +208,9 @@
     background:
       linear-gradient(
         90deg,
-        rgba(209, 238, 255, 0.90) 0%,
-        rgba(215, 241, 255, 0.68) 55%,
-        rgba(215, 241, 255, 0.24) 100%
+        rgba(209, 238, 255, 0.84) 0%,
+        rgba(215, 241, 255, 0.57) 55%,
+        rgba(215, 241, 255, 0.20) 100%
       ),
       linear-gradient(180deg, rgba(195, 231, 251, 0.12), rgba(243, 245, 244, 0.16));
   }
@@ -218,5 +218,49 @@
 @media (prefers-reduced-motion: reduce) {
   .fieldly-hero-slide {
     transition: none;
+  }
+}
+
+
+/* Blue navigation, clear service-photo carousel controls, and reduced-motion support. */
+.fieldly-site-header {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.fieldly-site-header select:focus-visible,
+.fieldly-site-header a:focus-visible,
+.fieldly-site-header button:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, 0.88);
+  outline-offset: 3px;
+}
+.fieldly-hero-controls {
+  max-width: calc(100% - 2rem);
+}
+.fieldly-hero-controls button {
+  touch-action: manipulation;
+}
+.fieldly-hero-controls button:focus-visible {
+  outline: 2px solid #0759a8;
+  outline-offset: 2px;
+}
+@media (max-width: 639px) {
+  .fieldly-hero-controls {
+    right: 0.75rem;
+    bottom: 0.75rem;
+    gap: 0.35rem;
+    padding: 0.35rem 0.5rem;
+  }
+  .fieldly-hero-controls > span {
+    max-width: 5.5rem;
+    font-size: 0.65rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fieldly-hero-slide {
+    transition-duration: 0.01ms;
+  }
+  .fieldly-category-card,
+  .fieldly-category-card img {
+    transition-duration: 0.01ms;
   }
 }
