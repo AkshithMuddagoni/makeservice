@@ -433,7 +433,7 @@ async function testMobileCustomerJourney() {
     await detailsConsent.check();
     await page.getByRole("button", { name: "Send request to this provider", exact: true }).click();
     const requestUrl = page.url();
-    await page.getByText(/Waiting for the provider to accept with a quote or decline/).waitFor();
+    await page.getByText("Awaiting response", { exact: true }).waitFor();
     assert.equal(await page.getByRole("button", { name: /Accept quote/ }).count(), 0,
       "A customer must not see a quote before the provider responds");
 
