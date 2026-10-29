@@ -71,6 +71,7 @@ export type ServiceDef = {
   radiusKm: number
   includes: string[]
   fields: FieldDef[]
+  capabilities?: Record<string, string[]>
 };
 
 export type Rate = { rate: number; unit: string };
@@ -113,11 +114,17 @@ export type Provider = {
   reviews: Review[]
 };
 
+export type SiteImage = {
+  name: string
+  dataUrl: string
+}
+
 export type Draft = {
   serviceId: string
   requirements: Record<string, string>
   whenLabel: string
   notes: string
+  siteImages?: SiteImage[]
 };
 
 export type Session = {
@@ -148,6 +155,8 @@ export type JobRequest = {
   status: "open" | "booked" | "cancelled"
   createdAt: number
   targetedProviderIds: string[]
+  declinedProviderIds?: string[]
+  siteImages?: SiteImage[]
   messages: ChatMessage[]
 };
 
@@ -183,6 +192,7 @@ export type Booking = {
   requirements: Record<string, string>
   whenLabel: string
   notes: string
+  siteImages?: SiteImage[]
   customerPhone: string
   customerName: string
   amount: number
