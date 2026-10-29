@@ -103,7 +103,7 @@ function DeskHome({ providerId }: { providerId: string }) {
   const openJobs = useMemo(() => {
     if (!provider) return [];
     return requests
-      .filter((r) => r.status === "open" && r.targetedProviderIds.includes(provider.id) && provider.services.includes(r.serviceId))
+      .filter((r) => r.status === "open" && r.targetedProviderIds.includes(provider.id) && !(r.declinedProviderIds ?? []).includes(provider.id) && provider.services.includes(r.serviceId))
       .map((r) => ({ r, km: kmBetween(provider, r.site) }))
       .filter((row) => {
         const service = getService(row.r.serviceId);
@@ -177,7 +177,7 @@ function DeskHome({ providerId }: { providerId: string }) {
       {tab === "requests" && (
         <div className="mt-4 grid gap-3">
           {openJobs.length === 0 && (
-            <p className="rounded-2xl bg-card p-4 text-sm text-muted">No open requests in range. Stay online.</p>
+            <p className="rounded-2xl bg-card p-4 text-sm text-muted">No new requests in range. Stay online for new jobs.</p>
           )}
           {openJobs.map(({ r, km }) => (
             <QuoteCard
@@ -188,6 +188,7 @@ function DeskHome({ providerId }: { providerId: string }) {
               lines={requirementLines(r.serviceId, r.requirements)}
               whenLabel={r.whenLabel}
               notes={r.notes}
+              siteImages={r.siteImages ?? []}
               suggested={priceJob(r.serviceId, provider, r.requirements).amount}
               existing={quotes.find((q) => q.requestId === r.id && q.providerId === provider.id && q.status === "pending")}
               onSend={(amount, note) => {
@@ -247,6 +248,7 @@ function QuoteCard({
   lines,
   whenLabel,
   notes,
+  siteImages,
   suggested,
   existing,
   onSend,
@@ -258,12 +260,13 @@ function QuoteCard({
   lines: { label: string; value: string }[]
   whenLabel: string
   notes: string
+  siteImages: string[]
   suggested: number
   existing?: { amount: number; note: string }
   onSend: (amount: number, note: string) => void
   onDecline: () => void
 }) {
-  const [amount, setAmount] = useState(String(existing?.amount ?? suggested));
+  const [amount, setAmount] = useState(String(existing?.amount ?? (suggested > 0 ? suggested : "")));
   const [note, setNote] = useState(existing?.note ?? "");
   return (
     <article className="rounded-3xl border border-line bg-card p-5">
@@ -284,6 +287,16 @@ function QuoteCard({
         ))}
         {notes && <li>Note: {notes}</li>}
       </ul>
+      {siteImages.length > 0 && (
+        <div className="mt-3">
+          <p className="mb-2 text-xs font-semibold text-muted">Customer site photos</p>
+          <div className="grid grid-cols-3 gap-2">
+            {siteImages.map((image, index) => (
+              <img key={image.slice(-36)} src={image} alt={`Customer site photo ${index + 1}`} className="h-24 w-full rounded-xl border border-line object-cover" />
+            ))}
+          </div>
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap gap-2">
         <input
           value={amount}
@@ -299,9 +312,9 @@ function QuoteCard({
         />
       </div>
       <div className="mt-3 flex gap-2">
-        <Button onClick={() => onSend(Number(amount), note)}>{existing ? "Update quote" : "Send quote"}</Button>
+        <Button onClick={() => onSend(Number(amount), note)}>{existing ? "Update quote" : "Accept request & send quote"}</Button>
         <Button variant="secondary" onClick={onDecline}>
-          Decline
+          Decline request
         </Button>
       </div>
     </article>
