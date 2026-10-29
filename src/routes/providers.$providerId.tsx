@@ -4,7 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Stars, requirementLines } from "@/components/fieldly/bits";
 import { Button } from "@/components/ui/button";
-import { getService, isEligible, verificationLines } from "@/lib/fieldly/catalog";
+import { getService, isEligible, supportsServiceRequest, verificationLines } from "@/lib/fieldly/catalog";
 import { formatKm, kmBetween, travelMinutes } from "@/lib/fieldly/geo";
 import { inr, maskPhone } from "@/lib/fieldly/format";
 import { priceJob } from "@/lib/fieldly/pricing";
@@ -48,7 +48,10 @@ function ProviderPage() {
   const km = site ? kmBetween(site, provider) : null;
   const req = draft?.serviceId === serviceId ? draft.requirements : {};
   const priced = service ? priceJob(service.id, provider, req) : null;
-  const eligible = service ? isEligible(provider, service.id) && provider.online : false;
+  const eligible = service ? isEligible(provider, service.id) && supportsServiceRequest(provider, service.id, req) && provider.online : false;
+  const requiresManualQuote = serviceId === "borewell" &&
+    Boolean(req.borewell_service) &&
+    req.borewell_service !== "New borewell drilling";
   const known =
     bookings.some((b) => b.providerId === provider.id && b.customerPhone === (customer?.phone || session?.phone)) ||
     false;
@@ -194,22 +197,34 @@ function ProviderPage() {
           </div>
           {priced && (
             <>
-              <div className="mt-4 font-display text-4xl font-bold">{inr(priced.amount)}</div>
-              <p className="text-sm text-muted">{priced.summary}</p>
+              <div className="mt-4 font-display text-3xl font-bold">{requiresManualQuote ? "Quote required" : inr(priced.amount)}</div>
+              <p className="text-sm text-muted">{requiresManualQuote ? "The operator must send a specific price for this service." : priced.summary}</p>
               <ul className="mt-3 grid gap-1 text-sm">
                 {priced.includes.map((item) => (
                   <li key={item}>· {item}</li>
                 ))}
               </ul>
               {draft?.serviceId === serviceId && (
-                <ul className="mt-3 grid gap-1 text-sm text-muted">
-                  {requirementLines(serviceId, draft.requirements).map((row) => (
-                    <li key={row.label}>
-                      {row.label}: {row.value}
-                    </li>
-                  ))}
-                  <li>When: {draft.whenLabel}</li>
-                </ul>
+                <>
+                  <ul className="mt-3 grid gap-1 text-sm text-muted">
+                    {requirementLines(serviceId, draft.requirements).map((row) => (
+                      <li key={row.label}>
+                        {row.label}: {row.value}
+                      </li>
+                    ))}
+                    <li>When: {draft.whenLabel}</li>
+                  </ul>
+                  {draft.siteImages?.length ? (
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold text-muted">Attached site photos ({draft.siteImages.length})</p>
+                      <div className="mt-2 grid grid-cols-3 gap-2">
+                        {draft.siteImages.map((photo, index) => (
+                          <img key={photo.name + index} src={photo.dataUrl} alt={photo.name} className="h-20 w-full rounded-lg object-cover" />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </>
               )}
               <p className="mt-3 text-xs text-muted">{priced.note}</p>
             </>
