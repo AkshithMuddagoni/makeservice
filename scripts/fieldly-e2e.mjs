@@ -82,7 +82,11 @@ async function mockExternalServices(page) {
     });
   });
   await page.route("https://tiles.openfreemap.org/**", (route) => route.abort());
-  await page.route("https://images.pexels.com/**", (route) => route.abort());
+  await page.route("https://images.pexels.com/**", (route) => route.fulfill({
+    status: 200,
+    contentType: "image/svg+xml",
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2" viewBox="0 0 2 2"><rect width="2" height="2" fill="#b8e1f8"/></svg>',
+  }));
   await page.route("https://fonts.googleapis.com/**", (route) => route.abort());
   await page.route("https://fonts.gstatic.com/**", (route) => route.abort());
 }
@@ -197,22 +201,69 @@ async function assertHeaderLayout(page, width) {
   await mobileNav.waitFor({ state: "hidden" });
 }
 
-async function assertHeroBackgroundChoices(page, width) {
+async function assertHeroCarouselLayout(page, width) {
   const hero = page.locator('[data-testid="hero-section"]');
-  const choices = [
-    ["farming", "Use farming background"],
-    ["cranes", "Use cranes background"],
-    ["water", "Use water background"],
-    ["construction", "Use construction background"],
-  ];
+  const slides = hero.getByTestId("hero-background-slide");
+  assert.equal(await slides.count(), 6, "Hero should use all six popular-service photos at " + width + "px");
+  assert.equal(await page.getByText("Choose a scene", { exact: true }).count(), 0, "Manual scene chooser must be removed");
 
-  for (const [id, accessibleName] of choices) {
-    await page.getByRole("button", { name: accessibleName }).click();
-    assert.equal(
-      await hero.getAttribute("data-background"),
-      id,
-      "Hero background selection should change to " + id + " at " + width + "px",
+  const layout = await page.evaluate(() => {
+    const hero = document.querySelector('[data-testid="hero-section"]');
+    const card = document.querySelector('[data-testid="location-hero-card"]') ||
+      Array.from(document.querySelectorAll(".fieldly-home-hero > div > div > div")).find((node) =>
+        node.textContent?.includes("Where is your work site?"),
+      );
+    if (!hero || !card) return null;
+    const heroRect = hero.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    return {
+      heroWidth: heroRect.width,
+      cardWidth: cardRect.width,
+      cardLeft: cardRect.left - heroRect.left,
+    };
+  });
+
+  assert.ok(layout, "Hero and location card should be visible at " + width + "px");
+  assert.ok(layout.cardWidth <= 430, "Location card should stay compact at " + width + "px");
+  assert.ok(layout.cardLeft < layout.heroWidth * 0.4, "Location card should keep the previously approved left alignment");
+  const activeCount = await hero.locator('[data-testid="hero-background-slide"].is-active').count();
+  assert.equal(activeCount, 1, "Exactly one hero image should be active at " + width + "px");
+}
+
+async function completeCustomerSignIn(page) {
+  const dialog = page.getByRole("dialog", { name: "Sign in to continue" });
+  await dialog.waitFor({ state: "visible" });
+  await dialog.getByLabel(/Your name/).fill("Fieldly Test Customer");
+  await dialog.getByLabel("Mobile number").fill("9876543210");
+  await dialog.getByRole("button", { name: "Continue with mobile" }).click();
+  await dialog.getByLabel("Verification code").fill("482609");
+  await dialog.getByRole("button", { name: "Sign in and continue" }).click();
+  await dialog.waitFor({ state: "hidden" });
+}
+
+async function testHeroAutoCarousel() {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage();
+  await mockExternalServices(page);
+  try {
+    await page.goto(BASE_URL + "/", { waitUntil: "networkidle" });
+    const hero = page.locator('[data-testid="hero-section"]');
+    const heading = page.getByRole("heading", { name: /Construction & Field Equipment Services/i });
+    await heading.waitFor();
+    const first = await hero.getAttribute("data-background");
+    await page.waitForFunction(
+      (initial) => {
+        const active = document.querySelector('[data-testid="hero-section"]');
+        return Boolean(active && active.getAttribute("data-background") !== initial);
+      },
+      first,
+      { timeout: 12_000 },
     );
+    assert.equal(await hero.getByTestId("hero-background-slide").count(), 6);
+    assert.equal(await hero.locator('[data-testid="hero-background-slide"].is-active').count(), 1);
+    assert.equal(await page.getByText("Choose a scene", { exact: true }).count(), 0);
+  } finally {
+    await context.close();
   }
 }
 
@@ -233,7 +284,7 @@ async function testResponsiveViewportMatrix() {
       await assertNoHorizontalOverflow(page, "landing at " + width + "px");
       await assertHomepageSectionLayout(page, width);
       await assertHeaderLayout(page, width);
-      await assertHeroBackgroundChoices(page, width);
+      await assertHeroCarouselLayout(page, width);
       await assertNoHorizontalOverflow(page, "landing after background selection at " + width + "px");
       const locationButton = page.getByRole("button", { name: /Enter location/ });
       await locationButton.click();
@@ -317,6 +368,8 @@ async function testMarketplaceServicesMatrix() {
   try {
     const dialog = await openLocationDialog(page);
     await confirmManualWorkSite(dialog);
+    await page.getByRole("dialog", { name: "Sign in to continue" }).waitFor();
+    await completeCustomerSignIn(page);
     await page.getByRole("heading", { name: "Choose a service" }).waitFor();
 
     for (const width of widths) {
@@ -347,6 +400,12 @@ async function testMobileCustomerJourney() {
     await assertNoHorizontalOverflow(page, "mobile landing/dialog");
     await confirmManualWorkSite(dialog);
 
+    const signInDialog = page.getByRole("dialog", { name: "Sign in to continue" });
+    await signInDialog.waitFor({ state: "visible" });
+    assert.equal(await page.getByRole("heading", { name: "Choose a service" }).count(), 0,
+      "Service choices must stay hidden until the customer signs in");
+    await completeCustomerSignIn(page);
+
     await page.getByRole("heading", { name: "Choose a service" }).waitFor();
     await assertNoHorizontalOverflow(page, "mobile marketplace");
     await page.getByRole("link", { name: /Borewell drilling/ }).first().click();
@@ -368,16 +427,6 @@ async function testMobileCustomerJourney() {
     assert.equal(await page.getByRole("link", { name: /Sri Sai Borewell Works/ }).count(), 1);
     await page.getByPlaceholder("Filter by name").fill("");
 
-    await page.getByRole("button", { name: "Request quotes", exact: true }).click();
-    await page.getByPlaceholder("Your name").fill("Fieldly Test Customer");
-    await page.getByPlaceholder("Mobile number").fill("9876543210");
-    await page.getByRole("button", { name: "Get code", exact: true }).click();
-    await page.getByPlaceholder("482609").fill("482609");
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await page.getByText("Signed in", { exact: true }).waitFor();
-
-    await page.goto(BASE_URL + "/find/borewell", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Request quotes", exact: true }).waitFor();
     await page.getByRole("button", { name: "Request quotes", exact: true }).click();
     await page.getByRole("heading", { name: "Borewell drilling", exact: true }).waitFor();
     await page.getByRole("button", { name: "Accept quote", exact: true }).waitFor();
@@ -417,6 +466,8 @@ async function testDesktopGpsJourney() {
     }
     assert.equal(await confirmButton.isEnabled(), true, "GPS address lookup should finish before confirmation");
     await confirmButton.click();
+    await page.getByRole("dialog", { name: "Sign in to continue" }).waitFor({ state: "visible" });
+    await completeCustomerSignIn(page);
     await page.getByRole("heading", { name: "Choose a service" }).waitFor();
     await assertNoHorizontalOverflow(page, "desktop marketplace");
     assert.deepEqual(pageErrors, [], "desktop GPS journey should have no uncaught page errors");
@@ -440,6 +491,7 @@ async function main() {
   try {
     await waitForServer();
     browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
+    await testHeroAutoCarousel();
     await testResponsiveViewportMatrix();
     await testMarketplaceServicesMatrix();
     await testMobileCustomerJourney();
