@@ -438,6 +438,7 @@ async function testMobileCustomerJourney() {
       "A customer must not see a quote before the provider responds");
 
     await page.goto(new URL("/desk", page.url()).href);
+    await page.locator('[data-testid="operator-login-form"][data-hydrated="true"]').waitFor();
     await page.locator("form input").first().fill("9000000001");
     await page.getByPlaceholder("482609").fill("482609");
     await page.getByRole("button", { name: "Open desk", exact: true }).click();
