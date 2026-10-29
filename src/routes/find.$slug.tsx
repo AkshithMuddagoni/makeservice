@@ -52,9 +52,9 @@ function FindPage() {
   }, [providers, service, site, req, q]);
 
   const hidden = rows.filter((r) => !r.eligible).length;
-  const requiresManualQuote = service.id === "borewell" &&
-    Boolean(req.borewell_service) &&
-    req.borewell_service !== "New borewell drilling";
+  const requiresManualQuote = Boolean(service && service.id === "borewell" &&
+    req.borewell_service &&
+    req.borewell_service !== "New borewell drilling");
   const visible = rows
     .filter((r) => (verifiedOnly ? r.eligible : true))
     .sort((a, b) => {
