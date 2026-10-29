@@ -83,7 +83,7 @@ function ProviderPage() {
         return;
       }
     }
-    const result = createRequest({ serviceId, providerId: provider!.id });
+    const result = createRequest({ serviceId, providerId: provider!.id, detailsConsent: true });
     if (!result.ok) {
       toast.error(result.error);
       return;
