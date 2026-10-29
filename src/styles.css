@@ -156,3 +156,46 @@
     font-size: 0.78rem;
   }
 }
+
+
+/* Automatic service-photo hero carousel and centered location action */
+.fieldly-home-hero {
+  position: relative;
+  min-height: 34rem;
+  background: #eaf5fb;
+}
+
+.fieldly-hero-backdrops {
+  overflow: hidden;
+}
+
+.fieldly-hero-slide {
+  object-position: center 48%;
+  opacity: 0;
+  transition: opacity 1.5s ease-in-out;
+  will-change: opacity;
+}
+
+.fieldly-hero-slide.opacity-100 {
+  opacity: 1;
+}
+
+.fieldly-hero-slide.opacity-0 {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fieldly-hero-slide {
+    transition: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .fieldly-home-hero {
+    min-height: 0;
+  }
+
+  .fieldly-hero-slide {
+    object-position: center center;
+  }
+}
