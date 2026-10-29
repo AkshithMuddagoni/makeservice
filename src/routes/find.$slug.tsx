@@ -1,11 +1,9 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, BadgeCheck, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 import { MapCanvas } from "@/components/fieldly/map-canvas";
 import { Stars } from "@/components/fieldly/bits";
 import { CustomerSignInDialog } from "@/components/fieldly/customer-sign-in-dialog";
-import { Button } from "@/components/ui/button";
 import { getService, isEligible } from "@/lib/fieldly/catalog";
 import { formatKm, kmBetween, travelMinutes } from "@/lib/fieldly/geo";
 import { inr } from "@/lib/fieldly/format";
@@ -25,11 +23,7 @@ function FindPage() {
   const draft = useFieldly((s) => s.draft);
   const lang = useFieldly((s) => s.lang);
   const providers = useProviders();
-  const navigate = useNavigate();
   const session = useFieldly((s) => s.session);
-  const customer = useFieldly((s) => s.customer);
-  const createRequest = useFieldly((s) => s.createRequest);
-  const resumeCustomer = useFieldly((s) => s.resumeCustomer);
   const [sort, setSort] = useState<SortKey>("recommended");
   const [verifiedOnly, setVerifiedOnly] = useState(true);
   const [q, setQ] = useState("");
@@ -106,26 +100,6 @@ function FindPage() {
     })),
   ];
 
-  function askQuotes() {
-    if (!session || session.role !== "customer") {
-      if (!(customer && resumeCustomer())) {
-        toast.error("Sign in to request quotes.");
-        void navigate({ to: "/account" });
-        return;
-      }
-    }
-    if (!draft || draft.serviceId !== slug) {
-      void navigate({ to: "/services/$slug", params: { slug } });
-      return;
-    }
-    const result = createRequest({ serviceId: slug });
-    if (!result.ok || !result.id) {
-      toast.error(!result.ok ? result.error : "Could not open a request.");
-      return;
-    }
-    void navigate({ to: "/requests/$requestId", params: { requestId: result.id } });
-  }
-
   return (
     <div className="mx-auto grid max-w-6xl lg:min-h-screen lg:grid-cols-2">
       <div className="border-line lg:border-r">
@@ -138,12 +112,10 @@ function FindPage() {
             {site.label}, {site.area}. {visible.length} shown
             {draft?.serviceId === slug ? ` · ${draft.whenLabel}` : ""}.
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button size="lg" onClick={askQuotes}>
-              Request quotes
-            </Button>
-            <p className="max-w-xs text-xs text-muted">
-              The nearest verified operators quote against your details. Compare, then accept one.
+          <div className="mt-4 rounded-2xl border border-field/15 bg-field-soft/60 p-3">
+            <p className="text-sm font-bold text-ink">Choose one provider to review and request the service.</p>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              Compare distance, ratings, equipment, response time and the indicative estimate. Your request goes only to the provider you choose; no booking is confirmed until you review and accept their quote.
             </p>
           </div>
           <label className="mt-3 flex h-11 items-center rounded-xl border border-line bg-card px-3">
@@ -223,13 +195,20 @@ function FindPage() {
                     <span>
                       {row.p.rating.toFixed(1)} · {row.p.reviewCount}
                     </span>
-                    <span>{formatKm(row.km)}</span>
-                    <span>{travelMinutes(row.km)} min</span>
+                    <span>{formatKm(row.km)} away</span>
+                    <span>~{travelMinutes(row.km)} min travel estimate</span>
+                    <span>Replies in ~{row.p.replyMin} min</span>
                   </div>
                   <p className="mt-2 text-sm text-muted">{row.p.equipment}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    {row.p.years} years’ experience · {row.p.jobs} recorded jobs · {row.p.languages.join(", ")}
+                  </p>
+                  <p className="mt-2 text-xs font-bold text-field">View profile, review service details &amp; request →</p>
                 </div>
                 <div className="text-right">
-                  <div className="font-display text-lg font-bold">{inr(row.priced.amount)}</div>
+                  <div className="font-display text-lg font-bold">
+                    {row.priced.amount > 0 ? inr(row.priced.amount) : "Quote needed"}
+                  </div>
                   <div className="text-xs text-muted">{row.priced.summary}</div>
                 </div>
               </div>
