@@ -193,7 +193,7 @@ export const useFieldly = create<State>()(
         const siteImages = draft?.serviceId === serviceId ? draft.siteImages ?? [] : [];
         const ranked = get()
           .allProviders()
-          .filter((p) => isEligible(p, serviceId) && supportsServiceRequest(p, serviceId, requirements) && get().isOnline(p.id))
+          .filter((p) => isEligible(p, serviceId, requirements) && supportsServiceRequest(p, serviceId, requirements) && get().isOnline(p.id))
           .map((p) => ({ p, km: kmBetween(site, p) }))
           .filter((row) => row.km <= service.radiusKm)
           .sort((a, b) => a.km - b.km);
@@ -260,7 +260,7 @@ export const useFieldly = create<State>()(
         if (!request.targetedProviderIds.includes(provider.id)) {
           return { ok: false, error: "This request has not been assigned to your operator account." };
         }
-        if (!isEligible(provider, request.serviceId)) {
+        if (!isEligible(provider, request.serviceId, request.requirements) || !supportsServiceRequest(provider, request.serviceId, request.requirements)) {
           return { ok: false, error: "This machine is not eligible for the service. Check papers and WALTA if it is a rig." };
         }
         if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "Enter a price greater than zero." };
@@ -376,7 +376,7 @@ export const useFieldly = create<State>()(
           quotes: s.quotes.map((q) => {
             if (q.requestId !== request.id) return q;
             if (q.id === quote.id) return { ...q, status: "accepted" };
-            if (q.status === "pending") return { ...q, status: "declined" };
+            if (q.status === "pending" || q.status === "draft") return { ...q, status: "declined" };
             return q;
           }),
           requests: s.requests.map((r) => (r.id === request.id ? { ...r, status: "booked" } : r)),
