@@ -1,9 +1,10 @@
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { ArrowLeft, BadgeCheck, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
 import { MapCanvas } from "@/components/fieldly/map-canvas";
 import { Stars } from "@/components/fieldly/bits";
 import { CustomerSignInDialog } from "@/components/fieldly/customer-sign-in-dialog";
+import { Button } from "@/components/ui/button";
 import { getService, isEligible } from "@/lib/fieldly/catalog";
 import { formatKm, kmBetween, travelMinutes } from "@/lib/fieldly/geo";
 import { inr } from "@/lib/fieldly/format";
@@ -95,8 +96,8 @@ function FindPage() {
       id: row.p.id,
       lat: row.p.lat,
       lng: row.p.lng,
-      label: inr(row.priced.amount),
-      kind: "provider" as const,
+      label: `${row.p.name} · ${formatKm(row.km)}`,
+      kind: "vehicle" as const,
     })),
   ];
 
