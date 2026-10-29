@@ -48,7 +48,7 @@ function ProviderPage() {
   const km = site ? kmBetween(site, provider) : null;
   const req = draft?.serviceId === serviceId ? draft.requirements : {};
   const priced = service ? priceJob(service.id, provider, req) : null;
-  const eligible = service ? isEligible(provider, service.id) && supportsServiceRequest(provider, service.id, req) && provider.online : false;
+  const eligible = service ? isEligible(provider, service.id, req) && supportsServiceRequest(provider, service.id, req) && provider.online : false;
   const requiresManualQuote = serviceId === "borewell" &&
     Boolean(req.borewell_service) &&
     req.borewell_service !== "New borewell drilling";
