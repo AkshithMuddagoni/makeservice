@@ -49,10 +49,10 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-paper text-ink">
-      <header className="sticky top-0 z-40 border-b border-line bg-card/95 backdrop-blur">
+      <header className="fieldly-site-header sticky top-0 z-40 border-b border-white/15 bg-[#0759a8] text-white shadow-sm">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
           <Link to="/" className="flex items-center gap-2 font-display text-xl font-bold tracking-tight">
-            <span className="grid size-9 place-items-center rounded-xl bg-white text-field"><Sprout className="size-6" aria-hidden /></span>
+            <span className="grid size-9 place-items-center rounded-xl bg-white text-[#0759a8] shadow-sm"><Sprout className="size-6" aria-hidden /></span>
             Fieldly
           </Link>
           <nav aria-label="Desktop navigation" className="ml-4 hidden min-w-0 flex-1 items-center gap-1 lg:flex">
@@ -61,8 +61,8 @@ export function Shell({ children }: { children: ReactNode }) {
                 key={l.to}
                 to={l.to}
                 className={cn(
-                  "whitespace-nowrap rounded-lg px-2.5 py-2 text-sm font-semibold text-muted transition hover:bg-paper hover:text-ink xl:px-3",
-                  path === l.to && "bg-paper text-ink",
+                  "whitespace-nowrap rounded-lg px-2.5 py-2 text-sm font-semibold text-white/85 transition hover:bg-white/15 hover:text-white xl:px-3",
+                  path === l.to && "bg-white/15 text-white",
                 )}
               >
                 {l.label}
@@ -73,34 +73,34 @@ export function Shell({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={() => setSiteOpen(true)}
-              className="inline-flex h-10 min-w-0 max-w-40 items-center gap-1.5 rounded-xl border border-line bg-white px-3 text-left text-xs font-bold shadow-sm transition hover:border-field sm:h-11 sm:max-w-48"
+              className="inline-flex h-10 min-w-0 max-w-40 items-center gap-1.5 rounded-xl border border-white/30 bg-white/10 px-3 text-left text-xs font-bold text-white shadow-sm transition hover:border-white/70 hover:bg-white/15 sm:h-11 sm:max-w-48"
             >
-              <MapPin className="size-4 shrink-0 text-field" />
+              <MapPin className="size-4 shrink-0 text-sky-100" />
               <span className="truncate">{site ? site.city : "India"}</span>
-              <ChevronDown className="size-3.5 shrink-0 text-muted" />
+              <ChevronDown className="size-3.5 shrink-0 text-white/75" />
             </button>
             <label className="flex items-center">
               <span className="sr-only">{t(lang, "language")}</span>
               <select
                 value={lang}
                 onChange={(e) => setLang(e.target.value as Lang)}
-                className="h-10 rounded-xl border border-line bg-card px-2 text-sm font-semibold sm:h-11"
+                className="h-10 rounded-xl border border-white/25 bg-white/10 px-2 text-sm font-semibold text-white sm:h-11"
               >
-                <option value="en">EN</option>
-                <option value="te">తె</option>
-                <option value="hi">हि</option>
+                <option value="en" className="text-ink">EN</option>
+                <option value="te" className="text-ink">తె</option>
+                <option value="hi" className="text-ink">हि</option>
               </select>
             </label>
             <Link
               to="/account"
-              className="grid h-10 place-items-center rounded-xl bg-ink px-3 text-sm font-semibold text-on-ink transition hover:bg-field sm:h-11"
+              className="grid h-10 place-items-center rounded-xl bg-white px-3 text-sm font-bold text-[#0759a8] transition hover:bg-sky-50 sm:h-11"
             >
               {session ? session.name.split(" ")[0] : "Login"}
             </Link>
           </div>
           <button
             type="button"
-            className="ml-auto grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-white transition hover:border-field lg:hidden"
+            className="ml-auto grid size-10 shrink-0 place-items-center rounded-xl border border-white/30 bg-white/10 text-white transition hover:bg-white/20 lg:hidden"
             onClick={() => setMenu((v) => !v)}
             aria-label={menu ? "Close menu" : "Open menu"}
             aria-expanded={menu}
@@ -110,35 +110,35 @@ export function Shell({ children }: { children: ReactNode }) {
           </button>
         </div>
         {menu && (
-          <nav id="fieldly-navigation-menu" aria-label="Main navigation" className="border-t border-line bg-card px-4 py-3 shadow-sm lg:hidden">
+          <nav id="fieldly-navigation-menu" aria-label="Main navigation" className="border-t border-white/15 bg-[#0759a8] px-4 py-3 text-white shadow-lg lg:hidden">
             <button
               type="button"
               onClick={() => {
                 setMenu(false);
                 setSiteOpen(true);
               }}
-              className="flex h-11 w-full items-center gap-2 text-sm font-semibold"
+              className="flex h-11 w-full items-center gap-2 text-sm font-semibold text-white"
             >
-              <MapPin className="size-4 text-field" />
+              <MapPin className="size-4 text-sky-100" />
               {site ? site.label : t(lang, "your_site")}
             </button>
-            <Link to="/account" className="flex h-11 items-center text-sm font-semibold">
+            <Link to="/account" className="flex h-11 items-center text-sm font-semibold text-white">
               {session ? session.name : "Login"}
             </Link>
             {links.map((l) => (
-              <Link key={l.to} to={l.to} className="flex h-11 items-center text-sm font-semibold">
+              <Link key={l.to} to={l.to} className="flex h-11 items-center text-sm font-semibold text-white hover:text-sky-100">
                 {l.label}
               </Link>
             ))}
             <select
               value={lang}
               onChange={(e) => setLang(e.target.value as Lang)}
-              className="mb-2 h-11 w-full rounded-xl border border-line bg-card px-2 text-sm font-semibold"
+              className="mb-2 h-11 w-full rounded-xl border border-white/25 bg-white/10 px-2 text-sm font-semibold text-white"
               aria-label={t(lang, "language")}
             >
-              <option value="en">English</option>
-              <option value="te">తెలుగు</option>
-              <option value="hi">हिन्दी</option>
+              <option value="en" className="text-ink">English</option>
+              <option value="te" className="text-ink">తెలుగు</option>
+              <option value="hi" className="text-ink">हिन्दी</option>
             </select>
           </nav>
         )}
