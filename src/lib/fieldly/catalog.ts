@@ -44,7 +44,9 @@ export const SERVICES: ServiceDef[] = [
           "Deepening / re-boring",
           "Camera inspection",
           "Pump installation / repair",
-          "Recharge / maintenance",
+          "Water-yield / borewell assessment",
+          "Site / groundwater survey before drilling",
+          "Borewell recharge / maintenance",
         ],
       },
       {
@@ -79,8 +81,20 @@ export const SERVICES: ServiceDef[] = [
             "Flushing / cleaning an existing borewell",
             "Camera inspection",
             "Pump installation / repair",
-            "Recharge / maintenance",
+            "Water-yield / borewell assessment",
+            "Borewell recharge / maintenance",
           ],
+        },
+      },
+      {
+        key: "survey_goal",
+        label: "What should the site / groundwater survey assess?",
+        type: "text",
+        required: true,
+        placeholder: "Proposed drilling point, access, water-yield assessment…",
+        showWhen: {
+          key: "service_type",
+          values: ["Site / groundwater survey before drilling"],
         },
       },
       {
