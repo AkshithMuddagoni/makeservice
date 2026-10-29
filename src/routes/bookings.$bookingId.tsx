@@ -264,7 +264,7 @@ function BookingPage() {
               </div>
             )}
 
-            {booking.status === "PAID" && !booking.review && (
+            {(booking.status === "SERVICE_COMPLETED" || booking.status === "PAID") && !booking.review && (
               <form
                 className="mt-4 grid gap-2"
                 onSubmit={(e) => {
@@ -275,6 +275,7 @@ function BookingPage() {
                 }}
               >
                 <div className="font-semibold">Rate {provider?.name}</div>
+                <p className="text-xs text-muted">You can leave feedback once the provider marks the work complete.</p>
                 <div className="flex gap-1">
                   {[1, 2, 3, 4, 5].map((n) => (
                     <button key={n} type="button" onClick={() => setStars(n)} aria-label={`${n} stars`}>
