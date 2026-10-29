@@ -257,7 +257,7 @@ async function assertMarketplaceServicesLayout(page, width) {
   for (let i = 1; i < Math.min(3, result.cards.length); i += 1) {
     assert.ok(
       Math.abs(result.cards[i].rect.y - result.cards[0].rect.y) <= 2,
-      "The first three marketplace cards should be in one row at " + width + "px",
+      "The first three marketplace cards should be in one row at " + width + "px. Positions: " + JSON.stringify(result.cards.map((card) => card.rect)),
     );
   }
 }
