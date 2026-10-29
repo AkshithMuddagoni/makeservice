@@ -20,6 +20,7 @@ function DeskPage() {
   const session = useFieldly((s) => s.session);
   const providers = useProviders();
   const signInProvider = useFieldly((s) => s.signInProvider);
+  const hydrated = useFieldly((s) => s.hydrated);
   const [phone, setPhone] = useState("9000000001");
   const [code, setCode] = useState("");
 
@@ -75,7 +76,7 @@ function DeskPage() {
             placeholder="482609"
             className="h-12 rounded-xl border border-line px-3 text-center font-display text-2xl tracking-widest outline-none"
           />
-          <Button type="submit" size="lg">
+          <Button type="submit" size="lg" disabled={!hydrated}>
             Open desk
           </Button>
           <Link to="/join" className="text-center text-sm font-semibold">
