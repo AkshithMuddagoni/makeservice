@@ -9,6 +9,7 @@ import { formatKm, kmBetween } from "@/lib/fieldly/geo";
 import { priceJob } from "@/lib/fieldly/pricing";
 import { t } from "@/lib/fieldly/i18n";
 import { useFieldly, useProviders } from "@/lib/fieldly/store";
+import type { SiteImage } from "@/lib/fieldly/types";
 import { z } from "zod";
 
 export const Route = createFileRoute("/desk")({ component: DeskPage });
@@ -189,10 +190,11 @@ function DeskHome({ providerId }: { providerId: string }) {
               key={r.id}
               requestId={r.id}
               title={getService(r.serviceId)?.name ?? r.serviceId}
-              place={`${r.site.label} · ${formatKm(km)}`}
+              place={`${r.site.address || r.site.label}, ${r.site.city}, ${r.site.state} · ${formatKm(km)} straight-line`}
               lines={requirementLines(r.serviceId, r.requirements)}
               whenLabel={r.whenLabel}
               notes={r.notes}
+              siteImages={r.siteImages ?? []}
               suggested={priceJob(r.serviceId, provider, r.requirements).amount}
               existing={quotes.find((q) => q.requestId === r.id && q.providerId === provider.id && (q.status === "draft" || q.status === "pending"))}
               onSend={(amount, note) => {
@@ -252,6 +254,7 @@ function QuoteCard({
   lines,
   whenLabel,
   notes,
+  siteImages,
   suggested,
   existing,
   onSend,
@@ -263,6 +266,7 @@ function QuoteCard({
   lines: { label: string; value: string }[]
   whenLabel: string
   notes: string
+  siteImages: SiteImage[]
   suggested: number
   existing?: { amount: number; note: string }
   onSend: (amount: number, note: string) => void
@@ -294,6 +298,19 @@ function QuoteCard({
         ))}
         {notes && <li>Note: {notes}</li>}
       </ul>
+      {siteImages.length > 0 && (
+        <section className="mt-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Customer site photos</h3>
+          <div className="mt-2 grid grid-cols-3 gap-2 sm:max-w-xs">
+            {siteImages.map((photo, index) => (
+              <a key={photo.name + index} href={photo.dataUrl} target="_blank" rel="noreferrer" className="overflow-hidden rounded-xl border border-line">
+                <img src={photo.dataUrl} alt={photo.name} className="h-20 w-full object-cover" />
+                <span className="block truncate px-2 py-1 text-[10px] text-muted">{photo.name}</span>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="mt-3 flex flex-wrap gap-2">
         <input
           value={amount}
