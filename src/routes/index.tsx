@@ -63,8 +63,6 @@ const HERO_BACKGROUNDS = [
   },
 ] as const;
 
-type HeroBackgroundId = (typeof HERO_BACKGROUNDS)[number]["id"];
-
 const SERVICE_PHOTOS: Record<string, { src: string; alt: string; title: string }> = {
   borewell: {
     src: "https://images.pexels.com/photos/7910062/pexels-photo-7910062.jpeg?auto=compress&cs=tinysrgb&w=900",
@@ -188,7 +186,7 @@ function Home() {
               Book borewell rigs, JCBs, cranes, tractors, water tankers and more — at your work site, quickly and easily.
             </p>
 
-            <div className="mt-6 max-w-[390px] rounded-3xl border border-white/90 bg-white/95 p-4 shadow-[0_20px_55px_rgba(20,40,58,0.16)] backdrop-blur sm:p-5">
+            <div data-testid="location-hero-card" className="mt-6 max-w-[390px] rounded-3xl border border-white/90 bg-white/95 p-4 shadow-[0_20px_55px_rgba(20,40,58,0.16)] backdrop-blur sm:p-5">
               <h2 className="font-display text-xl font-extrabold tracking-tight sm:text-2xl">
                 Where is your work site?
               </h2>
