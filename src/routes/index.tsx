@@ -152,21 +152,21 @@ function Home() {
           ))}
           <div className="fieldly-hero-overlay absolute inset-0" />
         </div>
-        <div className="relative z-10 mx-auto max-w-6xl px-4 py-8 sm:py-10 lg:py-12">
+        <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:py-10 lg:py-12">
           <div className="max-w-[620px]">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/80 px-3 py-1.5 text-xs font-extrabold uppercase tracking-wide text-field shadow-sm backdrop-blur">
               <MapPin className="size-4" />
               {t(lang, "gate_kicker")}
             </div>
-            <h1 className="mt-4 max-w-[590px] font-display text-4xl font-extrabold leading-[1.04] tracking-tight text-ink sm:text-5xl lg:text-[3.35rem]">
+            <h1 className="mt-4 max-w-[13ch] font-display text-3xl font-extrabold leading-[1.08] tracking-tight text-ink sm:max-w-[590px] sm:text-5xl lg:text-[3.35rem]">
               Construction &amp; Field Equipment Services{" "}
               <span className="text-field">Across India</span>
             </h1>
-            <p className="mt-4 max-w-xl text-base font-medium leading-7 text-ink/90 sm:text-lg">
+            <p className="mt-3 max-w-xl text-sm font-medium leading-6 text-ink/90 sm:mt-4 sm:text-lg sm:leading-7">
               Book borewell rigs, JCBs, cranes, tractors, water tankers and more — at your work site, quickly and easily.
             </p>
 
-            <div data-testid="location-hero-card" className="mt-6 max-w-[390px] rounded-3xl border border-white/90 bg-white/95 p-4 shadow-[0_20px_55px_rgba(20,40,58,0.16)] backdrop-blur sm:p-5">
+            <div data-testid="location-hero-card" className="mt-5 max-w-[390px] rounded-3xl border border-white/95 bg-white/95 p-4 shadow-[0_20px_55px_rgba(20,40,58,0.16)] backdrop-blur sm:mt-6 sm:p-5">
               <h2 className="font-display text-xl font-extrabold tracking-tight sm:text-2xl">
                 Where is your work site?
               </h2>
@@ -196,7 +196,7 @@ function Home() {
               <Button
                 type="button"
                 variant="primary"
-                className="mt-4 h-12 w-full rounded-xl text-base font-bold shadow-sm"
+                className="mt-4 h-12 w-full rounded-xl bg-[#009b57] text-base font-bold text-white shadow-sm hover:bg-[#00864b]"
                 onClick={() => setPickerOpen(true)}
               >
                 Enter location <ArrowRight className="ml-2 size-4" />
@@ -212,9 +212,9 @@ function Home() {
         </div>
         <div
           aria-label="Hero image selection"
-          className="fieldly-hero-controls absolute bottom-3 right-3 z-10 flex items-center gap-3 rounded-full border border-white/75 bg-white/90 px-3 py-2 shadow-lg backdrop-blur-md sm:bottom-4 sm:right-4"
+          className="fieldly-hero-controls absolute bottom-3 right-3 z-10 flex items-center gap-2 rounded-full border border-white/75 bg-white/90 px-2.5 py-1.5 shadow-lg backdrop-blur-md sm:bottom-4 sm:right-4 sm:gap-3 sm:px-3 sm:py-2"
         >
-          <span className="max-w-32 truncate text-xs font-extrabold text-ink">{heroBackground.label}</span>
+          <span className="max-w-24 truncate text-[11px] font-extrabold text-ink sm:max-w-32 sm:text-xs">{heroBackground.label}</span>
           <div className="flex items-center gap-1">
             {HERO_BACKGROUNDS.map((scene, index) => (
               <button
