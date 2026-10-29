@@ -132,6 +132,50 @@ async function openLocationDialog(page) {
   return dialog;
 }
 
+async function assertHomepageSectionLayout(page, width) {
+  const result = await page.evaluate(() => {
+    const strip = document.querySelector('[data-testid="benefit-strip"]');
+    const grid = document.querySelector('[data-testid="popular-services-grid"]');
+    if (!strip || !grid) return { error: "The benefits strip or popular services grid is missing" };
+    const benefitItems = Array.from(strip.children).map((el) => {
+      const rect = el.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    });
+    const serviceCards = Array.from(grid.children).map((el) => {
+      const rect = el.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    });
+    return {
+      benefitColumns: getComputedStyle(strip).gridTemplateColumns.split(" ").length,
+      serviceColumns: getComputedStyle(grid).gridTemplateColumns.split(" ").length,
+      benefitItems,
+      serviceCards,
+    };
+  });
+
+  assert.equal(result.error, undefined, "Homepage service sections should render at " + width + "px");
+  assert.equal(result.benefitItems.length, 4, "Exactly four benefit items must be present");
+  assert.equal(result.serviceColumns, 3, "Popular Services must use three columns at " + width + "px");
+  assert.equal(result.benefitColumns, 4, "Benefit strip must remain four columns at " + width + "px");
+  for (let i = 1; i < result.benefitItems.length; i += 1) {
+    assert.ok(
+      Math.abs(result.benefitItems[i].y - result.benefitItems[0].y) <= 2,
+      "The four benefit items must stay on one horizontal row at " + width + "px",
+    );
+  }
+  assert.ok(result.serviceCards.length >= 3, "Popular Services should show at least three cards");
+  for (let i = 1; i < 3; i += 1) {
+    assert.ok(
+      Math.abs(result.serviceCards[i].y - result.serviceCards[0].y) <= 2,
+      "The first three service images must be aligned in one row at " + width + "px",
+    );
+    assert.ok(
+      result.serviceCards[i].x > result.serviceCards[i - 1].x,
+      "Service cards should progress horizontally at " + width + "px",
+    );
+  }
+}
+
 async function testResponsiveViewportMatrix() {
   const widths = [320, 360, 375, 390, 414, 640, 768, 820, 1024, 1280, 1440, 1920];
   const context = await browser.newContext({ viewport: { width: 390, height: 900 } });
@@ -146,6 +190,7 @@ async function testResponsiveViewportMatrix() {
       const height = width < 600 ? 844 : width < 1024 ? 900 : 1000;
       await page.setViewportSize({ width, height });
       await assertNoHorizontalOverflow(page, "landing at " + width + "px");
+      await assertHomepageSectionLayout(page, width);
       const locationButton = page.getByRole("button", { name: /Enter location/ });
       await locationButton.click();
       const dialog = page.locator('[aria-labelledby="fieldly-location-title"]');
