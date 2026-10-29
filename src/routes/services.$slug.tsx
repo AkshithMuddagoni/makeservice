@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { FieldList, missingFields, controlClass } from "@/components/fieldly/bits";
+import { CustomerSignInDialog } from "@/components/fieldly/customer-sign-in-dialog";
 import { ServiceIcon } from "@/components/fieldly/icons";
 import { Button } from "@/components/ui/button";
 import { WHEN_OPTIONS, getService } from "@/lib/fieldly/catalog";
@@ -18,6 +19,8 @@ function ServiceForm() {
   const navigate = useNavigate();
   const lang = useFieldly((s) => s.lang);
   const site = useFieldly((s) => s.site);
+  const session = useFieldly((s) => s.session);
+  const [signInOpen, setSignInOpen] = useState(true);
   const draft = useFieldly((s) => s.draft);
   const setDraft = useFieldly((s) => s.setDraft);
   const initial = draft?.serviceId === slug ? draft : null;
@@ -40,6 +43,38 @@ function ServiceForm() {
           Back home
         </Link>
       </div>
+    );
+  }
+
+  if (!site) {
+    return (
+      <div className="mx-auto max-w-xl px-4 py-16">
+        <h1 className="font-display text-3xl font-extrabold">Choose your work site first.</h1>
+        <p className="mt-2 text-sm leading-6 text-muted">Fieldly asks for your location before you select a service or enter job requirements.</p>
+        <Button asChild className="mt-5">
+          <Link to="/">Set work-site location</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  if (!session || session.role !== "customer") {
+    return (
+      <main className="mx-auto min-h-[60vh] max-w-2xl px-4 py-10">
+        <section className="rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-8">
+          <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-field">Location confirmed</p>
+          <h1 className="mt-2 font-display text-3xl font-extrabold">Sign in before entering job details.</h1>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            Your work site is saved. Sign in first, then continue with {service.name}.
+          </p>
+          <Button className="mt-5" onClick={() => setSignInOpen(true)}>Sign in and continue</Button>
+        </section>
+        <CustomerSignInDialog
+          open={signInOpen}
+          onClose={() => setSignInOpen(false)}
+          onSuccess={() => setSignInOpen(false)}
+        />
+      </main>
     );
   }
 
