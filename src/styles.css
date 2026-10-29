@@ -185,10 +185,10 @@
   background:
     linear-gradient(
       90deg,
-      rgba(207, 237, 255, 0.86) 0%,
-      rgba(213, 240, 255, 0.66) 34%,
-      rgba(213, 240, 255, 0.22) 63%,
-      rgba(213, 240, 255, 0.02) 100%
+      rgba(193, 229, 250, 0.88) 0%,
+      rgba(201, 234, 252, 0.67) 28%,
+      rgba(208, 238, 253, 0.24) 52%,
+      rgba(213, 240, 255, 0.02) 76%
     ),
     linear-gradient(
       180deg,
@@ -208,11 +208,11 @@
     background:
       linear-gradient(
         90deg,
-        rgba(209, 238, 255, 0.84) 0%,
-        rgba(215, 241, 255, 0.57) 55%,
-        rgba(215, 241, 255, 0.20) 100%
+        rgba(192, 229, 251, 0.78) 0%,
+        rgba(205, 236, 253, 0.43) 43%,
+        rgba(215, 241, 255, 0.08) 100%
       ),
-      linear-gradient(180deg, rgba(195, 231, 251, 0.12), rgba(243, 245, 244, 0.16));
+      linear-gradient(180deg, rgba(195, 231, 251, 0.06), rgba(243, 245, 244, 0.04));
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -222,15 +222,15 @@
 }
 
 
-/* Blue navigation, clear service-photo carousel controls, and reduced-motion support. */
+/* Reference-aligned white navigation, vivid service photography, and responsive carousel controls. */
 .fieldly-site-header {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 .fieldly-site-header select:focus-visible,
 .fieldly-site-header a:focus-visible,
 .fieldly-site-header button:focus-visible {
-  outline: 3px solid rgba(255, 255, 255, 0.88);
+  outline: 3px solid rgba(0, 150, 83, 0.75);
   outline-offset: 3px;
 }
 .fieldly-hero-controls {
@@ -262,5 +262,27 @@
   .fieldly-category-card,
   .fieldly-category-card img {
     transition-duration: 0.01ms;
+  }
+}
+
+
+/* Keep the equipment readable while retaining the soft sky-blue reference treatment. */
+.fieldly-hero-slide {
+  object-position: center 46%;
+}
+.fieldly-hero-controls {
+  border-color: rgba(255, 255, 255, 0.9);
+}
+@media (max-width: 767px) {
+  .fieldly-hero-slide {
+    object-position: 62% center;
+  }
+  .fieldly-home-hero h1 {
+    max-width: 13ch;
+    font-size: clamp(1.8rem, 7.2vw, 2rem);
+    line-height: 1.08;
+  }
+  .fieldly-home-hero [data-testid="location-hero-card"] {
+    border-radius: 1.5rem;
   }
 }
