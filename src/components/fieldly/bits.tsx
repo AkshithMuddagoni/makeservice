@@ -89,6 +89,7 @@ function Field({
           <input
             inputMode="decimal"
             value={value}
+            aria-label={field.label}
             placeholder={"placeholder" in field ? field.placeholder : ""}
             onChange={(e) => onChange(e.target.value.replace(/[^\d.]/g, ""))}
             className="w-full bg-transparent outline-none"
