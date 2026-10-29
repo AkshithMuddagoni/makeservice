@@ -51,7 +51,7 @@ function ProviderPage() {
   const req = hasMatchingDraft ? draft!.requirements : {};
   const selectedImages = hasMatchingDraft ? draft!.siteImages ?? [] : [];
   const priced = service ? priceJob(service.id, provider, req) : null;
-  const eligible = service ? isEligible(provider, service.id) && provider.online : false;
+  const eligible = service ? isEligible(provider, service.id) && provider.online && km != null && km <= service.radiusKm : false;
   const known =
     bookings.some((b) => b.providerId === provider.id && b.customerPhone === (customer?.phone || session?.phone)) ||
     false;
