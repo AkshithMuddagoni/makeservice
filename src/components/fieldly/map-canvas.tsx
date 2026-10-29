@@ -15,12 +15,13 @@ type Props = {
   markers: MapMarker[]
   zoom?: number
   onPick?: (lat: number, lng: number) => void
+  showDistanceLines?: boolean
   className?: string
 };
 
 let workerReady = false;
 
-export function MapCanvas({ center, markers, zoom = 12, onPick, className }: Props) {
+export function MapCanvas({ center, markers, zoom = 12, onPick, showDistanceLines = false, className }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("maplibre-gl").Map | null>(null);
   const markersRef = useRef<import("maplibre-gl").Marker[]>([]);
@@ -93,6 +94,45 @@ export function MapCanvas({ center, markers, zoom = 12, onPick, className }: Pro
     const maplibregl = libRef.current;
     if (!map || !maplibregl || !ready) return;
     markersRef.current.forEach((m) => m.remove());
+    if (showDistanceLines) {
+      const sitePin = markers.find((marker) => marker.kind === "site");
+      const features = sitePin
+        ? markers
+            .filter((marker) => marker.kind === "provider")
+            .map((marker) => ({
+              type: "Feature" as const,
+              properties: { id: marker.id, label: marker.label },
+              geometry: {
+                type: "LineString" as const,
+                coordinates: [
+                  [sitePin.lng, sitePin.lat],
+                  [marker.lng, marker.lat],
+                ],
+              },
+            }))
+        : [];
+      const distanceGeoJson = { type: "FeatureCollection" as const, features };
+      const distanceSource = map.getSource("fieldly-distance-lines");
+      if (!distanceSource) {
+        map.addSource("fieldly-distance-lines", {
+          type: "geojson",
+          data: distanceGeoJson,
+        });
+        map.addLayer({
+          id: "fieldly-distance-lines-layer",
+          type: "line",
+          source: "fieldly-distance-lines",
+          paint: {
+            "line-color": "#1683e8",
+            "line-width": 2,
+            "line-opacity": 0.8,
+            "line-dasharray": [2, 2],
+          },
+        });
+      } else if ("setData" in distanceSource && typeof distanceSource.setData === "function") {
+        distanceSource.setData(distanceGeoJson);
+      }
+    }
     markersRef.current = markers.map((mk) => {
       const el = document.createElement("div");
       el.className = `pin ${mk.kind === "site" ? "pin-site" : ""} ${mk.kind === "vehicle" ? "pin-vehicle" : ""}`;
