@@ -310,7 +310,7 @@ function QuoteCard({
         <input
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Included work, exclusions, fees, rescheduling"
+          placeholder="Included work, exclusions, fees, cancellation terms"
           aria-label="Quote details and terms"
           required
           minLength={8}
