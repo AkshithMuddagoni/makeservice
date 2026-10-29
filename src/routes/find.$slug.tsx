@@ -166,6 +166,9 @@ function FindPage() {
         </div>
         <div className="h-64 px-4 lg:hidden">
           <MapCanvas center={site} markers={markers} />
+          <p className="mt-2 text-xs leading-5 text-muted">
+            Pins show listed provider locations. Distances are approximate straight-line distances; vehicle GPS is not connected in this preview.
+          </p>
         </div>
         <div className="grid gap-2 px-4 py-4">
           {visible.map((row) => (
@@ -224,6 +227,9 @@ function FindPage() {
       </div>
       <div className="sticky top-16 hidden h-screen p-4 lg:block">
         <MapCanvas center={site} markers={markers} className="h-full min-h-0" />
+        <p className="mt-2 text-xs leading-5 text-muted">
+          Pins show listed provider locations, not live vehicle positions. Use the provider's profile to compare verification, equipment, ratings and terms.
+        </p>
       </div>
     </div>
   );
