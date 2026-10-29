@@ -31,6 +31,7 @@ export type FieldDef =
       options: string[]
       required?: boolean
       hint?: string
+      showWhen?: { key: string; values: string[] }
     }
   | {
       key: string
@@ -40,6 +41,7 @@ export type FieldDef =
       required?: boolean
       placeholder?: string
       hint?: string
+      showWhen?: { key: string; values: string[] }
     }
   | {
       key: string
@@ -48,6 +50,7 @@ export type FieldDef =
       required?: boolean
       placeholder?: string
       hint?: string
+      showWhen?: { key: string; values: string[] }
     };
 
 export type ServiceIconName =
