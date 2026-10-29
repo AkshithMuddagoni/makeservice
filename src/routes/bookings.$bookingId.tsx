@@ -178,6 +178,20 @@ function BookingPage() {
           <section className="rounded-3xl border border-line bg-card p-5">
             <h2 className="font-display text-2xl font-bold">{inr(booking.amount)}</h2>
             <p className="text-sm text-muted">{booking.summary}</p>
+            {booking.quoteEtaMin != null && (
+              <p className="mt-1 text-sm text-muted">Provider arrival estimate at quote time: about {booking.quoteEtaMin} minutes. This is an estimate, not live tracking.</p>
+            )}
+            {booking.quoteIncludes?.length ? (
+              <div className="mt-3">
+                <p className="text-sm font-semibold">Included in the accepted offer</p>
+                <ul className="mt-1 grid gap-1 text-sm text-muted">
+                  {booking.quoteIncludes.map((item) => <li key={item}>• {item}</li>)}
+                </ul>
+              </div>
+            ) : null}
+            {booking.quoteNote && (
+              <p className="mt-2 rounded-xl bg-paper p-3 text-sm leading-5">Provider note: {booking.quoteNote}</p>
+            )}
             {booking.status !== "CANCELLED" && booking.status !== "DISPUTED" && provider && (
               <a
                 href={`tel:${provider.phone}`}
