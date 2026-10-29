@@ -3,6 +3,7 @@ import { BadgeCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ChatBox, Stars, requirementLines } from "@/components/fieldly/bits";
+import { MapCanvas } from "@/components/fieldly/map-canvas";
 import { Button } from "@/components/ui/button";
 import { getService } from "@/lib/fieldly/catalog";
 import { inr, timeAgo } from "@/lib/fieldly/format";
@@ -100,6 +101,23 @@ function RequestPage() {
           </div>
         ) : null}
       </section>
+      {selectedProvider && (
+        <section className="mt-4">
+          <div className="mb-2 font-display text-lg font-bold">Work site and selected provider</div>
+          <div className="h-64">
+            <MapCanvas
+              center={request.site}
+              markers={[
+                { id: "site", lat: request.site.lat, lng: request.site.lng, label: "Your work site", kind: "site" },
+                { id: selectedProvider.id, lat: selectedProvider.lat, lng: selectedProvider.lng, label: `${selectedProvider.name} · ${formatKm(kmBetween(request.site, selectedProvider))}`, kind: "vehicle" },
+              ]}
+            />
+          </div>
+          <p className="mt-2 text-xs leading-5 text-muted">
+            Provider pin represents the listed base location, not a live vehicle. Live tracking becomes available only when a provider explicitly shares GPS during an accepted booking and the production backend supports it.
+          </p>
+        </section>
+      )}
       <ul className="mt-3 flex flex-wrap gap-2 text-sm">
         {requirementLines(request.serviceId, request.requirements).map((row) => (
           <li key={row.label} className="rounded-full bg-card px-3 py-1">
