@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { MapCanvas } from "@/components/fieldly/map-canvas";
 import { Stars } from "@/components/fieldly/bits";
+import { CustomerSignInDialog } from "@/components/fieldly/customer-sign-in-dialog";
 import { Button } from "@/components/ui/button";
 import { getService, isEligible } from "@/lib/fieldly/catalog";
 import { formatKm, kmBetween, travelMinutes } from "@/lib/fieldly/geo";
@@ -32,6 +33,7 @@ function FindPage() {
   const [sort, setSort] = useState<SortKey>("recommended");
   const [verifiedOnly, setVerifiedOnly] = useState(true);
   const [q, setQ] = useState("");
+  const [signInOpen, setSignInOpen] = useState(true);
   const req = draft?.serviceId === slug ? draft.requirements : {};
 
   const rows = useMemo(() => {
@@ -70,6 +72,26 @@ function FindPage() {
           Choose a pin
         </Link>
       </div>
+    );
+  }
+
+  if (!session || session.role !== "customer") {
+    return (
+      <main className="mx-auto min-h-[60vh] max-w-2xl px-4 py-10">
+        <section className="rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-8">
+          <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-field">Site and service ready</p>
+          <h1 className="mt-2 font-display text-3xl font-extrabold">Sign in to continue.</h1>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            Sign in to review local options and request quotes for {service.name}.
+          </p>
+          <Button className="mt-5" onClick={() => setSignInOpen(true)}>Sign in and continue</Button>
+        </section>
+        <CustomerSignInDialog
+          open={signInOpen}
+          onClose={() => setSignInOpen(false)}
+          onSuccess={() => setSignInOpen(false)}
+        />
+      </main>
     );
   }
 
