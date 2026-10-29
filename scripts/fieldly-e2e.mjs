@@ -411,9 +411,9 @@ async function testMobileCustomerJourney() {
     await page.getByRole("link", { name: /Borewell drilling/ }).first().click();
     await page.getByRole("heading", { name: "Borewell drilling", exact: true }).waitFor();
 
-    const purposeOption = page.locator("button").filter({ hasText: /^Home$/ }).first();
-    await purposeOption.waitFor({ state: "visible" });
-    await purposeOption.click();
+    await page.locator("button").filter({ hasText: /^Drilling a new borewell$/ }).click();
+    await page.locator("button").filter({ hasText: /^Home$/ }).first().click();
+    await page.locator("button").filter({ hasText: /^Approvals confirmed$/ }).click();
     await page.locator("button").filter({ hasText: /^Easy access$/ }).click();
     await page.locator("button").filter({ hasText: /^Today$/ }).click();
     await page.getByLabel(/Anything the operator should know/).fill("Mockup smoke test work site");
@@ -427,15 +427,33 @@ async function testMobileCustomerJourney() {
     assert.equal(await page.getByRole("link", { name: /Sri Sai Borewell Works/ }).count(), 1);
     await page.getByPlaceholder("Filter by name").fill("");
 
-    await page.getByRole("button", { name: "Request quotes", exact: true }).click();
-    await page.getByRole("heading", { name: "Borewell drilling", exact: true }).waitFor();
-    await page.getByRole("button", { name: "Accept quote", exact: true }).waitFor();
-    await page.getByRole("button", { name: "Accept quote", exact: true }).click();
+    await page.getByRole("link", { name: /Sri Sai Borewell Works/ }).first().click();
+    await page.getByRole("heading", { name: "Sri Sai Borewell Works", exact: true }).waitFor();
+    const detailsConsent = page.getByRole("checkbox");
+    await detailsConsent.check();
+    await page.getByRole("button", { name: "Send request to this provider", exact: true }).click();
+    const requestUrl = page.url();
+    await page.getByText(/Waiting for the provider to accept with a quote or decline/).waitFor();
+    assert.equal(await page.getByRole("button", { name: /Accept quote/ }).count(), 0,
+      "A customer must not see a quote before the provider responds");
+
+    await page.goto(new URL("/desk", page.url()).href);
+    await page.getByPlaceholder("482609").fill("482609");
+    await page.getByRole("button", { name: "Open desk", exact: true }).click();
+    await page.getByRole("button", { name: "Accept request & send quote", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Accept request & send quote", exact: true }).click();
+
+    await page.goto(new URL("/account", page.url()).href);
+    await page.getByRole("button", { name: "Back to customer", exact: true }).click();
+    await page.goto(requestUrl);
+    await page.getByRole("button", { name: "Accept quote & confirm booking", exact: true }).waitFor();
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: "Accept quote & confirm booking", exact: true }).click();
     await page.getByText("FLD-1041", { exact: true }).waitFor();
     await page.getByRole("heading", { name: "Confirmed", exact: true }).waitFor();
     await assertNoHorizontalOverflow(page, "mobile booking confirmation");
     assert.deepEqual(pageErrors, [], "mobile journey should have no uncaught page errors");
-    log("mobile: location → service form → provider discovery → login → quote acceptance → booking passed");
+    log("mobile: location → service details → provider choice → details consent → provider quote/decline → quote consent → booking passed");
   } finally {
     await context.close();
   }
