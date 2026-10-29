@@ -82,7 +82,11 @@ async function mockExternalServices(page) {
     });
   });
   await page.route("https://tiles.openfreemap.org/**", (route) => route.abort());
-  await page.route("https://images.pexels.com/**", (route) => route.abort());
+  await page.route("https://images.pexels.com/**", (route) => route.fulfill({
+    status: 200,
+    contentType: "image/png",
+    body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/XeoAAAAASUVORK5CYII=", "base64"),
+  }));
   await page.route("https://fonts.googleapis.com/**", (route) => route.abort());
   await page.route("https://fonts.gstatic.com/**", (route) => route.abort());
 }
@@ -197,22 +201,67 @@ async function assertHeaderLayout(page, width) {
   await mobileNav.waitFor({ state: "hidden" });
 }
 
-async function assertHeroBackgroundChoices(page, width) {
+async function assertHeroCarouselLayout(page, width) {
   const hero = page.locator('[data-testid="hero-section"]');
-  const choices = [
-    ["farming", "Use farming background"],
-    ["cranes", "Use cranes background"],
-    ["water", "Use water background"],
-    ["construction", "Use construction background"],
-  ];
+  const slides = hero.getByTestId("hero-background-slide");
+  assert.equal(
+    await slides.count(),
+    6,
+    "Hero should contain all six service-image slides at " + width + "px",
+  );
+  assert.equal(
+    await page.getByText("Choose a scene", { exact: true }).count(),
+    0,
+    "Manual scene chooser should be removed",
+  );
+  assert.equal(
+    await hero.getAttribute("data-background"),
+    "borewell",
+    "Hero should begin with the first equipment photo at " + width + "px",
+  );
+  const card = page.getByTestId("location-hero-card");
+  const alignment = await page.evaluate(() => {
+    const hero = document.querySelector('[data-testid="hero-section"]');
+    const card = document.querySelector('[data-testid="location-hero-card"]');
+    if (!hero || !card) return null;
+    const heroRect = hero.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    return {
+      heroCenter: heroRect.left + heroRect.width / 2,
+      cardCenter: cardRect.left + cardRect.width / 2,
+      cardWidth: cardRect.width,
+      heroWidth: heroRect.width,
+    };
+  });
+  assert.ok(alignment, "Hero and location card should exist at " + width + "px");
+  assert.ok(
+    Math.abs(alignment.cardCenter - alignment.heroCenter) <= 2,
+    "Location card should be centered in the hero at " + width + "px",
+  );
+  assert.ok(alignment.cardWidth <= alignment.heroWidth, "Location card should fit in the hero at " + width + "px");
+}
 
-  for (const [id, accessibleName] of choices) {
-    await page.getByRole("button", { name: accessibleName }).click();
-    assert.equal(
-      await hero.getAttribute("data-background"),
-      id,
-      "Hero background selection should change to " + id + " at " + width + "px",
+async function testHeroAutoCarousel() {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage();
+  await mockExternalServices(page);
+  try {
+    await page.goto(BASE_URL + "/", { waitUntil: "networkidle" });
+    const hero = page.locator('[data-testid="hero-section"]');
+    await page.getByRole("heading", { name: /Construction & Field Equipment Services/i }).waitFor();
+    assert.equal(await hero.getAttribute("data-background"), "borewell");
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="hero-section"]')?.getAttribute("data-background") === "jcb",
+      null,
+      { timeout: 10_000 },
     );
+    assert.equal(
+      await hero.locator('[data-testid="hero-background-slide"].opacity-100').count(),
+      1,
+      "Exactly one hero image should be in its active/fading-in state",
+    );
+  } finally {
+    await context.close();
   }
 }
 
@@ -233,7 +282,7 @@ async function testResponsiveViewportMatrix() {
       await assertNoHorizontalOverflow(page, "landing at " + width + "px");
       await assertHomepageSectionLayout(page, width);
       await assertHeaderLayout(page, width);
-      await assertHeroBackgroundChoices(page, width);
+      await assertHeroCarouselLayout(page, width);
       await assertNoHorizontalOverflow(page, "landing after background selection at " + width + "px");
       const locationButton = page.getByRole("button", { name: /Enter location/ });
       await locationButton.click();
