@@ -30,39 +30,6 @@ type LocationMethod = "manual" | "map" | "gps";
 const HERO_IMAGE =
   "https://images.pexels.com/photos/35565815/pexels-photo-35565815.jpeg?auto=compress&cs=tinysrgb&w=2000";
 
-const HERO_BACKGROUNDS = [
-  {
-    id: "borewell",
-    label: "Borewell",
-    image: "https://images.pexels.com/photos/7910062/pexels-photo-7910062.jpeg?auto=compress&cs=tinysrgb&w=2000",
-  },
-  {
-    id: "jcb",
-    label: "JCB & excavators",
-    image: "https://images.pexels.com/photos/35565815/pexels-photo-35565815.jpeg?auto=compress&cs=tinysrgb&w=2000",
-  },
-  {
-    id: "crane",
-    label: "Cranes",
-    image: "https://images.pexels.com/photos/29502220/pexels-photo-29502220.jpeg?auto=compress&cs=tinysrgb&w=2000",
-  },
-  {
-    id: "tractor",
-    label: "Tractors",
-    image: "https://images.pexels.com/photos/12875208/pexels-photo-12875208.jpeg?auto=compress&cs=tinysrgb&w=2000",
-  },
-  {
-    id: "tanker",
-    label: "Water tankers",
-    image: "https://images.pexels.com/photos/17168925/pexels-photo-17168925.jpeg?auto=compress&cs=tinysrgb&w=2000",
-  },
-  {
-    id: "other",
-    label: "Other services",
-    image: "https://images.pexels.com/photos/14475776/pexels-photo-14475776.jpeg?auto=compress&cs=tinysrgb&w=2000",
-  },
-] as const;
-
 const SERVICE_PHOTOS: Record<string, { src: string; alt: string; title: string }> = {
   borewell: {
     src: "https://images.pexels.com/photos/7910062/pexels-photo-7910062.jpeg?auto=compress&cs=tinysrgb&w=900",
@@ -102,6 +69,16 @@ const SERVICE_PHOTOS: Record<string, { src: string; alt: string; title: string }
 };
 
 const POPULAR_SERVICE_IDS = ["borewell", "jcb", "crane", "tractor", "tanker", "other"];
+
+const HERO_BACKGROUNDS = POPULAR_SERVICE_IDS.map((id) => {
+  const photo = SERVICE_PHOTOS[id] ?? SERVICE_PHOTOS.jcb;
+  return {
+    id,
+    label: photo.title,
+    // Use the same underlying photograph as the Popular Services card, served at hero resolution.
+    image: photo.src.replace("w=900", "w=2000"),
+  };
+});
 
 function Home() {
   const site = useFieldly((s) => s.site);
@@ -162,7 +139,8 @@ function Home() {
               data-slide={scene.id}
               src={scene.image}
               alt=""
-              loading={index === 0 ? "eager" : "lazy"}
+              loading={index < 2 ? "eager" : "lazy"}
+              fetchPriority={index === heroSlideIndex ? "high" : "auto"}
               decoding="async"
               onError={(event) => {
                 event.currentTarget.style.display = "none";
@@ -229,6 +207,33 @@ function Home() {
 
           </div>
 
+        </div>
+        <div
+          aria-label="Hero image selection"
+          className="fieldly-hero-controls absolute bottom-4 right-4 z-10 hidden items-center gap-3 rounded-full border border-white/75 bg-white/85 px-3 py-2 shadow-lg backdrop-blur-md sm:flex"
+        >
+          <span className="max-w-32 truncate text-xs font-extrabold text-ink">{heroBackground.label}</span>
+          <div className="flex items-center gap-1">
+            {HERO_BACKGROUNDS.map((scene, index) => (
+              <button
+                key={scene.id}
+                type="button"
+                aria-label={`Show ${scene.label} background`}
+                aria-pressed={index === heroSlideIndex}
+                onClick={() => setHeroSlideIndex(index)}
+                className="grid size-5 place-items-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-field"
+              >
+                <span
+                  className={
+                    "rounded-full transition-all " +
+                    (index === heroSlideIndex
+                      ? "h-2 w-4 bg-field"
+                      : "size-2 bg-ink/30 hover:bg-ink/60")
+                  }
+                />
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
