@@ -64,17 +64,19 @@ function DeskPage() {
             </button>
           ))}
         </div>
-        <form onSubmit={enter} className="mt-4 grid gap-3 rounded-3xl border border-line bg-card p-5">
+        <form onSubmit={enter} data-testid="operator-login-form" data-hydrated={hydrated ? "true" : "false"} className="mt-4 grid gap-3 rounded-3xl border border-line bg-card p-5">
           <input
             value={phone}
+            disabled={!hydrated}
             onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-            className="h-12 rounded-xl border border-line px-3 text-base outline-none"
+            className="h-12 rounded-xl border border-line px-3 text-base outline-none disabled:opacity-60"
           />
           <input
             value={code}
+            disabled={!hydrated}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
             placeholder="482609"
-            className="h-12 rounded-xl border border-line px-3 text-center font-display text-2xl tracking-widest outline-none"
+            className="h-12 rounded-xl border border-line px-3 text-center font-display text-2xl tracking-widest outline-none disabled:opacity-60"
           />
           <Button type="submit" size="lg" disabled={!hydrated}>
             Open desk
