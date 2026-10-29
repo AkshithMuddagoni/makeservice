@@ -438,14 +438,11 @@ async function testMobileCustomerJourney() {
       "A customer must not see a quote before the provider responds");
 
     await page.goto(new URL("/desk", page.url()).href);
-    await page.getByRole("button", { name: /Sri Sai Borewell Works/ }).first().click();
+    await page.locator("form input").first().fill("9000000001");
     await page.getByPlaceholder("482609").fill("482609");
     await page.getByRole("button", { name: "Open desk", exact: true }).click();
-    await page.waitForTimeout(500);
+    await page.getByRole("heading", { name: "Sri Sai Borewell Works", exact: true }).waitFor();
     const providerDeskText = await page.locator("body").innerText();
-    log("operator desk after login: " + providerDeskText.replace(/\\s+/g, " ").slice(-1000));
-    assert.ok(providerDeskText.includes("Sri Sai Borewell Works"),
-      "the provider login should open the selected operator dashboard");
     assert.ok(providerDeskText.includes("Mockup smoke test work site"),
       "the selected provider must see the customer request in the operator desk");
     await page.getByRole("button", { name: "Accept request & send quote", exact: true }).waitFor();
