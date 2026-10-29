@@ -161,7 +161,7 @@ function RequestPage() {
                   <Button
                     disabled={!quoteConsent[quote.id]}
                     onClick={() => {
-                      const result = acceptQuote(quote.id);
+                      const result = acceptQuote(quote.id, Boolean(quoteConsent[quote.id]));
                       if (!result.ok || !result.id) {
                         toast.error(!result.ok ? result.error : "Could not book.");
                         return;
@@ -216,8 +216,8 @@ function RequestPage() {
           Cancel request
         </Button>
       )}
-      {pending.length === 0 && request.status === "open" && (
-        <p className="mt-3 text-sm text-muted">Every quote was declined. Cancel and try another site or service.</p>
+      {quotes.length > 0 && pending.length === 0 && request.status === "open" && !providerDeclined && (
+        <p className="mt-3 text-sm text-muted">This quote is no longer available. Choose another provider or cancel this request.</p>
       )}
 
       <h2 className="mt-8 font-display text-xl font-bold">Job chat</h2>
