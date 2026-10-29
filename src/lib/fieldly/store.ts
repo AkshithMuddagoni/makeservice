@@ -560,7 +560,7 @@ export const useFieldly = create<State>()(
       },
       review: (bookingId, stars, text) => {
         const booking = get().bookings.find((b) => b.id === bookingId);
-        if (!booking || booking.status !== "PAID") return { ok: false, error: "Rate the job after payment." };
+        if (!booking || (booking.status !== "SERVICE_COMPLETED" && booking.status !== "PAID")) return { ok: false, error: "Rate the job after it is marked completed." };
         const session = get().session;
         if (session?.role !== "customer" || session.phone !== booking.customerPhone) {
           return { ok: false, error: "Only the customer on this booking can leave a review." };
