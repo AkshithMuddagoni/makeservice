@@ -1,5 +1,5 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, BadgeCheck, MapPin, MessageCircle } from "lucide-react";
+import { ArrowLeft, BadgeCheck, MapPin, MessageCircle, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Stars, requirementLines } from "@/components/fieldly/bits";
@@ -31,6 +31,7 @@ function ProviderPage() {
   const createRequest = useFieldly((s) => s.createRequest);
   const resumeCustomer = useFieldly((s) => s.resumeCustomer);
   const [picked, setPicked] = useState(serviceQuery || provider?.services[0] || "");
+  const [detailsConfirmed, setDetailsConfirmed] = useState(false);
 
   if (!provider) {
     return (
@@ -46,7 +47,9 @@ function ProviderPage() {
   const serviceId = provider.services.includes(picked) ? picked : provider.services[0];
   const service = getService(serviceId);
   const km = site ? kmBetween(site, provider) : null;
-  const req = draft?.serviceId === serviceId ? draft.requirements : {};
+  const hasMatchingDraft = Boolean(draft && draft.serviceId === serviceId);
+  const req = hasMatchingDraft ? draft!.requirements : {};
+  const selectedImages = hasMatchingDraft ? draft!.siteImages ?? [] : [];
   const priced = service ? priceJob(service.id, provider, req) : null;
   const eligible = service ? isEligible(provider, service.id) && provider.online : false;
   const known =
@@ -63,6 +66,14 @@ function ProviderPage() {
     }));
 
   async function request() {
+    if (!hasMatchingDraft) {
+      void navigate({ to: "/services/$slug", params: { slug: serviceId } });
+      return;
+    }
+    if (!detailsConfirmed) {
+      toast.error("Review the requirements and confirm before sending your request.");
+      return;
+    }
     if (!session || session.role !== "customer") {
       if (customer && resumeCustomer()) {
         /* switched back to the customer who will own the request */
@@ -71,10 +82,6 @@ function ProviderPage() {
         void navigate({ to: "/account" });
         return;
       }
-    }
-    if (!draft || draft.serviceId !== serviceId) {
-      void navigate({ to: "/services/$slug", params: { slug: serviceId } });
-      return;
     }
     const result = createRequest({ serviceId, providerId: provider!.id });
     if (!result.ok) {
@@ -194,22 +201,40 @@ function ProviderPage() {
           </div>
           {priced && (
             <>
-              <div className="mt-4 font-display text-4xl font-bold">{inr(priced.amount)}</div>
+              <div className="mt-4 font-display text-3xl font-bold">
+                {priced.amount > 0 ? inr(priced.amount) : "Quote after inspection"}
+              </div>
               <p className="text-sm text-muted">{priced.summary}</p>
               <ul className="mt-3 grid gap-1 text-sm">
                 {priced.includes.map((item) => (
                   <li key={item}>· {item}</li>
                 ))}
               </ul>
-              {draft?.serviceId === serviceId && (
-                <ul className="mt-3 grid gap-1 text-sm text-muted">
-                  {requirementLines(serviceId, draft.requirements).map((row) => (
-                    <li key={row.label}>
-                      {row.label}: {row.value}
-                    </li>
-                  ))}
-                  <li>When: {draft.whenLabel}</li>
-                </ul>
+              {hasMatchingDraft && draft && (
+                <section className="mt-4 rounded-2xl border border-line bg-white p-4">
+                  <h3 className="font-display text-lg font-bold">Review your service request</h3>
+                  <p className="mt-1 text-xs text-muted">
+                    {service?.name} · {draft.whenLabel} · {site?.address || site?.label}
+                  </p>
+                  <ul className="mt-3 grid gap-2 text-sm">
+                    {requirementLines(serviceId, draft.requirements).map((row) => (
+                      <li key={row.label} className="flex flex-wrap justify-between gap-x-3 gap-y-1 border-b border-line/70 pb-2">
+                        <span className="text-muted">{row.label}</span>
+                        <span className="text-right font-semibold">{row.value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {draft.notes && (
+                    <p className="mt-3 text-sm"><span className="font-semibold">Operator note:</span> {draft.notes}</p>
+                  )}
+                  {selectedImages.length > 0 && (
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {selectedImages.map((image, index) => (
+                        <img key={image.slice(-36)} src={image} alt={`Site photo ${index + 1}`} className="h-20 w-full rounded-lg border border-line object-cover" />
+                      ))}
+                    </div>
+                  )}
+                </section>
               )}
               <p className="mt-3 text-xs text-muted">{priced.note}</p>
             </>
@@ -220,12 +245,31 @@ function ProviderPage() {
               {serviceId === "borewell" ? " and a WALTA rig number" : ""} are on file.
             </p>
           )}
-          <Button className="mt-4 w-full" size="lg" disabled={!eligible} onClick={() => void request()}>
-            {draft?.serviceId === serviceId ? "Request quotes" : "Add job details"}
+          {hasMatchingDraft && (
+            <label className="mt-4 flex items-start gap-3 rounded-2xl border border-line bg-white p-3 text-sm leading-5">
+              <input
+                type="checkbox"
+                checked={detailsConfirmed}
+                onChange={(event) => setDetailsConfirmed(event.target.checked)}
+                className="mt-1 size-4 shrink-0 accent-emerald-600"
+              />
+              <span>
+                I have reviewed the selected service, work-site location, requirements, date, notes and optional photos. I agree to share these details with <strong>{provider.name}</strong> for this request. I understand that the price and schedule are not final until I review the provider's quote, and I will confirm any permits or safety requirements that apply.
+              </span>
+            </label>
+          )}
+          {serviceId === "borewell" && (
+            <p className="mt-3 flex items-start gap-2 rounded-xl bg-sky-50 p-3 text-xs leading-5 text-sky-950">
+              <ShieldCheck className="mt-0.5 size-4 shrink-0" />
+              Borewell drilling must follow applicable local permissions and groundwater rules. A provider profile or rig verification is not official permission to drill.
+            </p>
+          )}
+          <Button className="mt-4 w-full" size="lg" disabled={!eligible || (hasMatchingDraft && !detailsConfirmed)} onClick={() => void request()}>
+            {hasMatchingDraft ? "Send request to this provider" : "Add job details"}
           </Button>
           <p className="mt-2 flex items-center justify-center gap-1 text-center text-xs text-muted">
             <MessageCircle className="size-3.5" />
-            Up to three eligible operators can quote. You compare before accepting.
+            This request goes only to this provider. Chat and contact options unlock after the provider responds.
           </p>
         </aside>
       </div>
