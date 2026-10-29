@@ -1,6 +1,6 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, ImagePlus, X } from "lucide-react";
+import { useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
 import { FieldList, missingFields, controlClass } from "@/components/fieldly/bits";
 import { CustomerSignInDialog } from "@/components/fieldly/customer-sign-in-dialog";
@@ -12,6 +12,38 @@ import { useFieldly } from "@/lib/fieldly/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/services/$slug")({ component: ServiceForm });
+
+function localDateValue(date = new Date()) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+async function compressSiteImage(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1400 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) {
+    bitmap.close();
+    throw new Error("This browser could not prepare the image.");
+  }
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => {
+      if (result) resolve(result);
+      else reject(new Error("Could not compress this image."));
+    }, "image/jpeg", 0.76);
+  });
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Could not read this image."));
+    reader.readAsDataURL(blob);
+  });
+}
 
 function ServiceForm() {
   const { slug } = Route.useParams();
@@ -34,6 +66,38 @@ function ServiceForm() {
     initial && !WHEN_OPTIONS.includes(initial.whenLabel as (typeof WHEN_OPTIONS)[number]) ? initial.whenLabel : "",
   );
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [siteImages, setSiteImages] = useState<string[]>(initial?.siteImages ?? []);
+  const [imagesBusy, setImagesBusy] = useState(false);
+  const today = localDateValue();
+
+  async function handleImagesChange(event: ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!selected.length) return;
+    const remaining = 3 - siteImages.length;
+    if (remaining <= 0) {
+      toast.error("You can attach up to 3 site photos.");
+      return;
+    }
+    if (selected.some((file) => !file.type.startsWith("image/"))) {
+      toast.error("Choose image files only.");
+      return;
+    }
+    if (selected.some((file) => file.size > 10 * 1024 * 1024)) {
+      toast.error("Each photo must be 10 MB or smaller.");
+      return;
+    }
+    setImagesBusy(true);
+    try {
+      const compressed = await Promise.all(selected.slice(0, remaining).map(compressSiteImage));
+      setSiteImages((current) => [...current, ...compressed].slice(0, 3));
+      if (selected.length > remaining) toast.message("Only 3 site photos can be attached.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not add the selected photos.");
+    } finally {
+      setImagesBusy(false);
+    }
+  }
 
   if (!service) {
     return (
@@ -91,7 +155,7 @@ function ServiceForm() {
       toast.error(`Add ${missing[0]}.`);
       return;
     }
-    setDraft({ serviceId: service!.id, requirements, whenLabel, notes });
+    setDraft({ serviceId: service!.id, requirements, whenLabel, notes, siteImages });
     void navigate({ to: "/find/$slug", params: { slug: service!.id } });
   }
 
@@ -135,7 +199,14 @@ function ServiceForm() {
             ))}
           </span>
           {whenChoice === "Pick a date" && (
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={controlClass} />
+            <input
+              type="date"
+              min={today}
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className={controlClass}
+              aria-label="Choose service date"
+            />
           )}
         </div>
         <label className="mt-5 grid gap-2">
@@ -147,7 +218,50 @@ function ServiceForm() {
             className="min-h-24 w-full rounded-xl border border-line bg-paper p-3 text-base outline-none focus-visible:border-ink"
           />
         </label>
-        <Button className="mt-6 w-full" size="lg" onClick={submit}>
+        <section className="mt-5 grid gap-2">
+          <div>
+            <span className="text-sm font-semibold">Upload site photos</span>
+            <span className="ml-2 text-xs text-muted">(Optional · up to 3)</span>
+          </div>
+          <p className="text-xs leading-5 text-muted">
+            Photos help the operator understand access, the work area, and equipment clearance. Only share images relevant to this request.
+          </p>
+          <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-paper px-3 py-3 text-sm font-semibold hover:border-field">
+            <ImagePlus className="size-4 text-field" />
+            {imagesBusy ? "Preparing photos…" : "Choose site photos"}
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              disabled={imagesBusy || siteImages.length >= 3}
+              onChange={(event) => void handleImagesChange(event)}
+              className="sr-only"
+            />
+          </label>
+          {siteImages.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {siteImages.map((image, index) => (
+                <div key={image.slice(-36)} className="relative overflow-hidden rounded-xl border border-line bg-white">
+                  <img src={image} alt={`Site photo ${index + 1}`} className="h-24 w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setSiteImages((current) => current.filter((_, i) => i !== index))}
+                    aria-label={`Remove site photo ${index + 1}`}
+                    className="absolute right-1 top-1 grid size-7 place-items-center rounded-full bg-white/95 text-ink shadow"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+        {service.id === "borewell" && requirements.service_type && requirements.service_type !== "Drilling a new borewell" && (
+          <p className="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm leading-5 text-sky-950">
+            This service needs a provider-specific quote after the actual scope is confirmed. Drilling rates per foot will not be reused for cleaning, deepening, inspection, pump work, or recharge.
+          </p>
+        )}
+        <Button className="mt-6 w-full" size="lg" disabled={imagesBusy} onClick={submit}>
           {t(lang, "see_who")}
         </Button>
       </div>
