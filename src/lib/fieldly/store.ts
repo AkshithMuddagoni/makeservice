@@ -214,11 +214,14 @@ export const useFieldly = create<State>()(
         )) {
           return { ok: false, error: "No approved available machine is linked to this service." };
         }
-        set((s) => ({
-          extras: s.extras.map((p) => p.id === id
-            ? { ...p, serviceAvailability: { ...(p.serviceAvailability ?? {}), [serviceId]: available } }
-            : p),
-        }));
+        set((s) => {
+          const updated: Provider = {
+            ...provider,
+            online: Object.prototype.hasOwnProperty.call(s.availability, id) ? s.availability[id] : provider.online,
+            serviceAvailability: { ...(provider.serviceAvailability ?? {}), [serviceId]: available },
+          };
+          return { extras: [...s.extras.filter((p) => p.id !== id), updated] };
+        });
         return { ok: true };
       },
       setAssetAvailability: (id, assetId, available) => {
