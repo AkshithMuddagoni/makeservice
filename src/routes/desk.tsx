@@ -63,7 +63,7 @@ function DeskPage() {
 }
 
 function DeskHome({ providerId }: { providerId: string }) {
-  const provider = useProviders().find((p) => p.id === providerId);
+  const foundProvider = useProviders().find((p) => p.id === providerId);
   const requests = useFieldly((s) => s.requests);
   const quotes = useFieldly((s) => s.quotes);
   const bookings = useFieldly((s) => s.bookings);
@@ -78,18 +78,19 @@ function DeskHome({ providerId }: { providerId: string }) {
   const online = isOnline(providerId);
 
   const openRequests = useMemo(() => {
-    if (!provider) return [];
+    if (!foundProvider) return [];
     return requests
-      .filter((r) => r.status === "open" && r.targetedProviderIds.includes(provider.id) && !(r.declinedProviderIds ?? []).includes(provider.id) && provider.services.includes(r.serviceId))
-      .map((request) => ({ request, km: kmBetween(provider, request.site) }))
+      .filter((r) => r.status === "open" && r.targetedProviderIds.includes(foundProvider.id) && !(r.declinedProviderIds ?? []).includes(foundProvider.id) && foundProvider.services.includes(r.serviceId))
+      .map((request) => ({ request, km: kmBetween(foundProvider, request.site) }))
       .filter(({ request, km }) => {
         const service = getService(request.serviceId);
         return service ? km <= service.radiusKm + 10 : false;
       })
       .sort((a, b) => a.km - b.km);
-  }, [requests, provider]);
+  }, [requests, foundProvider]);
 
-  if (!provider) return <p className="px-4 py-10">Provider account not found.</p>;
+  if (!foundProvider) return <p className="px-4 py-10">Provider account not found.</p>;
+  const provider: Provider = foundProvider;
 
   const mine = bookings.filter((b) => b.providerId === providerId);
   const activeJobs = mine.filter((b) => ACTIVE.includes(b.status));
