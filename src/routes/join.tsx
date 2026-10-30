@@ -99,7 +99,6 @@ function JoinPage() {
   const [serviceTasks, setServiceTasks] = useState<Record<string, string[]>>({
     [initialService]: [SERVICE_ONBOARDING[initialService].tasks[0]],
   });
-  const [serviceSpecs, setServiceSpecs] = useState<Record<string, Record<string, string>>>({});
   const [assets, setAssets] = useState<AssetDraft[]>([emptyAsset()]);
   const [assetDraft, setAssetDraft] = useState<AssetDraft>(emptyAsset());
   const [selectedDocumentKeys, setSelectedDocumentKeys] = useState<string[]>([]);
@@ -183,13 +182,6 @@ function JoinPage() {
         assetType: availableTypes.includes(current.assetType) ? current.assetType : availableTypes[0] ?? current.assetType,
       };
     });
-  }
-
-  function updateServiceSpec(serviceId: string, field: string, value: string) {
-    setServiceSpecs((current) => ({
-      ...current,
-      [serviceId]: { ...(current[serviceId] ?? {}), [field]: value },
-    }));
   }
 
   function toggleAssetService(serviceId: string, checked: boolean) {
@@ -325,7 +317,7 @@ function JoinPage() {
     const registrations: ProviderServiceRegistration[] = selectedServices.map((serviceId) => ({
       serviceId,
       selectedTasks: serviceTasks[serviceId] ?? [],
-      specifications: serviceSpecs[serviceId] ?? {},
+      specifications: {},
       status: "SUBMITTED",
       selectedDocumentKeys: selectedDocumentKeys,
       submittedAt: now,
