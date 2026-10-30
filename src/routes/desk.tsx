@@ -165,6 +165,25 @@ function DeskHome({ providerId }: { providerId: string }) {
         <Metric icon={CheckCircle2} label="Completed jobs" value={String(mine.filter((b) => b.status === "SERVICE_COMPLETED" || b.status === "PAID").length)} note="Marked complete or paid" />
         <Metric icon={Banknote} label="Customer-marked paid" value={inr(customerPaid)} note="Preview record · not a payout" />
       </section>
+      <section className="mt-3 grid gap-3 rounded-2xl border border-line bg-card p-4 sm:grid-cols-[auto_1fr] sm:items-center">
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl bg-gold-soft p-3 text-gold"><span className="font-display text-2xl font-bold">{provider.reviewCount > 0 ? provider.rating.toFixed(1) : "—"}</span></div>
+          <div>
+            <p className="font-semibold">Customer rating</p>
+            <p className="text-xs text-muted">{provider.reviewCount} verified booking review(s)</p>
+          </div>
+        </div>
+        <div className="min-w-0">
+          {provider.reviews.length ? (
+            <>
+              <p className="text-xs font-semibold text-muted">Latest feedback · {provider.reviews[0].stars}/5</p>
+              <p className="mt-1 text-sm leading-5">{provider.reviews[0].text}</p>
+            </>
+          ) : (
+            <p className="text-sm text-muted">Complete jobs and ask customers for honest feedback. Your rating will appear here after the first review.</p>
+          )}
+        </div>
+      </section>
 
       <nav className="-mx-1 mt-5 flex gap-1 overflow-x-auto px-1 pb-2" aria-label="Provider sections">
         {tabs.map(({ id, name, icon: Icon }) => (
