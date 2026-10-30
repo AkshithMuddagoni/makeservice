@@ -757,10 +757,30 @@ export const useFieldly = create<State>()(
         }
         if (booking.review) return { ok: false, error: "This booking already has a review." };
         if (stars < 1 || stars > 5) return { ok: false, error: "Pick 1 to 5 stars." };
+        const provider = get().providerById(booking.providerId);
+        if (!provider) return { ok: false, error: "The assigned provider profile is unavailable." };
+        const now = Date.now();
+        const nextCount = provider.reviewCount + 1;
+        const nextRating = Number((((provider.rating * provider.reviewCount) + stars) / nextCount).toFixed(1));
+        const nextReview = {
+          name: booking.customerName,
+          stars,
+          text: text.trim() || "Rated without a comment.",
+          ago: "Just now",
+        };
         set((s) => ({
           bookings: s.bookings.map((b) =>
-            b.id === bookingId ? { ...b, review: { stars, text: text.trim(), at: Date.now() } } : b,
+            b.id === bookingId ? { ...b, review: { stars, text: text.trim(), at: now } } : b,
           ),
+          extras: [
+            ...s.extras.filter((p) => p.id !== provider.id),
+            {
+              ...provider,
+              rating: nextRating,
+              reviewCount: nextCount,
+              reviews: [nextReview, ...provider.reviews],
+            },
+          ],
         }));
         return { ok: true };
       },
