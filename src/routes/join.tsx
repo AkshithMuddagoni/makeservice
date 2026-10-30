@@ -54,8 +54,8 @@ const emptyAsset = (serviceId: string = initialService): AssetDraft => ({
   model: "",
   year: "",
   ownership: "OWNED",
-  roadUse: "PUBLIC_ROAD",
-  vehicleClass: "CONSTRUCTION_EQUIPMENT",
+  roadUse: "NEEDS_REVIEW",
+  vehicleClass: "OTHER",
   registration: "",
   serial: "",
   specifications: {},
@@ -208,6 +208,28 @@ function JoinPage() {
       toast.error("Link this machine to at least one selected service.");
       return;
     }
+    if (assetDraft.roadUse === "NEEDS_REVIEW" && !assetDraft.vehicleClass) {
+      toast.error("Select the vehicle class or leave it for manual classification review.");
+      return;
+    }
+    for (const serviceId of assetDraft.serviceIds) {
+      const definition = SERVICE_ONBOARDING[serviceId];
+      for (const field of definition.fields.filter((item) => item.required)) {
+        if (field.key === "waltaStatus" && !(serviceTasks.borewell ?? []).some((task) => /new borewell drilling|deepening/i.test(task))) {
+          continue;
+        }
+        if (!(assetDraft.specifications[field.key] ?? "").trim()) {
+          toast.error("Complete “" + field.label + "” for this machine.");
+          return;
+        }
+      }
+    }
+    if (assetDraft.roadUse === "PUBLIC_ROAD" || assetDraft.roadUse === "COMMERCIAL_TRANSPORT") {
+      if (assetDraft.registration.length < 4) {
+        toast.error("Enter the last four characters of the vehicle registration number.");
+        return;
+      }
+    }
     const normalized = assetDraft.registration.replace(/\s+/g, "").toUpperCase();
     setAssets((current) => [
       ...current,
@@ -290,6 +312,13 @@ function JoinPage() {
     if (!completedAssets.length) return toast.error("Add at least one machine or equipment asset.");
     for (const asset of completedAssets) {
       if (!asset.serviceIds.length) return toast.error("Link every machine to at least one service.");
+      if (asset.roadUse === "NEEDS_REVIEW" && !asset.vehicleClass) {
+        return toast.error("Complete the road-use classification for every machine.");
+      }
+    }
+    const requiresBorewellRig = (serviceTasks.borewell ?? []).some((task) => /new borewell drilling|deepening/i.test(task));
+    if (requiresBorewellRig && !completedAssets.some((asset) => asset.serviceIds.includes("borewell") && /drilling rig/i.test(asset.assetType))) {
+      return toast.error("New drilling or deepening requires a separate drilling-rig asset linked to Borewell services.");
     }
     setStep(4);
   }
@@ -302,6 +331,7 @@ function JoinPage() {
     const now = Date.now();
     const providerId = "yard_" + phone;
     const business: ProviderBusinessProfile = {
+      ownerFullName: ownerName.trim(),
       legalName: legalName.trim(),
       tradeName: tradeName.trim(),
       businessType,
@@ -620,10 +650,11 @@ function JoinPage() {
                   {Object.entries(OWNERSHIP_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </Field>
-              <Field label="How does it move / operate?">
+                <Field label="How does it move / operate?">
                 <select value={assetDraft.roadUse} onChange={(e) => updateAsset("roadUse", e.target.value as ProviderAssetRoadUse)} className={controlClass}>
                   {Object.entries(ROAD_USE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
+                <span className="text-xs leading-5 text-muted">Choose the real movement pattern. If unsure, leave “Not sure” and Fieldly must manually classify it before approval.</span>
               </Field>
               {(assetDraft.roadUse === "PUBLIC_ROAD" || assetDraft.roadUse === "COMMERCIAL_TRANSPORT") && (
                 <>
