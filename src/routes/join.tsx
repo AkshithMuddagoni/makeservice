@@ -679,7 +679,7 @@ function JoinPage() {
                 </p>
               </div>
               {doc.secureOnly ? (
-                <span className="shrink-0 rounded-full bg-paper px-3 py-2 text-xs font-semibold">Secure KYC required</span>
+                <span className="shrink-0 rounded-full bg-paper px-3 py-2 text-xs font-semibold">Secure production step</span>
               ) : (
                 <label className="shrink-0 cursor-pointer rounded-xl border border-line px-3 py-2 text-center text-xs font-semibold">
                   Select file
