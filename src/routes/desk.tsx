@@ -1,19 +1,25 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { Activity, ArrowUpRight, Banknote, BriefcaseBusiness, CalendarClock, CheckCircle2, ClipboardList, FileCheck2, History, LifeBuoy, MapPin, PauseCircle, PlayCircle, Plus, Settings2, ShieldCheck, Truck, UserRound, Wallet, Wrench } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { StatusPill, requirementLines } from "@/components/fieldly/bits";
 import { Button } from "@/components/ui/button";
-import { getService, isEligible } from "@/lib/fieldly/catalog";
+import { getService, isAvailableForService, isEligible } from "@/lib/fieldly/catalog";
 import { inr } from "@/lib/fieldly/format";
 import { formatKm, kmBetween } from "@/lib/fieldly/geo";
 import { priceJob } from "@/lib/fieldly/pricing";
 import { t } from "@/lib/fieldly/i18n";
 import { useFieldly, useProviders } from "@/lib/fieldly/store";
+import type { Booking, Provider } from "@/lib/fieldly/types";
+import { cn } from "@/lib/utils";
 import { z } from "zod";
 
 export const Route = createFileRoute("/desk")({ component: DeskPage });
 
 const phoneSchema = z.string().regex(/^[6-9]\d{9}$/);
+type Tab = "overview" | "requests" | "jobs" | "fleet" | "earnings" | "business";
+type JobFilter = "active" | "history" | "disputes";
+const ACTIVE = ["CONFIRMED", "ON_THE_WAY", "ARRIVED", "SERVICE_STARTED", "SERVICE_COMPLETED"];
 
 function DeskPage() {
   const lang = useFieldly((s) => s.lang);
@@ -26,19 +32,10 @@ function DeskPage() {
 
   function enter(e: FormEvent) {
     e.preventDefault();
-    if (!phoneSchema.safeParse(phone).success) {
-      toast.error("Use a 10-digit mobile, for example 9000000001.");
-      return;
-    }
-    if (code.trim() !== "482609") {
-      toast.error("Preview code is 482609.");
-      return;
-    }
+    if (!phoneSchema.safeParse(phone).success) return toast.error("Use a valid 10-digit mobile number.");
+    if (code.trim() !== "482609") return toast.error("Preview OTP is 482609.");
     const match = providers.find((p) => p.phone === phone);
-    if (!match) {
-      toast.error("No machine is listed on that number. Join first.");
-      return;
-    }
+    if (!match) return toast.error("No machine is listed on that number. Join first.");
     signInProvider(match.id);
   }
 
@@ -46,49 +43,22 @@ function DeskPage() {
     const demos = providers.filter((p) => p.phone.startsWith("900000000"));
     return (
       <div className="mx-auto max-w-lg px-4 py-10">
-        <h1 className="font-display text-4xl font-bold">{t(lang, "desk_title")}</h1>
-        <p className="mt-2 text-sm text-muted">
-          Same preview code as customers, <span className="font-semibold text-ink">482609</span>. Demo rigs use
-          9000000001 to 9000000004.
-        </p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-field">Provider workspace</p>
+        <h1 className="mt-1 font-display text-4xl font-bold">{t(lang, "desk_title")}</h1>
+        <p className="mt-2 text-sm text-muted">Preview only · Demo OTP: <b>482609</b></p>
         <div className="mt-4 flex flex-wrap gap-2">
-          {demos.slice(0, 4).map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setPhone(p.phone)}
-              className="rounded-full border border-line bg-card px-3 py-2 text-left text-xs font-semibold"
-            >
-              {p.name}
-              <span className="block text-muted">{p.phone}</span>
-            </button>
-          ))}
+          {demos.slice(0, 6).map((p) => <button key={p.id} type="button" onClick={() => setPhone(p.phone)} className={cn("rounded-full border px-3 py-2 text-left text-xs font-semibold", phone === p.phone ? "border-ink bg-ink text-on-ink" : "border-line bg-card")}>{p.name}<span className="block">{p.phone}</span></button>)}
         </div>
         <form onSubmit={enter} data-testid="operator-login-form" data-hydrated={hydrated ? "true" : "false"} className="mt-4 grid gap-3 rounded-3xl border border-line bg-card p-5">
-          <input
-            value={phone}
-            disabled={!hydrated}
-            onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-            className="h-12 rounded-xl border border-line px-3 text-base outline-none disabled:opacity-60"
-          />
-          <input
-            value={code}
-            disabled={!hydrated}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            placeholder="482609"
-            className="h-12 rounded-xl border border-line px-3 text-center font-display text-2xl tracking-widest outline-none disabled:opacity-60"
-          />
-          <Button type="submit" size="lg" disabled={!hydrated}>
-            Open desk
-          </Button>
-          <Link to="/join" className="text-center text-sm font-semibold">
-            List a new machine
-          </Link>
+          <label className="grid gap-1 text-sm font-semibold">Registered mobile number<input value={phone} disabled={!hydrated} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} inputMode="numeric" className="h-12 rounded-xl border border-line px-3 text-base" /></label>
+          <label className="grid gap-1 text-sm font-semibold">Preview OTP<input value={code} disabled={!hydrated} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="482609" inputMode="numeric" className="h-12 rounded-xl border border-line px-3 text-center font-display text-2xl tracking-widest" /></label>
+          <Button type="submit" size="lg" disabled={!hydrated}>Open provider workspace</Button>
+          <Link to="/join" className="text-center text-sm font-semibold">Register a new business / machine</Link>
         </form>
+        <p className="mt-4 text-xs leading-5 text-muted">Production sign-in needs real OTP and shared server-side provider records. This preview uses browser-local data.</p>
       </div>
     );
   }
-
   return <DeskHome providerId={session.providerId} />;
 }
 
@@ -97,270 +67,220 @@ function DeskHome({ providerId }: { providerId: string }) {
   const requests = useFieldly((s) => s.requests);
   const quotes = useFieldly((s) => s.quotes);
   const bookings = useFieldly((s) => s.bookings);
-  const online = useFieldly((s) => s.isOnline(providerId));
+  const isOnline = useFieldly((s) => s.isOnline);
   const setOnline = useFieldly((s) => s.setOnline);
+  const setServiceAvailability = useFieldly((s) => s.setServiceAvailability);
+  const setAssetAvailability = useFieldly((s) => s.setAssetAvailability);
   const sendQuote = useFieldly((s) => s.sendQuote);
   const declineRequest = useFieldly((s) => s.declineRequest);
-  const [tab, setTab] = useState<"requests" | "jobs" | "earnings">("requests");
+  const [tab, setTab] = useState<Tab>("overview");
+  const [jobFilter, setJobFilter] = useState<JobFilter>("active");
+  const online = isOnline(providerId);
 
-  const openJobs = useMemo(() => {
+  const openRequests = useMemo(() => {
     if (!provider) return [];
     return requests
       .filter((r) => r.status === "open" && r.targetedProviderIds.includes(provider.id) && !(r.declinedProviderIds ?? []).includes(provider.id) && provider.services.includes(r.serviceId))
-      .map((r) => ({ r, km: kmBetween(provider, r.site) }))
-      .filter((row) => {
-        const service = getService(row.r.serviceId);
-        return service ? row.km <= service.radiusKm + 10 : false;
+      .map((request) => ({ request, km: kmBetween(provider, request.site) }))
+      .filter(({ request, km }) => {
+        const service = getService(request.serviceId);
+        return service ? km <= service.radiusKm + 10 : false;
       })
       .sort((a, b) => a.km - b.km);
   }, [requests, provider]);
 
-  const mine = bookings.filter((b) => b.providerId === providerId);
-  const earned = mine.filter((b) => b.status === "PAID").reduce((sum, b) => sum + b.amount, 0);
-  const canOfferApprovedService = provider?.onboarding
-    ? provider.onboarding.services.some((service) => isEligible(provider, service.serviceId))
-    : Boolean(provider?.approved);
+  if (!provider) return <p className="px-4 py-10">Provider account not found.</p>;
 
-  if (!provider) return <p className="px-4 py-10">Operator missing.</p>;
+  const mine = bookings.filter((b) => b.providerId === providerId);
+  const activeJobs = mine.filter((b) => ACTIVE.includes(b.status));
+  const historyJobs = mine.filter((b) => b.status === "PAID" || b.status === "CANCELLED");
+  const disputes = mine.filter((b) => b.status === "DISPUTED");
+  const customerPaid = mine.filter((b) => b.status === "PAID").reduce((sum, b) => sum + b.amount, 0);
+  const awaitingPayment = mine.filter((b) => b.status === "SERVICE_COMPLETED").reduce((sum, b) => sum + b.amount, 0);
+  const canGoOnline = provider.services.some((id) => isEligible(provider, id) && provider.serviceAvailability?.[id] !== false && (!provider.onboarding || provider.onboarding.assets.some((a) => a.serviceIds.includes(id) && a.status === "APPROVED" && a.available !== false)));
+  const pausedCount = provider.services.filter((id) => provider.serviceAvailability?.[id] === false).length;
+
+  const tabs: { id: Tab; name: string; icon: typeof Activity }[] = [
+    { id: "overview", name: "Overview", icon: Activity },
+    { id: "requests", name: "Requests", icon: ClipboardList },
+    { id: "jobs", name: "Bookings", icon: BriefcaseBusiness },
+    { id: "fleet", name: "Services & fleet", icon: Truck },
+    { id: "earnings", name: "Earnings", icon: Wallet },
+    { id: "business", name: "Business profile", icon: Settings2 },
+  ];
+
+  function toggleGlobal() {
+    if (!online && !canGoOnline) return toast.error("No approved service and machine is currently available.");
+    setOnline(provider.id, !online);
+    toast.success(online ? "New requests paused for all services." : "You are online for eligible services.");
+  }
+  function toggleService(serviceId: string, next: boolean) {
+    const result = setServiceAvailability(provider.id, serviceId, next);
+    if (!result.ok) toast.error(result.error);
+    else toast.success(next ? "Service is accepting new requests." : "New requests paused for this service.");
+  }
+  function toggleAsset(assetId: string, next: boolean) {
+    const result = setAssetAvailability(provider.id, assetId, next);
+    if (!result.ok) toast.error(result.error);
+    else toast.success(next ? "Machine available for new work." : "Machine paused for new work.");
+  }
+
+  const isServiceEnabled = (id: string) => provider.serviceAvailability?.[id] !== false;
+  const serviceApproval = (id: string) => provider.onboarding?.services.find((s) => s.serviceId === id);
+  const approvedAssetCount = (id: string) => provider.onboarding?.assets.filter((a) => a.serviceIds.includes(id) && a.status === "APPROVED").length ?? 0;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-field">Operator desk</p>
-          <h1 className="font-display text-4xl font-bold tracking-tight">{provider.name}</h1>
-          <p className="text-sm text-muted">
-            {provider.area} · {provider.phone}
-          </p>
+    <div className="mx-auto max-w-5xl px-4 py-6 pb-16">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-widest text-field">Fieldly provider workspace</p>
+          <h1 className="mt-1 break-words font-display text-3xl font-bold sm:text-4xl">{provider.name}</h1>
+          <p className="mt-1 flex items-center gap-1 text-sm text-muted"><MapPin className="size-3.5" />{provider.area}, {provider.city} · {provider.phone}</p>
+          {provider.onboarding?.business.ownerFullName && <p className="mt-1 text-xs text-muted">Account owner: {provider.onboarding.business.ownerFullName}</p>}
         </div>
-        <button
-          type="button"
-          onClick={() => setOnline(provider.id, !online)}
-          disabled={!canOfferApprovedService}
-          className={
-            !canOfferApprovedService
-              ? "h-11 cursor-not-allowed rounded-full bg-line px-4 text-sm font-semibold text-muted"
-              : online
-                ? "h-11 rounded-full bg-field px-4 text-sm font-semibold text-on-field"
-                : "h-11 rounded-full bg-ink px-4 text-sm font-semibold text-on-ink"
-          }
-        >
-          {!canOfferApprovedService ? "Not approved yet" : online ? "Online" : "Offline"}
-        </button>
-      </div>
-      {provider.onboarding ? (
-        <section className="mt-4 grid gap-3 rounded-2xl border border-line bg-card p-4">
-          <div>
-            <p className="font-semibold">Business profile · {provider.onboarding.businessStatus.replaceAll("_", " ")}</p>
-            <p className="mt-1 text-xs text-muted">
-              {provider.onboarding.business.tradeName} · {provider.onboarding.business.businessType.replaceAll("_", " ")}
-            </p>
+        <div className="flex flex-col items-stretch gap-2 sm:items-end">
+          <span className={cn("inline-flex items-center justify-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold", online ? "bg-field-soft text-field" : "bg-paper text-muted")}>
+            <span className={cn("size-2 rounded-full", online ? "bg-field" : "bg-muted")} />{online ? "Online · eligible requests on" : "Offline · new requests paused"}
+          </span>
+          <Button onClick={toggleGlobal} disabled={!online && !canGoOnline} variant={online ? "secondary" : "default"}>
+            {online ? <><PauseCircle className="mr-2 size-4" /> Go offline</> : <><PlayCircle className="mr-2 size-4" /> Go online</>}
+          </Button>
+        </div>
+      </header>
+
+      {provider.onboarding && (
+        <section className="mt-4 rounded-2xl border border-line bg-card p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div><p className="font-semibold">Business verification · {provider.onboarding.businessStatus.replaceAll("_", " ")}</p><p className="mt-1 text-xs text-muted">{provider.onboarding.business.tradeName} · {provider.onboarding.business.businessType.replaceAll("_", " ")}</p></div>
+            <span className="rounded-full bg-paper px-3 py-1.5 text-xs font-semibold">Payout setup: {provider.onboarding.payoutStatus.replaceAll("_", " ")}</span>
           </div>
-          <div className="grid gap-2">
-            {provider.onboarding.services.map((service) => (
-              <div key={service.serviceId} className="flex items-center justify-between gap-3 rounded-xl bg-paper p-3">
-                <span className="text-sm font-semibold">{getService(service.serviceId)?.name ?? service.serviceId}</span>
-                <span className="text-xs font-semibold text-muted">{service.status.replaceAll("_", " ")}</span>
-              </div>
-            ))}
-          </div>
-          <div className="grid gap-1 text-xs text-muted">
-            <p>{provider.onboarding.assets.length} machine(s) submitted for review.</p>
-            <p>Payout setup: {provider.onboarding.payoutStatus.replaceAll("_", " ")}.</p>
-            <p>Customers can book a service only after its business, service and linked asset checks are approved.</p>
-          </div>
+          <p className="mt-2 text-xs leading-5 text-muted">Business, service and machine verification are separate. Payment-provider onboarding remains deferred and is not active in this preview.</p>
         </section>
-      ) : !provider.approved && (
-        <p className="mt-4 rounded-2xl bg-gold-soft p-4 text-sm text-gold">
-          Papers are still in review, so customers cannot see this listing.
-        </p>
       )}
-      {!isEligible(provider, provider.services[0] ?? "") && provider.approved && (
-        <p className="mt-4 rounded-2xl bg-danger-soft p-4 text-sm text-danger">
-          Not eligible for {provider.services[0]}. Identity, equipment
-          {provider.services.includes("borewell") ? " and a WALTA number" : ""} are required.
-        </p>
-      )}
-      <div className="mt-5 flex gap-2">
-        {(
-          [
-            ["requests", "Requests"],
-            ["jobs", "Jobs"],
-            ["earnings", "Earnings"],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            className={
-              tab === key
-                ? "h-10 rounded-xl bg-ink px-3 text-sm font-semibold text-on-ink"
-                : "h-10 rounded-xl border border-line bg-card px-3 text-sm font-semibold"
-            }
-          >
-            {label}
+
+      <section className="mt-5 grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <Metric icon={ClipboardList} label="Open requests" value={String(openRequests.length)} note="Assigned to registered services" />
+        <Metric icon={BriefcaseBusiness} label="Active bookings" value={String(activeJobs.length)} note="Includes work awaiting payment" />
+        <Metric icon={CheckCircle2} label="Completed jobs" value={String(mine.filter((b) => b.status === "SERVICE_COMPLETED" || b.status === "PAID").length)} note="Marked complete or paid" />
+        <Metric icon={Banknote} label="Customer-marked paid" value={inr(customerPaid)} note="Preview record · not a payout" />
+      </section>
+
+      <nav className="-mx-1 mt-5 flex gap-1 overflow-x-auto px-1 pb-2" aria-label="Provider sections">
+        {tabs.map(({ id, name, icon: Icon }) => (
+          <button key={id} type="button" onClick={() => setTab(id)} className={cn("flex shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold", tab === id ? "bg-ink text-on-ink" : "border border-line bg-card text-muted")}>
+            <Icon className="size-4" />{name}{id === "requests" && openRequests.length > 0 && <span className="rounded-full bg-field-soft px-1.5 text-[10px] text-field">{openRequests.length}</span>}
           </button>
         ))}
-      </div>
+      </nav>
+
+      {tab === "overview" && (
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+          <section className="rounded-3xl border border-line bg-card p-4 sm:p-5">
+            <h2 className="font-display text-xl font-bold">Service availability</h2>
+            <p className="mt-1 text-xs text-muted">Pause one service without taking your other services offline.</p>
+            <div className="mt-3 grid gap-2">
+              {provider.services.map((id) => {
+                const service = getService(id);
+                const approved = isEligible(provider, id);
+                const enabled = isServiceEnabled(id);
+                const effective = isAvailableForService(provider, id);
+                return (
+                  <div key={id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line p-3">
+                    <div><p className="font-semibold">{service?.name ?? id}</p><p className="mt-1 text-xs text-muted">{serviceApproval(id)?.status.replaceAll("_", " ") ?? (provider.approved ? "Legacy listing" : "Not approved")} · {provider.onboarding ? approvedAssetCount(id) + " approved machine(s)" : "Listing"}</p></div>
+                    <button type="button" disabled={!approved} onClick={() => toggleService(id, !enabled)} className={cn("rounded-full px-3 py-2 text-xs font-bold", !approved ? "cursor-not-allowed bg-paper text-muted" : effective ? "bg-field-soft text-field" : "bg-paper text-muted")}>{effective ? "Accepting · Pause" : enabled && approved && !online ? "Ready · Global offline" : "Paused · Enable"}</button>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-3 text-xs leading-5 text-muted">Going offline or pausing a service stops new leads only. It does not cancel accepted bookings.</p>
+          </section>
+          <section className="rounded-3xl border border-line bg-card p-4 sm:p-5">
+            <div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold">Work queue</h2><CalendarClock className="size-5 text-muted" /></div>
+            {activeJobs.length ? <div className="mt-3 grid gap-2">{activeJobs.slice(0, 4).map((b) => <JobRow key={b.id} booking={b} />)}<button className="text-left text-sm font-semibold underline" onClick={() => { setTab("jobs"); setJobFilter("active"); }}>View all bookings</button></div> : <Empty icon={BriefcaseBusiness} title="No active bookings" detail="Accepted jobs and work awaiting customer payment appear here." />}
+            <div className="mt-4 border-t border-line pt-4"><p className="text-sm font-semibold">Open requests · {openRequests.length}</p>{openRequests.slice(0, 3).map(({ request }) => <p key={request.id} className="mt-2 text-sm text-muted">{getService(request.serviceId)?.name} · {request.site.area} · {request.whenLabel}</p>)}{openRequests.length > 0 && <button onClick={() => setTab("requests")} className="mt-3 text-sm font-semibold underline">Respond to requests</button>}</div>
+          </section>
+          <section className="rounded-3xl border border-line bg-card p-4 sm:p-5 lg:col-span-2">
+            <h2 className="font-display text-xl font-bold">Your operation</h2>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3"><InfoMini label="Registered services" value={String(provider.services.length)} /><InfoMini label="Registered machines" value={String(provider.onboarding?.assets.length ?? provider.machines.length)} /><InfoMini label="Services paused" value={String(pausedCount)} /></div>
+            <div className="mt-4 flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setTab("fleet")}><Truck className="mr-2 size-4" />Manage fleet</Button><Button variant="secondary" onClick={() => setTab("business")}><FileCheck2 className="mr-2 size-4" />Verification status</Button><Button asChild><Link to="/join"><Plus className="mr-2 size-4" />Add service / machine</Link></Button></div>
+          </section>
+        </div>
+      )}
 
       {tab === "requests" && (
-        <div className="mt-4 grid gap-3">
-          {openJobs.length === 0 && (
-            <p className="rounded-2xl bg-card p-4 text-sm text-muted">No new requests in range. Stay online for new jobs.</p>
-          )}
-          {openJobs.map(({ r, km }) => (
-            <QuoteCard
-              key={r.id}
-              requestId={r.id}
-              title={getService(r.serviceId)?.name ?? r.serviceId}
-              place={`${r.site.label} · ${formatKm(km)}`}
-              lines={requirementLines(r.serviceId, r.requirements)}
-              whenLabel={r.whenLabel}
-              notes={r.notes}
-              customerPhone={r.customerPhone}
-              siteImages={r.siteImages ?? []}
-              suggested={priceJob(r.serviceId, provider, r.requirements).amount}
-              existing={quotes.find((q) => q.requestId === r.id && q.providerId === provider.id && q.status === "pending")}
-              onSend={(amount, note) => {
-                const result = sendQuote(r.id, amount, note);
-                if (!result.ok) toast.error(result.error);
-                else toast.success("Quote sent.");
-              }}
-              onDecline={() => {
-                const result = declineRequest(r.id);
-                if (!result.ok) toast.error(result.error);
-              }}
-            />
-          ))}
-        </div>
+        <section className="mt-4 grid gap-3">
+          <div className="rounded-2xl bg-paper p-3 text-xs leading-5 text-muted">Check location, requested date, scope, work-site photos, machine fit and safety details before quoting. Pausing a service blocks new quotes but lets you decline existing enquiries.</div>
+          {!openRequests.length && <Empty icon={ClipboardList} title="No open requests" detail="New enquiries appear here when the corresponding service is active and your business is online." />}
+          {openRequests.map(({ request, km }) => {
+            const quote = quotes.find((q) => q.requestId === request.id && q.providerId === provider.id && q.status === "pending");
+            return <QuoteCard key={request.id} requestId={request.id} title={getService(request.serviceId)?.name ?? request.serviceId} place={request.site.label + " · " + formatKm(km)} lines={requirementLines(request.serviceId, request.requirements)} whenLabel={request.whenLabel} notes={request.notes} customerPhone={request.customerPhone} siteImages={request.siteImages ?? []} suggested={priceJob(request.serviceId, provider, request.requirements).amount} existing={quote} servicePaused={provider.serviceAvailability?.[request.serviceId] === false} onSend={(amount, note) => { const r = sendQuote(request.id, amount, note); if (!r.ok) toast.error(r.error); else toast.success("Quote sent for customer review."); }} onDecline={() => { const r = declineRequest(request.id); if (!r.ok) toast.error(r.error); else toast.success("Request declined."); }} />;
+          })}
+        </section>
       )}
 
       {tab === "jobs" && (
-        <div className="mt-4 grid gap-3">
-          {mine.length === 0 && <p className="text-sm text-muted">No accepted jobs yet.</p>}
-          {mine.map((b) => (
-            <Link
-              key={b.id}
-              to="/bookings/$bookingId"
-              params={{ bookingId: b.id }}
-              className="flex items-center justify-between rounded-2xl border border-line bg-card p-4"
-            >
-              <span>
-                <span className="block font-semibold">
-                  {b.code} · {getService(b.serviceId)?.name}
-                </span>
-                <span className="text-sm text-muted">{b.site.label}</span>
-              </span>
-              <StatusPill status={b.status} />
-            </Link>
-          ))}
-        </div>
+        <section className="mt-4">
+          <div className="flex flex-wrap gap-2">{([["active", "Active · " + activeJobs.length], ["history", "History · " + historyJobs.length], ["disputes", "Disputes · " + disputes.length]] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setJobFilter(key)} className={cn("rounded-xl px-3 py-2 text-sm font-semibold", jobFilter === key ? "bg-ink text-on-ink" : "border border-line bg-card")}>{label}</button>)}</div>
+          <div className="mt-3 grid gap-2">
+            {jobFilter === "active" && (activeJobs.length ? activeJobs.map((b) => <JobRow key={b.id} booking={b} />) : <Empty icon={BriefcaseBusiness} title="No active bookings" detail="Accepted jobs, work in progress and completed jobs awaiting payment show here." />)}
+            {jobFilter === "history" && (historyJobs.length ? historyJobs.map((b) => <JobRow key={b.id} booking={b} />) : <Empty icon={History} title="No booking history yet" detail="Paid and cancelled bookings appear here." />)}
+            {jobFilter === "disputes" && (disputes.length ? disputes.map((b) => <JobRow key={b.id} booking={b} />) : <Empty icon={LifeBuoy} title="No disputed bookings" detail="Bookings that need reviewer attention appear here." />)}
+          </div>
+        </section>
+      )}
+
+      {tab === "fleet" && (
+        <section className="mt-4 grid gap-4">
+          <div className="rounded-2xl bg-paper p-3 text-xs leading-5 text-muted">Global Online stops all new leads. Service availability pauses one category. Machine availability removes one specific asset from new matching. Existing bookings are never cancelled by these switches.</div>
+          <section className="rounded-3xl border border-line bg-card p-4"><h2 className="font-display text-xl font-bold">Service controls</h2><div className="mt-3 grid gap-2">{provider.services.map((id) => { const approved = isEligible(provider, id); const enabled = isServiceEnabled(id); const effective = isAvailableForService(provider, id); return <div key={id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line p-3"><div><p className="font-semibold">{getService(id)?.name ?? id}</p><p className="mt-1 text-xs text-muted">{approved ? (effective ? "Approved · accepting new requests" : online && enabled ? "Approved · no active machine or otherwise paused" : "Approved · paused") : "Not approved yet"}</p></div><Button size="sm" variant={enabled && approved ? "secondary" : "default"} disabled={!approved} onClick={() => toggleService(id, !enabled)}>{enabled ? "Pause service" : "Activate service"}</Button></div>; })}</div></section>
+          {provider.onboarding ? <section className="rounded-3xl border border-line bg-card p-4"><h2 className="font-display text-xl font-bold">Machines and equipment</h2><div className="mt-3 grid gap-3">{provider.onboarding.assets.map((asset) => { const approved = asset.status === "APPROVED"; const enabled = asset.available !== false; return <article key={asset.id} className="rounded-2xl border border-line p-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold">{asset.make} {asset.model}</p><p className="mt-1 text-xs text-muted">{asset.assetType} · {asset.yearOfManufacture ?? "Year not supplied"}</p><p className="mt-1 text-xs text-muted">Services: {asset.serviceIds.map((id) => getService(id)?.name ?? id).join(", ")}</p><p className="mt-1 text-xs text-muted">Review: {asset.status.replaceAll("_", " ")} · registration suffix {asset.registrationLast4 ?? "not supplied"}</p></div><Button size="sm" variant={enabled ? "secondary" : "default"} disabled={!approved} onClick={() => toggleAsset(asset.id, !enabled)}>{enabled ? "Pause machine" : "Make available"}</Button></div>{!approved && <p className="mt-2 text-xs text-gold">Cannot receive new bookings until approved.</p>}</article>; })}</div></section> : <section className="rounded-3xl border border-line bg-card p-4"><h2 className="font-display text-xl font-bold">Listed equipment</h2><div className="mt-3 grid gap-2">{provider.machines.map((m) => <p key={m} className="rounded-xl bg-paper p-3 text-sm">{m}</p>)}</div><p className="mt-2 text-xs text-muted">Legacy preview listing; per-machine controls need a completed asset registration.</p></section>}
+          <Button asChild variant="secondary"><Link to="/join"><Plus className="mr-2 size-4" />Add another service or machine</Link></Button>
+        </section>
       )}
 
       {tab === "earnings" && (
-        <div className="mt-4 rounded-3xl border border-line bg-card p-5">
-          <div className="text-sm text-muted">Recorded on paid jobs</div>
-          <div className="font-display text-4xl font-bold">{inr(earned)}</div>
-          <p className="mt-2 text-sm text-muted">
-            {mine.filter((b) => b.status === "PAID").length} paid · {mine.length} bookings. Preview totals stay on this
-            device.
-          </p>
-        </div>
+        <section className="mt-4 grid gap-4">
+          <div className="rounded-2xl border border-gold/30 bg-gold-soft p-4 text-xs leading-5 text-gold">Preview accounting only. “Customer-marked paid” means the customer used the local preview control; it is not gateway-confirmed money, provider payout, bank settlement or a tax statement. Cashfree and real payout processing are deferred.</div>
+          <div className="grid gap-2 sm:grid-cols-3"><MoneyMetric label="Customer-marked paid" amount={customerPaid} detail={mine.filter((b) => b.status === "PAID").length + " booking(s)"} /><MoneyMetric label="Completed · awaiting customer payment" amount={awaitingPayment} detail={mine.filter((b) => b.status === "SERVICE_COMPLETED").length + " booking(s)"} /><MoneyMetric label="Quoted value of open work" amount={mine.filter((b) => ACTIVE.includes(b.status)).reduce((sum, b) => sum + b.amount, 0)} detail="Not money received" /></div>
+          <section className="rounded-3xl border border-line bg-card p-4"><h2 className="font-display text-xl font-bold">Payment activity</h2>{mine.filter((b) => b.payment || b.status === "SERVICE_COMPLETED").length ? <div className="mt-3 grid gap-2">{mine.filter((b) => b.payment || b.status === "SERVICE_COMPLETED").sort((a, b) => (b.payment?.at ?? b.timestamps.SERVICE_COMPLETED ?? 0) - (a.payment?.at ?? a.timestamps.SERVICE_COMPLETED ?? 0)).map((b) => <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line p-3"><div><p className="text-sm font-semibold">{b.code} · {getService(b.serviceId)?.name}</p><p className="mt-1 text-xs text-muted">{b.site.area} · {b.payment ? b.payment.method + " · " + b.payment.ref : "Awaiting customer payment"}</p></div><div className="text-right"><p className="font-display text-xl font-bold">{inr(b.amount)}</p><p className="text-xs text-muted">{b.status.replaceAll("_", " ")}</p></div></div>)}</div> : <Empty icon={Wallet} title="No payment activity" detail="Customer-side records appear after work is marked complete." />}</section>
+          <section className="rounded-3xl border border-line bg-card p-4"><h2 className="font-display text-xl font-bold">Service-wise totals</h2><div className="mt-3 grid gap-2">{provider.services.map((id) => { const rows = mine.filter((b) => b.serviceId === id); const total = rows.filter((b) => b.status === "PAID").reduce((sum, b) => sum + b.amount, 0); return <div key={id} className="flex items-center justify-between rounded-xl bg-paper p-3"><span className="text-sm font-semibold">{getService(id)?.name ?? id}<span className="ml-2 text-xs font-normal text-muted">{rows.length} jobs</span></span><span className="font-semibold">{inr(total)}</span></div>; })}</div></section>
+          <p className="text-xs text-muted">A real settlement statement, commission deductions, GST/TDS/TCS, refunds, chargebacks and payout reconciliation belong to the deferred payment integration.</p>
+        </section>
+      )}
+
+      {tab === "business" && (
+        <section className="mt-4 grid gap-4">
+          {provider.onboarding ? <>
+            <section className="rounded-3xl border border-line bg-card p-4"><div className="flex items-center gap-2"><UserRound className="size-5 text-muted" /><h2 className="font-display text-xl font-bold">Business identity</h2></div><div className="mt-3 grid gap-3 sm:grid-cols-2"><InfoMini label="Owner / authorised person" value={provider.onboarding.business.ownerFullName} /><InfoMini label="Legal name" value={provider.onboarding.business.legalName} /><InfoMini label="Trade name" value={provider.onboarding.business.tradeName} /><InfoMini label="Legal structure" value={provider.onboarding.business.businessType.replaceAll("_", " ")} /><InfoMini label="Business address" value={provider.onboarding.business.address + ", " + provider.onboarding.business.district + " – " + provider.onboarding.business.pincode} /><InfoMini label="GST status" value={provider.onboarding.business.gstStatus.replaceAll("_", " ")} /><InfoMini label="Turnover declaration" value={provider.onboarding.business.aggregateTurnoverBand.replaceAll("_", " ")} /><InfoMini label="Udyam" value={provider.onboarding.business.udyamProvided ? "Declared available" : "Not provided"} /></div></section>
+            <section className="rounded-3xl border border-line bg-card p-4"><h2 className="font-display text-xl font-bold">Verification checklist</h2><div className="mt-3 grid gap-2">{provider.onboarding.documents.map((doc) => <div key={doc.key} className="flex items-start justify-between gap-3 rounded-xl border border-line p-3"><div><p className="text-sm font-semibold">{doc.label}</p><p className="mt-1 text-xs text-muted">{doc.jobSpecific ? "Job-specific" : doc.requiredForApproval ? "Required for approval" : "Optional / conditional"}</p></div><span className={cn("shrink-0 rounded-full px-2 py-1 text-[10px] font-bold", doc.selectedInPreview ? "bg-gold-soft text-gold" : "bg-paper text-muted")}>{doc.selectedInPreview ? "Marked ready · preview" : "Not submitted"}</span></div>)}</div><p className="mt-2 text-xs text-muted">No real files were uploaded or verified. Document expiry and reviewer decisions are not connected yet.</p></section>
+          </> : <section className="rounded-3xl border border-line bg-card p-4"><h2 className="font-display text-xl font-bold">Business profile</h2><p className="mt-2 text-sm text-muted">Legacy preview listing. Complete the full business and asset registration before production onboarding.</p></section>}
+          <section className="rounded-3xl border border-line bg-card p-4"><h2 className="font-display text-xl font-bold">Public service profile</h2><p className="mt-2 text-sm text-muted">{provider.bio || "No business description supplied."}</p><p className="mt-2 text-xs text-muted">Operating base: {provider.area}, {provider.city}, {provider.state}. Languages: {provider.languages.join(", ")}.</p></section>
+          <Button asChild variant="secondary"><Link to="/join"><Settings2 className="mr-2 size-4" />Add service / update registration</Link></Button>
+        </section>
       )}
     </div>
   );
 }
 
-function QuoteCard({
-  requestId,
-  title,
-  place,
-  lines,
-  whenLabel,
-  notes,
-  customerPhone,
-  siteImages,
-  suggested,
-  existing,
-  onSend,
-  onDecline,
-}: {
-  requestId: string
-  title: string
-  place: string
-  lines: { label: string; value: string }[]
-  whenLabel: string
-  notes: string
-  customerPhone: string
-  siteImages: string[]
-  suggested: number
-  existing?: { amount: number; note: string }
-  onSend: (amount: number, note: string) => void
-  onDecline: () => void
+function Metric({ icon: Icon, label, value, note }: { icon: typeof Activity; label: string; value: string; note: string }) {
+  return <div className="rounded-2xl border border-line bg-card p-3"><div className="flex items-center justify-between gap-1"><span className="text-xs text-muted">{label}</span><Icon className="size-4 text-muted" /></div><p className="mt-2 font-display text-2xl font-bold">{value}</p><p className="mt-1 text-[10px] leading-4 text-muted">{note}</p></div>;
+}
+function MoneyMetric({ label, amount, detail }: { label: string; amount: number; detail: string }) {
+  return <div className="rounded-2xl border border-line bg-card p-4"><p className="text-xs text-muted">{label}</p><p className="mt-2 font-display text-2xl font-bold">{inr(amount)}</p><p className="mt-1 text-xs text-muted">{detail}</p></div>;
+}
+function InfoMini({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl bg-paper p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{label}</p><p className="mt-1 break-words text-sm font-semibold">{value || "Not provided"}</p></div>;
+}
+function Empty({ icon: Icon, title, detail }: { icon: typeof Activity; title: string; detail: string }) {
+  return <div className="rounded-2xl border border-dashed border-line bg-card p-6 text-center"><Icon className="mx-auto size-7 text-muted" /><p className="mt-2 font-semibold">{title}</p><p className="mt-1 text-sm text-muted">{detail}</p></div>;
+}
+function JobRow({ booking }: { booking: Booking }) {
+  return <Link to="/bookings/$bookingId" params={{ bookingId: booking.id }} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-card p-4 transition hover:border-ink"><div className="min-w-0"><p className="font-semibold">{booking.code} · {getService(booking.serviceId)?.name ?? booking.serviceId}</p><p className="mt-1 truncate text-sm text-muted">{booking.site.label}, {booking.site.area} · {booking.customerName}</p><p className="mt-1 text-xs text-muted">{booking.whenLabel}</p></div><div className="flex items-center gap-3"><div className="text-right"><p className="font-semibold">{inr(booking.amount)}</p><p className="text-xs text-muted">{booking.status.replaceAll("_", " ")}</p></div><StatusPill status={booking.status} /><ArrowUpRight className="size-4 text-muted" /></div></Link>;
+}
+function QuoteCard({ requestId, title, place, lines, whenLabel, notes, customerPhone, siteImages, suggested, existing, servicePaused, onSend, onDecline }: {
+  requestId: string; title: string; place: string; lines: { label: string; value: string }[]; whenLabel: string; notes: string; customerPhone: string; siteImages: string[]; suggested: number; existing?: { amount: number; note: string }; servicePaused: boolean; onSend: (amount: number, note: string) => void; onDecline: () => void;
 }) {
   const [amount, setAmount] = useState(String(existing?.amount ?? (suggested > 0 ? suggested : "")));
   const [note, setNote] = useState(existing?.note ?? "");
-  return (
-    <article className="rounded-3xl border border-line bg-card p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="font-display text-xl font-bold">{title}</h2>
-          <p className="text-sm text-muted">
-            {place} · {whenLabel}
-          </p>
-        </div>
-        <span className="text-xs text-muted">{requestId.slice(-4)}</span>
-      </div>
-      <ul className="mt-2 text-sm text-muted">
-        {lines.map((row) => (
-          <li key={row.label}>
-            {row.label}: {row.value}
-          </li>
-        ))}
-        {notes && <li>Note: {notes}</li>}
-      </ul>
-      {existing && (
-        <a
-          href={`tel:${customerPhone}`}
-          className="mt-3 inline-flex h-10 items-center justify-center rounded-xl bg-field px-4 text-sm font-semibold text-on-field hover:bg-ink"
-        >
-          Call customer · {customerPhone}
-        </a>
-      )}
-      {siteImages.length > 0 && (
-        <div className="mt-3">
-          <p className="mb-2 text-xs font-semibold text-muted">Customer site photos</p>
-          <div className="grid grid-cols-3 gap-2">
-            {siteImages.map((image, index) => (
-              <img key={image.slice(-36)} src={image} alt={`Customer site photo ${index + 1}`} className="h-24 w-full rounded-xl border border-line object-cover" />
-            ))}
-          </div>
-        </div>
-      )}
-      <div className="mt-3 flex flex-wrap gap-2">
-        <input
-          value={amount}
-          onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
-          className="h-11 w-36 rounded-xl border border-line px-3 text-base outline-none"
-          aria-label="Quote amount"
-        />
-        <input
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Included work, exclusions, fees, cancellation terms"
-          aria-label="Quote details and terms"
-          required
-          minLength={8}
-          className="h-11 min-w-48 flex-1 rounded-xl border border-line px-3 text-base outline-none"
-        />
-      </div>
-      <div className="mt-3 flex gap-2">
-        <Button disabled={!Number(amount) || !note.trim() || note.trim().length < 8} onClick={() => onSend(Number(amount), note)}>{existing ? "Update quote" : "Accept request & send quote"}</Button>
-        <Button variant="secondary" onClick={onDecline}>
-          Decline request
-        </Button>
-      </div>
-    </article>
-  );
+  return <article className="rounded-3xl border border-line bg-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="font-display text-xl font-bold">{title}</h2><p className="text-sm text-muted">{place} · {whenLabel}</p><p className="mt-1 text-xs text-muted">Request {requestId.slice(-6)}</p></div><span className="rounded-full bg-paper px-2 py-1 text-xs font-semibold text-muted">New enquiry</span></div><ul className="mt-3 grid gap-1 text-sm text-muted">{lines.map((row) => <li key={row.label}>{row.label}: {row.value}</li>)}{notes && <li>Customer note: {notes}</li>}</ul>{siteImages.length > 0 && <div className="mt-3"><p className="mb-2 text-xs font-semibold text-muted">Work-site photos</p><div className="grid grid-cols-3 gap-2">{siteImages.map((image, i) => <img key={image.slice(-36)} src={image} alt={"Customer work site " + (i + 1)} className="h-24 w-full rounded-xl border border-line object-cover" />)}</div></div>}{existing && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-field-soft p-3"><p className="text-sm font-semibold text-field">Quote already sent · {inr(existing.amount)}</p><a href={"tel:" + customerPhone} className="text-sm font-semibold underline">Call customer</a></div>}{servicePaused && <p className="mt-3 rounded-xl bg-gold-soft p-3 text-xs leading-5 text-gold">This service is paused. Re-enable it under Services & fleet before sending a quote. You may still decline this request.</p>}<div className="mt-3 grid gap-2 sm:grid-cols-[10rem_1fr]"><label className="grid gap-1 text-xs font-semibold text-muted">Quote amount (₹)<input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))} className="h-11 rounded-xl border border-line px-3 text-base text-ink outline-none" /></label><label className="grid gap-1 text-xs font-semibold text-muted">Inclusions / exclusions / fees<input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Travel, fuel, operator, extra hours, fees, cancellation…" className="h-11 rounded-xl border border-line px-3 text-base text-ink outline-none" /></label></div><div className="mt-3 flex flex-wrap gap-2"><Button disabled={servicePaused || !Number(amount) || note.trim().length < 8} onClick={() => onSend(Number(amount), note)}>{existing ? "Update quote" : "Send quote"}</Button><Button variant="secondary" onClick={onDecline}>Decline request</Button></div></article>;
 }
