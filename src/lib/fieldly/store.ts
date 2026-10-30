@@ -82,6 +82,8 @@ type State = {
   providerById: (id: string) => Provider | undefined
   isOnline: (id: string) => boolean
   setOnline: (id: string, online: boolean) => void
+  setServiceAvailability: (id: string, serviceId: string, available: boolean) => Result
+  setAssetAvailability: (id: string, assetId: string, available: boolean) => Result
   addProvider: (provider: Provider) => void
   createRequest: (input: {
     serviceId: string
