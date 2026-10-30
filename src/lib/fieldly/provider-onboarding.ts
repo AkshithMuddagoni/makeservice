@@ -42,7 +42,7 @@ export const SERVICE_ONBOARDING: Record<string, ServiceOnboardingDefinition> = {
       { key: "rigType", label: "Rig type", kind: "select", options: ["Rotary", "DTH", "Combination rotary / DTH", "Not applicable — service equipment only"], required: true },
       { key: "maxDepthFt", label: "Maximum stated drilling depth", kind: "number", unit: "ft", placeholder: "1200", hint: "Enter the manufacturer's or verified operating capacity, not a guaranteed borewell depth." },
       { key: "maxDiameterIn", label: "Maximum drilling diameter", kind: "number", unit: "in", placeholder: "12" },
-      { key: "waltaNumber", label: "WALTA Form 16 rig registration number", kind: "text", placeholder: "Enter only in the secure production KYC step", hint: "Required for a drilling rig used for borewell drilling. The preview does not retain the full number." },
+      { key: "waltaStatus", label: "WALTA Form 16 status", kind: "select", options: ["Current Form 16 available", "Renewal due / needs review", "Not registered yet"], required: true, hint: "The full registration number and certificate must be verified through secure production document handling." },
       { key: "waltaExpiry", label: "WALTA registration expiry", kind: "text", placeholder: "DD-MM-YYYY", hint: "Check the current Form 16 certificate. Telangana rules provide a two-year renewal cycle." },
     ],
   },
@@ -277,6 +277,12 @@ export function getProviderDocumentRequirements(input: {
     add({ key: "GST_CERTIFICATE", label: "GST registration certificate", description: "GSTIN and legal name must match the declared entity; verify through the GST system.", requiredForApproval: true });
   }
   add({
+    key: "LOCAL_TRADE_LICENSE",
+    label: "Local trade / establishment licence (where applicable)",
+    description: "Only where required by the local municipality, panchayat, Shops and Establishments rules, business premises or activity. Not a universal document for every individual machine owner.",
+    requiredForApproval: false,
+  });
+  add({
     key: "UDYAM_CERTIFICATE",
     label: "Udyam / MSME certificate (optional)",
     description: "Optional supporting business credential; not a universal condition for listing or a separate certificate per service.",
@@ -322,6 +328,14 @@ export function getProviderDocumentRequirements(input: {
   }
   if (input.services.some((service) => service.serviceId === "tanker" && service.selectedTasks.some((task) => /potable/i.test(task)))) {
     add({ key: "POTABLE_WATER_QUALITY", label: "Potable water quality evidence", description: "Recent test from a competent laboratory and hygienic tanker/handling evidence before the provider may advertise drinking water.", requiredForApproval: true });
+    add({ key: "POTABLE_WATER_FBO_LICENSE", label: "FSSAI registration / licence (where the activity is a food business)", description: "FSSAI licensing applies to Food Business Operators. Fieldly must classify the exact potable / packaged water supply activity before making this mandatory for a bulk tanker-only provider.", requiredForApproval: false });
+  }
+
+  if (input.assets.some((asset) => asset.roadUse === "PUBLIC_ROAD" || asset.roadUse === "COMMERCIAL_TRANSPORT")) {
+    add({ key: "OPERATOR_DL", label: "Driving licence for road-driving operators", description: "Verify each driver’s current licence and the correct vehicle class. The driver record and complete licence details belong in the secure production operator onboarding flow.", requiredForApproval: true, secureOnly: true });
+  }
+  if (input.services.length > 0) {
+    add({ key: "OPERATOR_ROSTER", label: "Operator / driver roster", description: "In production, add each operator against the machine they operate: legal name, contact, role, experience, competence/training and driving licence where relevant. This is a Fieldly safety and accountability check; statutory requirements vary by equipment and worksite.", requiredForApproval: true, secureOnly: true });
   }
 
   add({
@@ -331,14 +345,6 @@ export function getProviderDocumentRequirements(input: {
     requiredForApproval: false,
     jobSpecific: true,
   });
-  add({
-    key: "OPERATOR_DL",
-    label: "Driver licence for road-driving operators",
-    description: "Verify a current licence and the correct vehicle class for each person who will drive a road-going vehicle. Add each driver in the secure production workflow.",
-    requiredForApproval: true,
-    secureOnly: true,
-  });
-
   return [...docs.values()];
 }
 
