@@ -297,6 +297,15 @@ export function getProviderDocumentRequirements(input: {
     add({ key: "ASSET_OWNER_NOC", label: "Lease / owner consent / NOC", description: "Required where the listed machine belongs to a third party or is leased; confirm that the provider may offer it for hire.", requiredForApproval: true });
   }
 
+  if (input.assets.some((asset) => asset.roadUse === "NEEDS_REVIEW")) {
+    add({
+      key: "VEHICLE_CLASSIFICATION_REVIEW",
+      label: "Machine movement / vehicle classification review",
+      description: "The provider is unsure how the asset moves or is classified. Fieldly must review the machine, RC (if any), transport method and actual use before deciding which road-document rules apply.",
+      requiredForApproval: true,
+    });
+  }
+
   const roadAssets = input.assets.filter((asset) => asset.roadUse === "PUBLIC_ROAD" || asset.roadUse === "COMMERCIAL_TRANSPORT");
   if (roadAssets.length > 0) {
     add({ key: "VEHICLE_RC", label: "Vehicle registration certificate (RC)", description: "For road-registered motor vehicles and applicable construction equipment vehicles. Verify vehicle class, registered owner and validity.", requiredForApproval: true });
@@ -401,6 +410,7 @@ export const ROAD_USE_LABELS: Record<ProviderAssetRoadUse, string> = {
   TRAILER_MOVED: "Moved between sites on a trailer / low-bed",
   OFF_ROAD: "Off-road / private site only",
   NOT_APPLICABLE: "Not a vehicle (stationary equipment)",
+  NEEDS_REVIEW: "Not sure — classification review required",
 };
 
 export function selectedDocumentRecords(requirements: DocumentRequirement[], selectedKeys: string[]): ProviderOnboardingDocument[] {
