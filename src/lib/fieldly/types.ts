@@ -85,7 +85,94 @@ export type Review = {
   ago: string
 };
 
+
+export type ProviderBusinessType =
+  | "INDIVIDUAL"
+  | "PROPRIETORSHIP"
+  | "PARTNERSHIP"
+  | "LLP"
+  | "PRIVATE_LIMITED"
+  | "PUBLIC_LIMITED"
+  | "OTHER";
+
+export type ProviderBusinessProfile = {
+  legalName: string;
+  tradeName: string;
+  businessType: ProviderBusinessType;
+  address: string;
+  district: string;
+  pincode: string;
+  state: string;
+  gstStatus: "REGISTERED" | "NOT_REGISTERED" | "NOT_SURE";
+  udyamProvided: boolean;
+  authorisedRepresentative: boolean;
+  declarationAcceptedAt: number;
+};
+
+export type ProviderAssetOwnership = "OWNED" | "LEASED" | "THIRD_PARTY";
+export type ProviderAssetRoadUse =
+  | "PUBLIC_ROAD"
+  | "COMMERCIAL_TRANSPORT"
+  | "TRAILER_MOVED"
+  | "OFF_ROAD"
+  | "NOT_APPLICABLE";
+
+export type ProviderVerificationStatus =
+  | "DRAFT"
+  | "SUBMITTED"
+  | "NEEDS_INFORMATION"
+  | "UNDER_REVIEW"
+  | "APPROVED"
+  | "REJECTED"
+  | "SUSPENDED";
+
+export type ProviderServiceRegistration = {
+  serviceId: string;
+  selectedTasks: string[];
+  specifications: Record<string, string>;
+  status: ProviderVerificationStatus;
+  selectedDocumentKeys: string[];
+  submittedAt?: number;
+  reviewerNote?: string;
+};
+
+export type ProviderAsset = {
+  id: string;
+  serviceIds: string[];
+  assetType: string;
+  make: string;
+  model: string;
+  yearOfManufacture?: number;
+  ownership: ProviderAssetOwnership;
+  roadUse: ProviderAssetRoadUse;
+  vehicleClass: string;
+  registrationLast4?: string;
+  serialLast4?: string;
+  specifications: Record<string, string>;
+  selectedDocumentKeys: string[];
+  status: ProviderVerificationStatus;
+};
+
+export type ProviderOnboardingDocument = {
+  key: string;
+  label: string;
+  selectedInPreview: boolean;
+  requiredForApproval: boolean;
+  jobSpecific: boolean;
+};
+
+export type ProviderOnboardingProfile = {
+  business: ProviderBusinessProfile;
+  services: ProviderServiceRegistration[];
+  assets: ProviderAsset[];
+  documents: ProviderOnboardingDocument[];
+  businessStatus: ProviderVerificationStatus;
+  payoutStatus: "NOT_STARTED" | "KYC_REQUIRED" | "UNDER_REVIEW" | "ACTIVE" | "REJECTED";
+  accountCreatedAt: number;
+};
+
 export type Provider = {
+  onboarding?: ProviderOnboardingProfile;
   id: string
   phone: string
   name: string
