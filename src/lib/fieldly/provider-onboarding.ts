@@ -222,6 +222,7 @@ export type OnboardingAssetInput = {
 
 export function getProviderDocumentRequirements(input: {
   businessType: ProviderBusinessType;
+  state: string;
   gstStatus: "REGISTERED" | "NOT_REGISTERED" | "NOT_SURE";
   authorisedRepresentative: boolean;
   services: OnboardingServiceInput[];
@@ -309,8 +310,13 @@ export function getProviderDocumentRequirements(input: {
     add({ key: "ROAD_TAX_RECEIPT", label: "Road tax / green tax receipt", description: "Where applicable to the vehicle and permit category.", requiredForApproval: false });
   }
 
+  const isTelangana = input.state.trim().toLowerCase() === "telangana";
   if (input.assets.some((asset) => asset.serviceIds.includes("borewell") && /drilling rig/i.test(asset.assetType))) {
-    add({ key: "WALTA_FORM16", label: "WALTA drilling rig registration — Form 16", description: "For a drilling rig operated in Telangana. Match the certificate to this rig / vehicle and check its renewal date.", requiredForApproval: true });
+    if (isTelangana) {
+      add({ key: "WALTA_FORM16", label: "WALTA drilling rig registration — Form 16", description: "For a drilling rig operated in Telangana. Match the certificate to this rig / vehicle and check its renewal date.", requiredForApproval: true });
+    } else {
+      add({ key: "STATE_GROUNDWATER_RIG_REVIEW", label: "State groundwater / drilling-rig authorisation review", description: "Groundwater drilling and rig requirements differ by State and district. Fieldly compliance must identify and verify the current State / local permits before approval.", requiredForApproval: true, secureOnly: true });
+    }
   }
   if (input.services.some((service) => service.serviceId === "borewell" && service.selectedTasks.some((task) => /new borewell drilling|deepening/i.test(task)))) {
     add({ key: "WALTA_ACKNOWLEDGEMENT", label: "WALTA drilling compliance declaration", description: "Confirm that the rig used for drilling/deepening is registered and that job-specific site permissions/feasibility/insurance will be checked before drilling.", requiredForApproval: true, secureOnly: true });
