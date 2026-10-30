@@ -52,7 +52,7 @@ function DeskPage() {
         <form onSubmit={enter} data-testid="operator-login-form" data-hydrated={hydrated ? "true" : "false"} className="mt-4 grid gap-3 rounded-3xl border border-line bg-card p-5">
           <label className="grid gap-1 text-sm font-semibold">Registered mobile number<input value={phone} disabled={!hydrated} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} inputMode="numeric" className="h-12 rounded-xl border border-line px-3 text-base" /></label>
           <label className="grid gap-1 text-sm font-semibold">Preview OTP<input value={code} disabled={!hydrated} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="482609" inputMode="numeric" className="h-12 rounded-xl border border-line px-3 text-center font-display text-2xl tracking-widest" /></label>
-          <Button type="submit" size="lg" disabled={!hydrated}>Open provider workspace</Button>
+          <Button type="submit" size="lg" disabled={!hydrated}>Open desk</Button>
           <Link to="/join" className="text-center text-sm font-semibold">Register a new business / machine</Link>
         </form>
         <p className="mt-4 text-xs leading-5 text-muted">Production sign-in needs real OTP and shared server-side provider records. This preview uses browser-local data.</p>
