@@ -883,6 +883,11 @@ export function isEligible(provider: Provider, serviceId: string) {
   // expose a separate borewell rig that is still awaiting its WALTA review.
   if (provider.onboarding) {
     if (provider.onboarding.businessStatus !== "APPROVED") return false;
+    // Marketplace booking is not enabled until the approved payment provider
+    // has completed vendor KYC and confirmed that this provider can receive
+    // settlements. This avoids onboarding a bookable provider with no payout
+    // destination in the split-payment model.
+    if (provider.onboarding.payoutStatus !== "ACTIVE") return false;
     const service = provider.onboarding.services.find((item) => item.serviceId === serviceId);
     if (!service || service.status !== "APPROVED") return false;
     const approvedAssetExists = provider.onboarding.assets.some(
