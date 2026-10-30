@@ -876,8 +876,23 @@ export function getService(id: string | undefined) {
 }
 
 export function isEligible(provider: Provider, serviceId: string) {
-  if (!provider.approved || !provider.verified.identity || !provider.verified.equipment) return false;
   if (!provider.services.includes(serviceId)) return false;
+
+  // New profiles are approved independently per service and per physical asset.
+  // A business with a cleared tractor registration must not automatically
+  // expose a separate borewell rig that is still awaiting its WALTA review.
+  if (provider.onboarding) {
+    if (provider.onboarding.businessStatus !== "APPROVED") return false;
+    const service = provider.onboarding.services.find((item) => item.serviceId === serviceId);
+    if (!service || service.status !== "APPROVED") return false;
+    const approvedAssetExists = provider.onboarding.assets.some(
+      (asset) => asset.serviceIds.includes(serviceId) && asset.status === "APPROVED",
+    );
+    return approvedAssetExists;
+  }
+
+  // Legacy seeded listings retain their original preview checks.
+  if (!provider.approved || !provider.verified.identity || !provider.verified.equipment) return false;
   if (serviceId === "borewell" && !provider.verified.walta) return false;
   return true;
 }
