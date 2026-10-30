@@ -96,6 +96,7 @@ export type ProviderBusinessType =
   | "OTHER";
 
 export type ProviderBusinessProfile = {
+  ownerFullName: string;
   aggregateTurnoverBand: "UNDER_20_LAKH" | "20_LAKH_OR_MORE" | "NOT_SURE";
   legalName: string;
   tradeName: string;
@@ -152,6 +153,7 @@ export type ProviderAsset = {
   specifications: Record<string, string>;
   selectedDocumentKeys: string[];
   status: ProviderVerificationStatus;
+  available?: boolean;
 };
 
 export type ProviderOnboardingDocument = {
@@ -174,6 +176,8 @@ export type ProviderOnboardingProfile = {
 
 export type Provider = {
   onboarding?: ProviderOnboardingProfile;
+  /** Derived runtime toggle state; persisted separately by provider/service. */
+  serviceAvailability?: Record<string, boolean>;
   id: string
   phone: string
   name: string
