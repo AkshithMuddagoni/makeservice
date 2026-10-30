@@ -231,6 +231,16 @@ function JoinPage() {
     setAssets((current) => current.filter((_, itemIndex) => itemIndex !== index));
   }
 
+  function toggleExistingAssetService(index: number, serviceId: string, checked: boolean) {
+    setAssets((current) => current.map((asset, itemIndex) => {
+      if (itemIndex !== index) return asset;
+      const serviceIds = checked
+        ? Array.from(new Set([...asset.serviceIds, serviceId]))
+        : asset.serviceIds.filter((id) => id !== serviceId);
+      return { ...asset, serviceIds };
+    }));
+  }
+
   function onDocumentSelect(key: string, event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     if (!file) return;
@@ -542,22 +552,7 @@ function JoinPage() {
                           </label>
                         ))}
                       </div>
-                      {definition.fields.length > 0 && (
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                          {definition.fields.map((field) => (
-                            <Field key={field.key} label={field.label} hint={field.hint}>
-                              {field.kind === "select" ? (
-                                <select value={serviceSpecs[service.id]?.[field.key] ?? ""} onChange={(e) => updateServiceSpec(service.id, field.key, e.target.value)} className={controlClass}>
-                                  <option value="">Select</option>
-                                  {(field.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}
-                                </select>
-                              ) : (
-                                <input type={field.kind === "number" ? "number" : "text"} value={serviceSpecs[service.id]?.[field.key] ?? ""} onChange={(e) => updateServiceSpec(service.id, field.key, e.target.value)} placeholder={field.placeholder ?? ""} className={controlClass} />
-                              )}
-                            </Field>
-                          ))}
-                        </div>
-                      )}
+
                     </div>
                   )}
                 </article>
@@ -583,6 +578,14 @@ function JoinPage() {
                     <p className="font-semibold">{asset.make} {asset.model}</p>
                     <p className="text-xs text-muted">{asset.assetType} · {asset.serviceIds.map((id) => SERVICE_ONBOARDING[id]?.label).join(", ")}</p>
                     <p className="mt-1 text-xs text-muted">Registration / serial ending: {asset.registration || asset.serial || "Not provided"}</p>
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                      {selectedServices.map((serviceId) => (
+                        <label key={serviceId} className="flex items-center gap-1 text-[11px] text-muted">
+                          <input type="checkbox" checked={asset.serviceIds.includes(serviceId)} onChange={(e) => toggleExistingAssetService(index, serviceId, e.target.checked)} className="size-3.5" />
+                          {SERVICE_ONBOARDING[serviceId].label}
+                        </label>
+                      ))}
+                    </div>
                   </div>
                   <button type="button" onClick={() => removeAsset(index)} className="text-xs font-semibold text-danger underline">Remove</button>
                 </div>
