@@ -77,32 +77,56 @@ function JoinPage() {
   const site = useFieldly((s) => s.site);
   const addProvider = useFieldly((s) => s.addProvider);
   const signInProvider = useFieldly((s) => s.signInProvider);
+  const activeProviderId = useFieldly((s) => s.session?.role === "provider" ? s.session.providerId : undefined);
+  const existingProvider = useFieldly((s) => activeProviderId ? s.providerById(activeProviderId) : undefined);
+  const existingBusiness = existingProvider?.onboarding?.business;
 
-  const [step, setStep] = useState(1);
-  const [ownerName, setOwnerName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [step, setStep] = useState(existingProvider ? 2 : 1);
+  const [ownerName, setOwnerName] = useState(existingBusiness?.ownerFullName ?? "");
+  const [phone, setPhone] = useState(existingProvider?.phone ?? "");
   const [previewOtp, setPreviewOtp] = useState("");
-  const [phoneVerified, setPhoneVerified] = useState(false);
-  const [businessType, setBusinessType] = useState<ProviderBusinessType>("PROPRIETORSHIP");
-  const [legalName, setLegalName] = useState("");
-  const [tradeName, setTradeName] = useState("");
-  const [businessAddress, setBusinessAddress] = useState("");
-  const [district, setDistrict] = useState("");
-  const [pincode, setPincode] = useState("");
-  const [gstStatus, setGstStatus] = useState<ProviderBusinessProfile["gstStatus"]>("NOT_SURE");
-  const [aggregateTurnoverBand, setAggregateTurnoverBand] = useState<ProviderBusinessProfile["aggregateTurnoverBand"]>("NOT_SURE");
-  const [authorisedRepresentative, setAuthorisedRepresentative] = useState(false);
-  const [udyamProvided, setUdyamProvided] = useState(false);
-  const [years, setYears] = useState("1");
-  const [languages, setLanguages] = useState("Telugu, Hindi");
-  const [bio, setBio] = useState("");
+  const [phoneVerified, setPhoneVerified] = useState(Boolean(existingProvider));
+  const [businessType, setBusinessType] = useState<ProviderBusinessType>(existingBusiness?.businessType ?? "PROPRIETORSHIP");
+  const [legalName, setLegalName] = useState(existingBusiness?.legalName ?? "");
+  const [tradeName, setTradeName] = useState(existingBusiness?.tradeName ?? "");
+  const [businessAddress, setBusinessAddress] = useState(existingBusiness?.address ?? "");
+  const [district, setDistrict] = useState(existingBusiness?.district ?? "");
+  const [pincode, setPincode] = useState(existingBusiness?.pincode ?? "");
+  const [gstStatus, setGstStatus] = useState<ProviderBusinessProfile["gstStatus"]>(existingBusiness?.gstStatus ?? "NOT_SURE");
+  const [aggregateTurnoverBand, setAggregateTurnoverBand] = useState<ProviderBusinessProfile["aggregateTurnoverBand"]>(existingBusiness?.aggregateTurnoverBand ?? "NOT_SURE");
+  const [authorisedRepresentative, setAuthorisedRepresentative] = useState(existingBusiness?.authorisedRepresentative ?? false);
+  const [udyamProvided, setUdyamProvided] = useState(existingBusiness?.udyamProvided ?? false);
+  const [years, setYears] = useState(String(existingProvider?.years ?? 1));
+  const [languages, setLanguages] = useState(existingProvider?.languages.join(", ") ?? "Telugu, Hindi");
+  const [bio, setBio] = useState(existingProvider?.bio ?? "");
 
-  const [serviceTasks, setServiceTasks] = useState<Record<string, string[]>>({
-    [initialService]: [SERVICE_ONBOARDING[initialService].tasks[0]],
-  });
-  const [assets, setAssets] = useState<AssetDraft[]>([emptyAsset()]);
-  const [assetDraft, setAssetDraft] = useState<AssetDraft>(emptyAsset());
-  const [selectedDocumentKeys, setSelectedDocumentKeys] = useState<string[]>([]);
+  const [serviceTasks, setServiceTasks] = useState<Record<string, string[]>>(
+    existingProvider?.onboarding
+      ? Object.fromEntries(existingProvider.onboarding.services.map((service) => [service.serviceId, service.selectedTasks]))
+      : { [initialService]: [SERVICE_ONBOARDING[initialService].tasks[0]] },
+  );
+  const [assets, setAssets] = useState<AssetDraft[]>(
+    existingProvider?.onboarding
+      ? existingProvider.onboarding.assets.map((asset) => ({
+          localId: asset.id.startsWith(existingProvider.id + "_") ? asset.id.slice(existingProvider.id.length + 1) : asset.id,
+          serviceIds: asset.serviceIds,
+          assetType: asset.assetType,
+          make: asset.make,
+          model: asset.model,
+          year: asset.yearOfManufacture ? String(asset.yearOfManufacture) : "",
+          ownership: asset.ownership,
+          roadUse: asset.roadUse,
+          vehicleClass: asset.vehicleClass,
+          registration: asset.registrationLast4 ?? "",
+          serial: asset.serialLast4 ?? "",
+          specifications: asset.specifications,
+        }))
+      : [],
+  );
+  const [assetDraft, setAssetDraft] = useState<AssetDraft>(emptyAsset(existingProvider?.services[0] ?? initialService));
+  const [selectedDocumentKeys, setSelectedDocumentKeys] = useState<string[]>(
+    existingProvider?.onboarding?.documents.filter((doc) => doc.selectedInPreview).map((doc) => doc.key) ?? [],
+  );
   const [createdProviderId, setCreatedProviderId] = useState<string | null>(null);
 
   const selectedServices = useMemo(
