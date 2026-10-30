@@ -96,6 +96,7 @@ export type ProviderBusinessType =
   | "OTHER";
 
 export type ProviderBusinessProfile = {
+  aggregateTurnoverBand: "UNDER_20_LAKH" | "20_LAKH_OR_MORE" | "NOT_SURE";
   legalName: string;
   tradeName: string;
   businessType: ProviderBusinessType;
