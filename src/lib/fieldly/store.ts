@@ -250,7 +250,7 @@ export const useFieldly = create<State>()(
             return { extras: [...s.extras.filter((p) => p.id !== incoming.id), incoming] };
           }
 
-          const sameBusiness = (a: Provider["onboarding"]["business"], b: Provider["onboarding"]["business"]) =>
+          const sameBusiness = (a: NonNullable<Provider["onboarding"]>["business"], b: NonNullable<Provider["onboarding"]>["business"]) =>
             a.ownerFullName === b.ownerFullName &&
             a.legalName === b.legalName &&
             a.tradeName === b.tradeName &&
