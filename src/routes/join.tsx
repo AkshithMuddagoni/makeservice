@@ -280,12 +280,11 @@ function JoinPage() {
   }
 
   function nextFromAssets() {
-    const allAssets = [...completedAssets];
-    if (assetDraft.make.trim() && assetDraft.model.trim()) {
-      allAssets.push(assetDraft as AssetDraft);
+    if (assetDraft.make.trim() || assetDraft.model.trim()) {
+      return toast.error("Press “Add this machine” to include the machine in your application.");
     }
-    if (!allAssets.length) return toast.error("Add at least one machine or equipment asset.");
-    for (const asset of allAssets) {
+    if (!completedAssets.length) return toast.error("Add at least one machine or equipment asset.");
+    for (const asset of completedAssets) {
       if (!asset.serviceIds.length) return toast.error("Link every machine to at least one service.");
     }
     setStep(4);
