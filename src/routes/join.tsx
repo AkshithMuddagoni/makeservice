@@ -132,6 +132,7 @@ function JoinPage() {
     }
     return getProviderDocumentRequirements({
       businessType,
+      state: site?.state || "Telangana",
       gstStatus,
       authorisedRepresentative,
       services,
@@ -145,6 +146,7 @@ function JoinPage() {
     gstStatus,
     selectedServices,
     serviceTasks,
+    site?.state,
   ]);
 
   const completedAssets = assets.filter((asset) => asset.make.trim() && asset.model.trim());
