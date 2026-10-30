@@ -199,3 +199,89 @@ test("borewell rig registration is state-aware outside Telangana", () => {
   assert.equal(result.has("WALTA_FORM16"), false);
   assert.equal(result.has("STATE_GROUNDWATER_RIG_REVIEW"), true);
 });
+
+
+test("global, per-service and per-machine availability are independently enforced", async () => {
+  const { isAvailableForService, isEligible } = await import("./catalog.ts");
+  const provider = {
+    id: "provider_test",
+    phone: "9000000001",
+    name: "Test services",
+    city: "Warangal",
+    area: "Test yard",
+    state: "Telangana",
+    lat: 17.385,
+    lng: 78.4867,
+    services: ["tractor", "borewell"],
+    equipment: "Tractor and borewell rig",
+    machines: ["45 HP tractor", "Drilling rig"],
+    years: 5,
+    jobs: 0,
+    rating: 0,
+    reviewCount: 0,
+    replyMin: 10,
+    rates: {},
+    verified: { identity: false, equipment: false, insurance: false, walta: null },
+    approved: false,
+    online: true,
+    serviceAvailability: { tractor: true, borewell: true },
+    bio: "",
+    languages: ["Telugu"],
+    reviews: [],
+    onboarding: {
+      business: {
+        ownerFullName: "Test Owner",
+        legalName: "Test Owner",
+        tradeName: "Test services",
+        businessType: "PROPRIETORSHIP" as const,
+        address: "Test address",
+        district: "Warangal",
+        pincode: "506001",
+        state: "Telangana",
+        gstStatus: "NOT_REGISTERED" as const,
+        aggregateTurnoverBand: "UNDER_20_LAKH" as const,
+        udyamProvided: false,
+        authorisedRepresentative: false,
+        declarationAcceptedAt: 1,
+      },
+      businessStatus: "APPROVED" as const,
+      services: [
+        { serviceId: "tractor", selectedTasks: ["Ploughing"], specifications: {}, status: "APPROVED" as const, selectedDocumentKeys: [] },
+        { serviceId: "borewell", selectedTasks: ["New borewell drilling"], specifications: {}, status: "APPROVED" as const, selectedDocumentKeys: [] },
+      ],
+      assets: [
+        { id: "tractor_1", serviceIds: ["tractor"], assetType: "Agricultural tractor", make: "Mahindra", model: "575", ownership: "OWNED" as const, roadUse: "PUBLIC_ROAD" as const, vehicleClass: "AGRICULTURAL", registrationLast4: "1234", specifications: {}, selectedDocumentKeys: [], status: "APPROVED" as const, available: true },
+        { id: "rig_1", serviceIds: ["borewell"], assetType: "Drilling rig", make: "Rig maker", model: "R1", ownership: "OWNED" as const, roadUse: "TRAILER_MOVED" as const, vehicleClass: "CONSTRUCTION_EQUIPMENT", specifications: {}, selectedDocumentKeys: [], status: "APPROVED" as const, available: true },
+      ],
+      documents: [],
+      payoutStatus: "NOT_STARTED" as const,
+      accountCreatedAt: 1,
+    },
+  };
+
+  assert.equal(isEligible(provider, "tractor"), true);
+  assert.equal(isEligible(provider, "borewell"), true);
+  assert.equal(isAvailableForService(provider, "tractor"), true);
+  assert.equal(isAvailableForService(provider, "borewell"), true);
+
+  const borewellPaused = {
+    ...provider,
+    serviceAvailability: { tractor: true, borewell: false },
+  };
+  assert.equal(isAvailableForService(borewellPaused, "tractor"), true);
+  assert.equal(isAvailableForService(borewellPaused, "borewell"), false);
+
+  const tractorMachinePaused = {
+    ...provider,
+    onboarding: {
+      ...provider.onboarding,
+      assets: provider.onboarding.assets.map((asset) => asset.id === "tractor_1" ? { ...asset, available: false } : asset),
+    },
+  };
+  assert.equal(isEligible(tractorMachinePaused, "tractor"), true);
+  assert.equal(isAvailableForService(tractorMachinePaused, "tractor"), false);
+  assert.equal(isAvailableForService(tractorMachinePaused, "borewell"), true);
+
+  assert.equal(isAvailableForService({ ...provider, online: false }, "tractor"), false);
+  assert.equal(isEligible({ ...provider, onboarding: { ...provider.onboarding, payoutStatus: "NOT_STARTED" } }, "tractor"), true);
+});
