@@ -243,7 +243,101 @@ export const useFieldly = create<State>()(
         }));
         return { ok: true };
       },
-      addProvider: (provider) => set((s) => ({ extras: [...s.extras.filter((p) => p.id !== provider.id), provider] })),
+      addProvider: (incoming) =>
+        set((s) => {
+          const existing = s.extras.find((p) => p.id === incoming.id);
+          if (!existing?.onboarding || !incoming.onboarding) {
+            return { extras: [...s.extras.filter((p) => p.id !== incoming.id), incoming] };
+          }
+
+          const sameBusiness = (a: Provider["onboarding"]["business"], b: Provider["onboarding"]["business"]) =>
+            a.ownerFullName === b.ownerFullName &&
+            a.legalName === b.legalName &&
+            a.tradeName === b.tradeName &&
+            a.businessType === b.businessType &&
+            a.address === b.address &&
+            a.district === b.district &&
+            a.pincode === b.pincode &&
+            a.state === b.state &&
+            a.gstStatus === b.gstStatus &&
+            a.aggregateTurnoverBand === b.aggregateTurnoverBand &&
+            a.udyamProvided === b.udyamProvided &&
+            a.authorisedRepresentative === b.authorisedRepresentative;
+
+          const servicesById = new Map(existing.onboarding.services.map((service) => [service.serviceId, service]));
+          for (const next of incoming.onboarding.services) {
+            const previous = servicesById.get(next.serviceId);
+            const unchanged = previous &&
+              JSON.stringify(previous.selectedTasks) === JSON.stringify(next.selectedTasks) &&
+              JSON.stringify(previous.specifications) === JSON.stringify(next.specifications);
+            servicesById.set(next.serviceId, unchanged
+              ? { ...next, status: previous.status, reviewerNote: previous.reviewerNote, submittedAt: previous.submittedAt }
+              : next);
+          }
+
+          const assetsById = new Map(existing.onboarding.assets.map((asset) => [asset.id, asset]));
+          for (const next of incoming.onboarding.assets) {
+            const previous = assetsById.get(next.id);
+            const unchanged = previous &&
+              previous.assetType === next.assetType &&
+              previous.make === next.make &&
+              previous.model === next.model &&
+              previous.yearOfManufacture === next.yearOfManufacture &&
+              previous.ownership === next.ownership &&
+              previous.roadUse === next.roadUse &&
+              previous.vehicleClass === next.vehicleClass &&
+              previous.registrationLast4 === next.registrationLast4 &&
+              previous.serialLast4 === next.serialLast4 &&
+              JSON.stringify(previous.serviceIds) === JSON.stringify(next.serviceIds) &&
+              JSON.stringify(previous.specifications) === JSON.stringify(next.specifications);
+            assetsById.set(next.id, unchanged
+              ? { ...next, status: previous.status, available: previous.available }
+              : next);
+          }
+
+          const documentMap = new Map(existing.onboarding.documents.map((document) => [document.key, document]));
+          for (const next of incoming.onboarding.documents) {
+            const previous = documentMap.get(next.key);
+            documentMap.set(next.key, previous
+              ? { ...next, selectedInPreview: previous.selectedInPreview || next.selectedInPreview }
+              : next);
+          }
+
+          const businessUnchanged = sameBusiness(existing.onboarding.business, incoming.onboarding.business);
+          const onboarding = {
+            ...incoming.onboarding,
+            business: incoming.onboarding.business,
+            businessStatus: businessUnchanged ? existing.onboarding.businessStatus : "SUBMITTED" as const,
+            services: [...servicesById.values()],
+            assets: [...assetsById.values()],
+            documents: [...documentMap.values()],
+            payoutStatus: existing.onboarding.payoutStatus,
+            accountCreatedAt: existing.onboarding.accountCreatedAt,
+          };
+          const services = Array.from(new Set([...existing.services, ...incoming.services]));
+          return {
+            extras: [
+              ...s.extras.filter((p) => p.id !== incoming.id),
+              {
+                ...existing,
+                ...incoming,
+                services,
+                machines: Array.from(new Set([...existing.machines, ...incoming.machines])),
+                rates: { ...existing.rates, ...incoming.rates },
+                serviceAvailability: { ...(existing.serviceAvailability ?? {}), ...(incoming.serviceAvailability ?? {}) },
+                online: existing.online,
+                approved: existing.approved,
+                verified: existing.verified,
+                onboarding,
+                equipment: Array.from(new Set([...existing.machines, ...incoming.machines])).join(", "),
+                jobs: existing.jobs,
+                rating: existing.rating,
+                reviewCount: existing.reviewCount,
+                reviews: existing.reviews,
+              },
+            ],
+          };
+        }),
       createRequest: ({ serviceId, providerId, detailsConsent }) => {
         const { site, draft, session } = get();
         const who = session?.role === "customer" ? session : null;
