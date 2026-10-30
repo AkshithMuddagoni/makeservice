@@ -4,7 +4,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { StatusPill, requirementLines } from "@/components/fieldly/bits";
 import { Button } from "@/components/ui/button";
-import { getService, isAvailableForService, isEligible } from "@/lib/fieldly/catalog";
+import { getService, isAvailableForService, isEligible, isServiceOperational } from "@/lib/fieldly/catalog";
 import { inr } from "@/lib/fieldly/format";
 import { formatKm, kmBetween } from "@/lib/fieldly/geo";
 import { priceJob } from "@/lib/fieldly/pricing";
@@ -213,7 +213,7 @@ function DeskHome({ providerId }: { providerId: string }) {
           {!openRequests.length && <Empty icon={ClipboardList} title="No open requests" detail="New enquiries appear here when the corresponding service is active and your business is online." />}
           {openRequests.map(({ request, km }) => {
             const quote = quotes.find((q) => q.requestId === request.id && q.providerId === provider.id && q.status === "pending");
-            return <QuoteCard key={request.id} requestId={request.id} title={getService(request.serviceId)?.name ?? request.serviceId} place={request.site.label + " · " + formatKm(km)} lines={requirementLines(request.serviceId, request.requirements)} whenLabel={request.whenLabel} notes={request.notes} customerPhone={request.customerPhone} siteImages={request.siteImages ?? []} suggested={priceJob(request.serviceId, provider, request.requirements).amount} existing={quote} servicePaused={provider.serviceAvailability?.[request.serviceId] === false} onSend={(amount, note) => { const r = sendQuote(request.id, amount, note); if (!r.ok) toast.error(r.error); else toast.success("Quote sent for customer review."); }} onDecline={() => { const r = declineRequest(request.id); if (!r.ok) toast.error(r.error); else toast.success("Request declined."); }} />;
+            return <QuoteCard key={request.id} requestId={request.id} title={getService(request.serviceId)?.name ?? request.serviceId} place={request.site.label + " · " + formatKm(km)} lines={requirementLines(request.serviceId, request.requirements)} whenLabel={request.whenLabel} notes={request.notes} customerPhone={request.customerPhone} siteImages={request.siteImages ?? []} suggested={priceJob(request.serviceId, provider, request.requirements).amount} existing={quote} servicePaused={!isServiceOperational(provider, request.serviceId)} onSend={(amount, note) => { const r = sendQuote(request.id, amount, note); if (!r.ok) toast.error(r.error); else toast.success("Quote sent for customer review."); }} onDecline={() => { const r = declineRequest(request.id); if (!r.ok) toast.error(r.error); else toast.success("Request declined."); }} />;
           })}
         </section>
       )}
