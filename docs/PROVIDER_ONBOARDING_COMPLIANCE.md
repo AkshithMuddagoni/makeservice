@@ -246,3 +246,33 @@ Before launch, move provider onboarding into the authenticated shared PostgreSQL
 - Consumer Protection (E-Commerce) Amendment Rules, 2026 PIB announcement (effective 1 January 2027): https://www.pib.gov.in/PressReleasePage.aspx?PRID=2308759
 
 **Before production:** get written advice from a Telangana-groundwater / transport compliance adviser, Indian GST/Income Tax CA and privacy counsel on the categories and state-specific conditions Fieldly will actually operate.
+
+
+## Provider / operator workspace
+
+The provider home screen is an operational workspace, not just an online toggle.
+
+### Availability controls
+
+- **Global Online / Offline:** one switch for the whole business. Offline stops matching for new customer enquiries; it does not cancel confirmed bookings or remove active jobs.
+- **Service-level switch:** a provider can accept borewell jobs and pause tractor jobs, or vice versa. A service can only be switched on when it has been approved and has at least one approved, available linked asset.
+- **Machine-level switch:** pause one tractor, rig, crane, tipper or other machine because it is under repair, already committed, undergoing inspection or not staffed. Other approved machines linked to that service can still receive requests.
+- Customer search and the server-side request creation rule must enforce the same combined state. A UI-only toggle is not an authorization control.
+- A production version should add working hours, weekly schedule, date-specific leave / holidays, emergency pause and an “until” time. Global/service/asset availability is immediate; calendar scheduling is a separate next iteration.
+
+### Main sections
+
+1. **Overview:** open request count, active booking count, completed jobs, customer-recorded paid count/value, current online state, per-service states, today's active work queue and customer rating.
+2. **Requests:** assigned enquiries, job type, location/distance, date/time, customer requirements, site photos, quote scope/price, reply, decline and post-response contact/chat. Do not show leads to unapproved or paused services.
+3. **Bookings:** separate active jobs, paid/cancelled history and disputes. Active booking details provide customer contact after provider response, accepted quote terms, work-site details, status timeline, chat, arrival/start OTP and job-completion action.
+4. **Services & fleet:** each registered service and each physical machine, approval status, linked service categories and independent availability toggles.
+5. **Earnings:** separate customer-marked payment activity, completed jobs awaiting customer payment, quoted job value, and (when later available) actual gateway settlements, commissions, adjustments, refunds and payouts. A locally entered “paid” status must never be shown as bank settlement.
+6. **Business profile:** owner/business summary, registered services, machine count, document checklist, approval states and future expiry/renewal notifications.
+
+### Partner-product patterns used
+
+- Uber's driver workflows separate going online, receiving a request, active trip controls, trip history and earnings statements.
+- Urban Company's partner tools expose available slots, day-off controls, upcoming bookings, booking-specific support, ratings and profile-change reviews.
+- Porter's driver/owner workflows surface vehicle/driver status, trip details, daily earnings and payout/transaction views.
+
+Fieldly adopts these underlying operational patterns but its controls need to fit worksite equipment: multiple service types, multiple independently available assets, machine suitability, operator assignments and job/site safety requirements. Schedule calendars, support ticketing and real bank settlement statements remain future capabilities rather than simulated functionality.
