@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { useMemo } from "react";
-import { CATALOG_PROVIDERS, getService, isAvailableForService, isEligible } from "./catalog";
+import { CATALOG_PROVIDERS, getService, isAvailableForService, isEligible, isServiceOperational } from "./catalog";
 import { kmBetween, travelMinutes } from "./geo";
 import { priceJob } from "./pricing";
 import type {
@@ -400,7 +400,7 @@ export const useFieldly = create<State>()(
         if (request.declinedProviderIds?.includes(provider.id)) {
           return { ok: false, error: "You already declined this request." };
         }
-        if (!isEligible(provider, request.serviceId) || provider.serviceAvailability?.[request.serviceId] === false) {
+        if (!isServiceOperational(provider, request.serviceId)) {
           return { ok: false, error: "This service or its machines are paused or not approved. Decline the request or reactivate the service after checks." };
         }
         if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "Enter a price greater than zero." };
