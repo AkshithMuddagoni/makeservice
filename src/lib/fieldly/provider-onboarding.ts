@@ -314,7 +314,9 @@ export function getProviderDocumentRequirements(input: {
   }
   if (input.services.some((service) => service.serviceId === "borewell" && service.selectedTasks.some((task) => /new borewell drilling|deepening/i.test(task)))) {
     add({ key: "WALTA_ACKNOWLEDGEMENT", label: "WALTA drilling compliance declaration", description: "Confirm that the rig used for drilling/deepening is registered and that job-specific site permissions/feasibility/insurance will be checked before drilling.", requiredForApproval: true, secureOnly: true });
-    add({ key: "SITE_PERMISSION_JOB", label: "Site permission / feasibility / proposed-well insurance", description: "Job-specific. Collect and verify against the customer's proposed borewell and land before the work starts; do not treat a rig registration as site permission.", requiredForApproval: false, jobSpecific: true });
+    add({ key: "SITE_PERMISSION_JOB", label: "Site permission / local well approval", description: "Job-specific. Collect and verify against the customer's proposed borewell, land, local authority restrictions and site before drilling; rig registration is not a site permission.", requiredForApproval: false, jobSpecific: true });
+    add({ key: "AGRI_IRRIGATION_FEASIBILITY", label: "Groundwater feasibility certificate for agricultural irrigation", description: "Job-specific where drilling is proposed on agricultural land for irrigation; Section 14(3) of Telangana WALTA requires the rig owner/operator to obtain the feasibility certificate for the selected site.", requiredForApproval: false, jobSpecific: true });
+    add({ key: "PROPOSED_WELL_INSURANCE", label: "Insurance for the proposed agricultural borewell", description: "Job-specific where drilling is proposed on agricultural land for irrigation; Section 14(3) requires insurance of the proposed borewell before drilling.", requiredForApproval: false, jobSpecific: true });
   }
 
   if (input.services.some((service) => service.serviceId === "crane")) {
