@@ -4,7 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Stars, requirementLines } from "@/components/fieldly/bits";
 import { Button } from "@/components/ui/button";
-import { getService, isAvailableForService, verificationLines } from "@/lib/fieldly/catalog";
+import { getService, isAvailableForService, isEligible, isServiceOperational, verificationLines } from "@/lib/fieldly/catalog";
 import { formatKm, kmBetween, travelMinutes } from "@/lib/fieldly/geo";
 import { inr, maskPhone } from "@/lib/fieldly/format";
 import { priceJob } from "@/lib/fieldly/pricing";
@@ -51,7 +51,20 @@ function ProviderPage() {
   const req = hasMatchingDraft ? draft!.requirements : {};
   const selectedImages = hasMatchingDraft ? draft!.siteImages ?? [] : [];
   const priced = service ? priceJob(service.id, provider, req) : null;
+  const approved = service ? isEligible(provider, service.id) : false;
+  const operational = service ? isServiceOperational(provider, service.id) : false;
   const eligible = service ? isAvailableForService(provider, service.id) && km != null && km <= service.radiusKm : false;
+  const availabilityMessage = !approved
+    ? "This service or its linked equipment is still awaiting Fieldly approval."
+    : provider.serviceAvailability?.[serviceId] === false
+      ? "This service is currently paused by the provider."
+      : !operational
+        ? "The provider has no approved machine currently available for this service."
+        : !provider.online
+          ? "The provider is currently offline and is not accepting new requests."
+          : km != null && service && km > service.radiusKm
+            ? "The work site is outside this provider's current service range."
+            : "This service is temporarily unavailable.";
   const known =
     bookings.some((b) => b.providerId === provider.id && b.customerPhone === (customer?.phone || session?.phone)) ||
     false;
@@ -64,6 +77,12 @@ function ProviderPage() {
       text: b.review!.text || "Rated without a comment.",
       ago: "from your bookings",
     }));
+  const visibleReviews = [
+    ...liveReviews,
+    ...provider.reviews.filter((review) =>
+      !liveReviews.some((live) => live.name === review.name && live.stars === review.stars && live.text === review.text),
+    ),
+  ];
 
   async function request() {
     if (!hasMatchingDraft) {
@@ -164,7 +183,7 @@ function ProviderPage() {
           <section className="mt-6">
             <h2 className="font-display text-xl font-bold">Reviews</h2>
             <div className="mt-3 grid gap-3">
-              {[...liveReviews, ...provider.reviews].map((review) => (
+              {visibleReviews.map((review) => (
                 <article key={review.name + review.text} className="rounded-2xl border border-line bg-card p-4">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-semibold">{review.name}</span>
@@ -241,8 +260,7 @@ function ProviderPage() {
           )}
           {!eligible && (
             <p className="mt-3 rounded-xl bg-danger-soft p-3 text-sm text-danger">
-              Not eligible for this service until identity, equipment
-              {serviceId === "borewell" ? " and a WALTA rig number" : ""} are on file.
+              {availabilityMessage}
             </p>
           )}
           {hasMatchingDraft && (
