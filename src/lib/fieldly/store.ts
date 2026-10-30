@@ -295,6 +295,13 @@ export const useFieldly = create<State>()(
               : next);
           }
 
+          const incomingAssetIds = new Set(incoming.onboarding.assets.map((asset) => asset.id));
+          for (const previous of existing.onboarding.assets) {
+            if (!incomingAssetIds.has(previous.id)) {
+              assetsById.set(previous.id, { ...previous, status: "SUSPENDED", available: false });
+            }
+          }
+
           const documentMap = new Map(existing.onboarding.documents.map((document) => [document.key, document]));
           for (const next of incoming.onboarding.documents) {
             const previous = documentMap.get(next.key);
@@ -314,7 +321,13 @@ export const useFieldly = create<State>()(
             payoutStatus: existing.onboarding.payoutStatus,
             accountCreatedAt: existing.onboarding.accountCreatedAt,
           };
+          const incomingServiceIds = new Set(incoming.onboarding.services.map((service) => service.serviceId));
+          const removedServices = existing.onboarding.services
+            .filter((service) => !incomingServiceIds.has(service.serviceId))
+            .map((service) => service.serviceId);
           const services = Array.from(new Set([...existing.services, ...incoming.services]));
+          const serviceAvailability = { ...(existing.serviceAvailability ?? {}), ...(incoming.serviceAvailability ?? {}) };
+          for (const serviceId of removedServices) serviceAvailability[serviceId] = false;
           return {
             extras: [
               ...s.extras.filter((p) => p.id !== incoming.id),
@@ -324,7 +337,7 @@ export const useFieldly = create<State>()(
                 services,
                 machines: Array.from(new Set([...existing.machines, ...incoming.machines])),
                 rates: { ...existing.rates, ...incoming.rates },
-                serviceAvailability: { ...(existing.serviceAvailability ?? {}), ...(incoming.serviceAvailability ?? {}) },
+                serviceAvailability,
                 online: existing.online,
                 approved: existing.approved,
                 verified: existing.verified,
