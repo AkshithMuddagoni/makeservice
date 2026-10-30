@@ -1,0 +1,287 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  getProviderDocumentRequirements,
+  isValidProviderOnboardingService,
+} from "./provider-onboarding.ts";
+
+const base = {
+  businessType: "PROPRIETORSHIP" as const,
+  state: "Telangana",
+  gstStatus: "NOT_REGISTERED" as const,
+  authorisedRepresentative: false,
+  services: [],
+  assets: [],
+};
+
+function keys(input: Parameters<typeof getProviderDocumentRequirements>[0]) {
+  return new Set(getProviderDocumentRequirements(input).map((item) => item.key));
+}
+
+test("borewell drilling adds Telangana WALTA rig proof and job-level site permission", () => {
+  const result = keys({
+    ...base,
+    services: [{ serviceId: "borewell", selectedTasks: ["New borewell drilling"] }],
+    assets: [{
+      serviceIds: ["borewell"],
+      ownership: "OWNED",
+      roadUse: "TRAILER_MOVED",
+      vehicleClass: "CONSTRUCTION_EQUIPMENT",
+      assetType: "Drilling rig",
+    }],
+  });
+
+  assert.equal(result.has("WALTA_FORM16"), true);
+  assert.equal(result.has("WALTA_ACKNOWLEDGEMENT"), true);
+  assert.equal(result.has("SITE_PERMISSION_JOB"), true);
+});
+
+test("a tractor-only service does not demand borewell WALTA paperwork", () => {
+  const result = keys({
+    ...base,
+    services: [{ serviceId: "tractor", selectedTasks: ["Ploughing"] }],
+    assets: [{
+      serviceIds: ["tractor"],
+      ownership: "OWNED",
+      roadUse: "PUBLIC_ROAD",
+      vehicleClass: "AGRICULTURAL",
+      assetType: "Agricultural tractor",
+    }],
+  });
+
+  assert.equal(result.has("WALTA_FORM16"), false);
+  assert.equal(result.has("SITE_PERMISSION_JOB"), false);
+  assert.equal(result.has("VEHICLE_RC"), true);
+  assert.equal(result.has("THIRD_PARTY_INSURANCE"), true);
+  assert.equal(result.has("OPERATOR_DL"), true);
+  assert.equal(result.has("FITNESS_CERTIFICATE"), false);
+  assert.equal(result.has("TRANSPORT_PERMIT"), false);
+});
+
+test("goods carriage road use adds conditional transport papers", () => {
+  const result = keys({
+    ...base,
+    services: [{ serviceId: "tipper", selectedTasks: ["Excavated soil movement"] }],
+    assets: [{
+      serviceIds: ["tipper"],
+      ownership: "OWNED",
+      roadUse: "COMMERCIAL_TRANSPORT",
+      vehicleClass: "TRANSPORT",
+      assetType: "Tipper truck",
+    }],
+  });
+
+  assert.equal(result.has("VEHICLE_RC"), true);
+  assert.equal(result.has("THIRD_PARTY_INSURANCE"), true);
+  assert.equal(result.has("FITNESS_CERTIFICATE"), true);
+  assert.equal(result.has("TRANSPORT_PERMIT"), true);
+  assert.equal(result.has("ROAD_TAX_RECEIPT"), true);
+});
+
+test("off-road construction machinery is not incorrectly asked for a road RC or goods permit", () => {
+  const result = keys({
+    ...base,
+    services: [{ serviceId: "jcb", selectedTasks: ["Foundation / basement excavation"] }],
+    assets: [{
+      serviceIds: ["jcb"],
+      ownership: "LEASED",
+      roadUse: "TRAILER_MOVED",
+      vehicleClass: "CONSTRUCTION_EQUIPMENT",
+      assetType: "Backhoe loader",
+    }],
+  });
+
+  assert.equal(result.has("VEHICLE_RC"), false);
+  assert.equal(result.has("TRANSPORT_PERMIT"), false);
+  assert.equal(result.has("ASSET_OWNER_NOC"), true);
+  assert.equal(result.has("ASSET_OWNERSHIP_PROOF"), true);
+});
+
+test("crane service requires machine load-chart, lifting inspection and operator evidence", () => {
+  const result = keys({
+    ...base,
+    services: [{ serviceId: "crane", selectedTasks: ["Loading and unloading"] }],
+    assets: [{
+      serviceIds: ["crane"],
+      ownership: "OWNED",
+      roadUse: "TRAILER_MOVED",
+      vehicleClass: "CONSTRUCTION_EQUIPMENT",
+      assetType: "Mobile crane",
+    }],
+  });
+
+  assert.equal(result.has("CRANE_LOAD_CHART"), true);
+  assert.equal(result.has("CRANE_INSPECTION"), true);
+  assert.equal(result.has("CRANE_OPERATOR_COMPETENCE"), true);
+  assert.equal(result.has("OPERATOR_ROSTER"), true);
+});
+
+test("potable tanker service requires water quality evidence and flags possible FSSAI classification", () => {
+  const result = keys({
+    ...base,
+    services: [{ serviceId: "tanker", selectedTasks: ["Potable / drinking water"] }],
+    assets: [{
+      serviceIds: ["tanker"],
+      ownership: "OWNED",
+      roadUse: "COMMERCIAL_TRANSPORT",
+      vehicleClass: "TRANSPORT",
+      assetType: "Water tanker truck",
+    }],
+  });
+
+  assert.equal(result.has("WATER_SOURCE_EVIDENCE"), true);
+  assert.equal(result.has("POTABLE_WATER_QUALITY"), true);
+  assert.equal(result.has("POTABLE_WATER_FBO_LICENSE"), true);
+});
+
+test("GST certificate is conditional and Udyam remains optional", () => {
+  const registered = getProviderDocumentRequirements({
+    ...base,
+    gstStatus: "REGISTERED",
+    services: [{ serviceId: "jcb", selectedTasks: ["Digging"] }],
+  });
+  const unregistered = getProviderDocumentRequirements({
+    ...base,
+    gstStatus: "NOT_REGISTERED",
+    services: [{ serviceId: "jcb", selectedTasks: ["Digging"] }],
+  });
+
+  assert.equal(registered.some((item) => item.key === "GST_CERTIFICATE" && item.requiredForApproval), true);
+  assert.equal(unregistered.some((item) => item.key === "GST_CERTIFICATE"), false);
+  assert.equal(registered.some((item) => item.key === "UDYAM_CERTIFICATE" && !item.requiredForApproval), true);
+});
+
+test("identity and operator roster are always routed through secure KYC, not preview uploads", () => {
+  const result = getProviderDocumentRequirements({
+    ...base,
+    services: [{ serviceId: "jcb", selectedTasks: ["Digging"] }],
+  });
+  assert.equal(result.find((item) => item.key === "OWNER_IDENTITY_KYC")?.secureOnly, true);
+  assert.equal(result.find((item) => item.key === "PAN_KYC")?.secureOnly, true);
+  assert.equal(result.find((item) => item.key === "OPERATOR_ROSTER")?.secureOnly, true);
+});
+
+test("service capability selection accepts only tasks from that service", () => {
+  assert.equal(isValidProviderOnboardingService({
+    serviceId: "borewell",
+    selectedTasks: ["New borewell drilling", "Flushing / cleaning"],
+  }), true);
+  assert.equal(isValidProviderOnboardingService({
+    serviceId: "borewell",
+    selectedTasks: ["Crane hire"],
+  }), false);
+  assert.equal(isValidProviderOnboardingService({
+    serviceId: "not-a-service",
+    selectedTasks: ["Anything"],
+  }), false);
+  assert.equal(isValidProviderOnboardingService({
+    serviceId: "tractor",
+    selectedTasks: [],
+  }), false);
+});
+
+
+test("borewell rig registration is state-aware outside Telangana", () => {
+  const result = keys({
+    ...base,
+    state: "Andhra Pradesh",
+    services: [{ serviceId: "borewell", selectedTasks: ["New borewell drilling"] }],
+    assets: [{
+      serviceIds: ["borewell"],
+      ownership: "OWNED",
+      roadUse: "TRAILER_MOVED",
+      vehicleClass: "CONSTRUCTION_EQUIPMENT",
+      assetType: "Drilling rig",
+    }],
+  });
+
+  assert.equal(result.has("WALTA_FORM16"), false);
+  assert.equal(result.has("STATE_GROUNDWATER_RIG_REVIEW"), true);
+});
+
+
+test("global, per-service and per-machine availability are independently enforced", async () => {
+  const { isAvailableForService, isEligible } = await import("./catalog.ts");
+  const provider = {
+    id: "provider_test",
+    phone: "9000000001",
+    name: "Test services",
+    city: "Warangal",
+    area: "Test yard",
+    state: "Telangana",
+    lat: 17.385,
+    lng: 78.4867,
+    services: ["tractor", "borewell"],
+    equipment: "Tractor and borewell rig",
+    machines: ["45 HP tractor", "Drilling rig"],
+    years: 5,
+    jobs: 0,
+    rating: 0,
+    reviewCount: 0,
+    replyMin: 10,
+    rates: {},
+    verified: { identity: false, equipment: false, insurance: false, walta: null },
+    approved: false,
+    online: true,
+    serviceAvailability: { tractor: true, borewell: true },
+    bio: "",
+    languages: ["Telugu"],
+    reviews: [],
+    onboarding: {
+      business: {
+        ownerFullName: "Test Owner",
+        legalName: "Test Owner",
+        tradeName: "Test services",
+        businessType: "PROPRIETORSHIP" as const,
+        address: "Test address",
+        district: "Warangal",
+        pincode: "506001",
+        state: "Telangana",
+        gstStatus: "NOT_REGISTERED" as const,
+        aggregateTurnoverBand: "UNDER_20_LAKH" as const,
+        udyamProvided: false,
+        authorisedRepresentative: false,
+        declarationAcceptedAt: 1,
+      },
+      businessStatus: "APPROVED" as const,
+      services: [
+        { serviceId: "tractor", selectedTasks: ["Ploughing"], specifications: {}, status: "APPROVED" as const, selectedDocumentKeys: [] },
+        { serviceId: "borewell", selectedTasks: ["New borewell drilling"], specifications: {}, status: "APPROVED" as const, selectedDocumentKeys: [] },
+      ],
+      assets: [
+        { id: "tractor_1", serviceIds: ["tractor"], assetType: "Agricultural tractor", make: "Mahindra", model: "575", ownership: "OWNED" as const, roadUse: "PUBLIC_ROAD" as const, vehicleClass: "AGRICULTURAL", registrationLast4: "1234", specifications: {}, selectedDocumentKeys: [], status: "APPROVED" as const, available: true },
+        { id: "rig_1", serviceIds: ["borewell"], assetType: "Drilling rig", make: "Rig maker", model: "R1", ownership: "OWNED" as const, roadUse: "TRAILER_MOVED" as const, vehicleClass: "CONSTRUCTION_EQUIPMENT", specifications: {}, selectedDocumentKeys: [], status: "APPROVED" as const, available: true },
+      ],
+      documents: [],
+      payoutStatus: "NOT_STARTED" as const,
+      accountCreatedAt: 1,
+    },
+  };
+
+  assert.equal(isEligible(provider, "tractor"), true);
+  assert.equal(isEligible(provider, "borewell"), true);
+  assert.equal(isAvailableForService(provider, "tractor"), true);
+  assert.equal(isAvailableForService(provider, "borewell"), true);
+
+  const borewellPaused = {
+    ...provider,
+    serviceAvailability: { tractor: true, borewell: false },
+  };
+  assert.equal(isAvailableForService(borewellPaused, "tractor"), true);
+  assert.equal(isAvailableForService(borewellPaused, "borewell"), false);
+
+  const tractorMachinePaused = {
+    ...provider,
+    onboarding: {
+      ...provider.onboarding,
+      assets: provider.onboarding.assets.map((asset) => asset.id === "tractor_1" ? { ...asset, available: false } : asset),
+    },
+  };
+  assert.equal(isEligible(tractorMachinePaused, "tractor"), true);
+  assert.equal(isAvailableForService(tractorMachinePaused, "tractor"), false);
+  assert.equal(isAvailableForService(tractorMachinePaused, "borewell"), true);
+
+  assert.equal(isAvailableForService({ ...provider, online: false }, "tractor"), false);
+  assert.equal(isEligible({ ...provider, onboarding: { ...provider.onboarding, payoutStatus: "NOT_STARTED" } }, "tractor"), true);
+});

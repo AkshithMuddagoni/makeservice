@@ -126,7 +126,18 @@ export const SERVICES: ServiceDef[] = [
         label: "What work is needed?",
         type: "select",
         required: true,
-        options: ["Digging", "Earthwork", "Site clearing", "Loading"],
+        options: [
+          "Foundation / basement excavation",
+          "Trenching / drainage",
+          "Site clearing",
+          "Land levelling / grading",
+          "Pond / canal excavation",
+          "Loading soil / material",
+          "Backfilling / compaction",
+          "Breaker / demolition attachment work",
+          "Auger / post-hole drilling",
+          "Other — describe in notes",
+        ],
       },
       {
         key: "hours",
@@ -168,7 +179,7 @@ export const SERVICES: ServiceDef[] = [
         label: "What are you lifting?",
         type: "select",
         required: true,
-        options: ["Material", "Slab or tank", "Equipment", "Other"],
+        options: ["Construction material", "Slab / roof unit", "Water tank", "Generator / machinery", "Steel / structural item", "Other"],
       },
       {
         key: "load_tons",
@@ -218,7 +229,16 @@ export const SERVICES: ServiceDef[] = [
         label: "Work",
         type: "select",
         required: true,
-        options: ["Ploughing", "Rotavator", "Hauling", "Sowing support"],
+        options: [
+          "Ploughing",
+          "Rotavator",
+          "Cultivator / harrowing",
+          "Seeding / sowing",
+          "Inter-cultivation / weeding",
+          "Land levelling",
+          "Trailer hauling",
+          "Other — describe in notes",
+        ],
       },
       {
         key: "acres",
@@ -273,7 +293,7 @@ export const SERVICES: ServiceDef[] = [
         label: "Water is for",
         type: "select",
         required: true,
-        options: ["Construction", "Farm", "Home storage", "Other"],
+        options: ["Construction / curing", "Agriculture / irrigation", "Domestic non-potable", "Drinking water", "Other"],
       },
       {
         key: "trips",
@@ -307,7 +327,7 @@ export const SERVICES: ServiceDef[] = [
         label: "Material",
         type: "select",
         required: true,
-        options: ["Soil", "Sand", "Gravel", "Debris", "Other"],
+        options: ["Soil", "Sand", "Gravel / aggregate", "Construction debris", "Regulated sand / mineral", "Other"],
       },
       {
         key: "loads",
@@ -321,7 +341,7 @@ export const SERVICES: ServiceDef[] = [
         label: "Haul distance",
         type: "select",
         required: true,
-        options: ["Under 10 km", "10–25 km", "25–50 km"],
+        options: ["Under 10 km", "10–25 km", "25–50 km", "Over 50 km — quote required"],
       },
       access,
       {
@@ -345,9 +365,18 @@ export const SERVICES: ServiceDef[] = [
       {
         key: "work",
         label: "What should happen in the field?",
-        type: "text",
+        type: "select",
         required: true,
-        placeholder: "Rotavator on 3 acres of wet soil",
+        options: [
+          "Combine harvesting",
+          "Reaping",
+          "Threshing",
+          "Power spraying",
+          "Seed drilling / planting",
+          "Baling / mulching",
+          "Straw management",
+          "Other — describe in notes",
+        ],
       },
       {
         key: "acres",
@@ -383,11 +412,18 @@ export const SERVICES: ServiceDef[] = [
     includes: ["Machine and operator", "Hours you confirm in chat"],
     fields: [
       {
+        key: "equipment_type",
+        label: "Equipment type",
+        type: "select",
+        required: true,
+        options: ["Concrete mixer", "Concrete pump", "Compactor / road roller", "Generator", "Material hoist", "Scaffolding / access", "Other site equipment"],
+      },
+      {
         key: "work_type",
-        label: "Site need",
+        label: "What work is needed at the site?",
         type: "text",
         required: true,
-        placeholder: "Breaker for a compound wall",
+        placeholder: "Concrete pumping for slab, 125 kVA generator for 2 days…",
       },
       {
         key: "hours",
@@ -876,8 +912,27 @@ export function getService(id: string | undefined) {
 }
 
 export function isEligible(provider: Provider, serviceId: string) {
-  if (!provider.approved || !provider.verified.identity || !provider.verified.equipment) return false;
   if (!provider.services.includes(serviceId)) return false;
+
+  // New profiles are approved independently per service and per physical asset.
+  // A business with a cleared tractor registration must not automatically
+  // expose a separate borewell rig that is still awaiting its WALTA review.
+  if (provider.onboarding) {
+    if (provider.onboarding.businessStatus !== "APPROVED") return false;
+    // Marketplace booking is not enabled until the approved payment provider
+    // has completed vendor KYC and confirmed that this provider can receive
+    // settlements. This avoids onboarding a bookable provider with no payout
+    // destination in the split-payment model.
+    const service = provider.onboarding.services.find((item) => item.serviceId === serviceId);
+    if (!service || service.status !== "APPROVED") return false;
+    const approvedAssetExists = provider.onboarding.assets.some(
+      (asset) => asset.serviceIds.includes(serviceId) && asset.status === "APPROVED",
+    );
+    return approvedAssetExists;
+  }
+
+  // Legacy seeded listings retain their original preview checks.
+  if (!provider.approved || !provider.verified.identity || !provider.verified.equipment) return false;
   if (serviceId === "borewell" && !provider.verified.walta) return false;
   return true;
 }
@@ -910,4 +965,30 @@ export function verificationLines(provider: Provider) {
     });
   }
   return lines;
+}
+
+/**
+ * Whether a customer may send a brand-new request to this provider/service.
+ * A global offline switch pauses all new requests; service toggles and active
+ * service-linked assets provide more granular control. Accepted jobs are not
+ * affected by these discovery switches.
+ */
+export function isServiceOperational(provider: Provider, serviceId: string): boolean {
+  if (!isEligible(provider, serviceId)) return false;
+  if (provider.serviceAvailability?.[serviceId] === false) return false;
+
+  if (provider.onboarding) {
+    return provider.onboarding.assets.some(
+      (asset) =>
+        asset.serviceIds.includes(serviceId) &&
+        asset.status === "APPROVED" &&
+        asset.available !== false,
+    );
+  }
+
+  return true;
+}
+
+export function isAvailableForService(provider: Provider, serviceId: string): boolean {
+  return provider.online && isServiceOperational(provider, serviceId);
 }

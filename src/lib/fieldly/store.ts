@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { useMemo } from "react";
-import { CATALOG_PROVIDERS, getService, isEligible } from "./catalog";
+import { CATALOG_PROVIDERS, getService, isAvailableForService, isEligible, isServiceOperational } from "./catalog";
 import { kmBetween, travelMinutes } from "./geo";
 import { priceJob } from "./pricing";
 import type {
@@ -82,6 +82,8 @@ type State = {
   providerById: (id: string) => Provider | undefined
   isOnline: (id: string) => boolean
   setOnline: (id: string, online: boolean) => void
+  setServiceAvailability: (id: string, serviceId: string, available: boolean) => Result
+  setAssetAvailability: (id: string, assetId: string, available: boolean) => Result
   addProvider: (provider: Provider) => void
   createRequest: (input: {
     serviceId: string
@@ -175,12 +177,185 @@ export const useFieldly = create<State>()(
         if (id in map) return map[id];
         return get().providerById(id)?.online ?? false;
       },
-      setOnline: (id, online) =>
+      setOnline: (id, online) => {
+        const session = get().session;
+        if (session?.role !== "provider" || session.providerId !== id) return;
+        const provider = get().providerById(id);
+        if (!provider) return;
+        if (online) {
+          const canOffer = provider.services.some((serviceId) =>
+            isEligible(provider, serviceId) &&
+            provider.serviceAvailability?.[serviceId] !== false &&
+            (!provider.onboarding || provider.onboarding.assets.some(
+              (asset) => asset.serviceIds.includes(serviceId) && asset.status === "APPROVED" && asset.available !== false,
+            )),
+          );
+          if (!canOffer) return;
+        }
         set((s) => ({
           availability: { ...s.availability, [id]: online },
           extras: s.extras.map((p) => (p.id === id ? { ...p, online } : p)),
-        })),
-      addProvider: (provider) => set((s) => ({ extras: [...s.extras.filter((p) => p.id !== provider.id), provider] })),
+        }));
+      },
+      setServiceAvailability: (id, serviceId, available) => {
+        const session = get().session;
+        if (session?.role !== "provider" || session.providerId !== id) {
+          return { ok: false, error: "Only this provider account can change its service availability." };
+        }
+        const provider = get().providerById(id);
+        if (!provider || !provider.services.includes(serviceId)) {
+          return { ok: false, error: "This service is not registered on the business account." };
+        }
+        if (available && !isEligible(provider, serviceId)) {
+          return { ok: false, error: "This service is not approved yet. Complete its business, service and machine checks first." };
+        }
+        if (available && provider.onboarding && !provider.onboarding.assets.some(
+          (asset) => asset.serviceIds.includes(serviceId) && asset.status === "APPROVED" && asset.available !== false,
+        )) {
+          return { ok: false, error: "No approved available machine is linked to this service." };
+        }
+        set((s) => {
+          const updated: Provider = {
+            ...provider,
+            online: Object.prototype.hasOwnProperty.call(s.availability, id) ? s.availability[id] : provider.online,
+            serviceAvailability: { ...(provider.serviceAvailability ?? {}), [serviceId]: available },
+          };
+          return { extras: [...s.extras.filter((p) => p.id !== id), updated] };
+        });
+        return { ok: true };
+      },
+      setAssetAvailability: (id, assetId, available) => {
+        const session = get().session;
+        if (session?.role !== "provider" || session.providerId !== id) {
+          return { ok: false, error: "Only this provider account can change its machine availability." };
+        }
+        const provider = get().providerById(id);
+        const asset = provider?.onboarding?.assets.find((item) => item.id === assetId);
+        if (!provider || !asset) return { ok: false, error: "Machine not found." };
+        if (available && asset.status !== "APPROVED") {
+          return { ok: false, error: "This machine is not approved for customer bookings." };
+        }
+        set((s) => ({
+          extras: s.extras.map((p) => p.id === id && p.onboarding
+            ? {
+                ...p,
+                onboarding: {
+                  ...p.onboarding,
+                  assets: p.onboarding.assets.map((item) => item.id === assetId ? { ...item, available } : item),
+                },
+              }
+            : p),
+        }));
+        return { ok: true };
+      },
+      addProvider: (incoming) =>
+        set((s) => {
+          const existing = s.extras.find((p) => p.id === incoming.id);
+          if (!existing?.onboarding || !incoming.onboarding) {
+            return { extras: [...s.extras.filter((p) => p.id !== incoming.id), incoming] };
+          }
+
+          const sameBusiness = (a: NonNullable<Provider["onboarding"]>["business"], b: NonNullable<Provider["onboarding"]>["business"]) =>
+            a.ownerFullName === b.ownerFullName &&
+            a.legalName === b.legalName &&
+            a.tradeName === b.tradeName &&
+            a.businessType === b.businessType &&
+            a.address === b.address &&
+            a.district === b.district &&
+            a.pincode === b.pincode &&
+            a.state === b.state &&
+            a.gstStatus === b.gstStatus &&
+            a.aggregateTurnoverBand === b.aggregateTurnoverBand &&
+            a.udyamProvided === b.udyamProvided &&
+            a.authorisedRepresentative === b.authorisedRepresentative;
+
+          const servicesById = new Map(existing.onboarding.services.map((service) => [service.serviceId, service]));
+          for (const next of incoming.onboarding.services) {
+            const previous = servicesById.get(next.serviceId);
+            const unchanged = previous &&
+              JSON.stringify(previous.selectedTasks) === JSON.stringify(next.selectedTasks) &&
+              JSON.stringify(previous.specifications) === JSON.stringify(next.specifications);
+            servicesById.set(next.serviceId, unchanged
+              ? { ...next, status: previous.status, reviewerNote: previous.reviewerNote, submittedAt: previous.submittedAt }
+              : next);
+          }
+
+          const assetsById = new Map(existing.onboarding.assets.map((asset) => [asset.id, asset]));
+          for (const next of incoming.onboarding.assets) {
+            const previous = assetsById.get(next.id);
+            const unchanged = previous &&
+              previous.assetType === next.assetType &&
+              previous.make === next.make &&
+              previous.model === next.model &&
+              previous.yearOfManufacture === next.yearOfManufacture &&
+              previous.ownership === next.ownership &&
+              previous.roadUse === next.roadUse &&
+              previous.vehicleClass === next.vehicleClass &&
+              previous.registrationLast4 === next.registrationLast4 &&
+              previous.serialLast4 === next.serialLast4 &&
+              JSON.stringify(previous.serviceIds) === JSON.stringify(next.serviceIds) &&
+              JSON.stringify(previous.specifications) === JSON.stringify(next.specifications);
+            assetsById.set(next.id, unchanged
+              ? { ...next, status: previous.status, available: previous.available }
+              : next);
+          }
+
+          const incomingAssetIds = new Set(incoming.onboarding.assets.map((asset) => asset.id));
+          for (const previous of existing.onboarding.assets) {
+            if (!incomingAssetIds.has(previous.id)) {
+              assetsById.set(previous.id, { ...previous, status: "SUSPENDED", available: false });
+            }
+          }
+
+          const documentMap = new Map(existing.onboarding.documents.map((document) => [document.key, document]));
+          for (const next of incoming.onboarding.documents) {
+            const previous = documentMap.get(next.key);
+            documentMap.set(next.key, previous
+              ? { ...next, selectedInPreview: previous.selectedInPreview || next.selectedInPreview }
+              : next);
+          }
+
+          const businessUnchanged = sameBusiness(existing.onboarding.business, incoming.onboarding.business);
+          const onboarding = {
+            ...incoming.onboarding,
+            business: incoming.onboarding.business,
+            businessStatus: businessUnchanged ? existing.onboarding.businessStatus : "SUBMITTED" as const,
+            services: [...servicesById.values()],
+            assets: [...assetsById.values()],
+            documents: [...documentMap.values()],
+            payoutStatus: existing.onboarding.payoutStatus,
+            accountCreatedAt: existing.onboarding.accountCreatedAt,
+          };
+          const incomingServiceIds = new Set(incoming.onboarding.services.map((service) => service.serviceId));
+          const removedServices = existing.onboarding.services
+            .filter((service) => !incomingServiceIds.has(service.serviceId))
+            .map((service) => service.serviceId);
+          const services = Array.from(new Set([...existing.services, ...incoming.services]));
+          const serviceAvailability = { ...(existing.serviceAvailability ?? {}), ...(incoming.serviceAvailability ?? {}) };
+          for (const serviceId of removedServices) serviceAvailability[serviceId] = false;
+          return {
+            extras: [
+              ...s.extras.filter((p) => p.id !== incoming.id),
+              {
+                ...existing,
+                ...incoming,
+                services,
+                machines: Array.from(new Set([...existing.machines, ...incoming.machines])),
+                rates: { ...existing.rates, ...incoming.rates },
+                serviceAvailability,
+                online: existing.online,
+                approved: existing.approved,
+                verified: existing.verified,
+                onboarding,
+                equipment: Array.from(new Set([...existing.machines, ...incoming.machines])).join(", "),
+                jobs: existing.jobs,
+                rating: existing.rating,
+                reviewCount: existing.reviewCount,
+                reviews: existing.reviews,
+              },
+            ],
+          };
+        }),
       createRequest: ({ serviceId, providerId, detailsConsent }) => {
         const { site, draft, session } = get();
         const who = session?.role === "customer" ? session : null;
@@ -191,8 +366,8 @@ export const useFieldly = create<State>()(
         if (!service) return { ok: false, error: "Unknown service." };
         if (!providerId) return { ok: false, error: "Choose a provider before sending a request." };
         const provider = get().providerById(providerId);
-        if (!provider || !isEligible(provider, serviceId) || !get().isOnline(providerId)) {
-          return { ok: false, error: "This provider is no longer available or eligible. Choose another provider." };
+        if (!provider || !isAvailableForService({ ...provider, online: get().isOnline(providerId) }, serviceId)) {
+          return { ok: false, error: "This provider is no longer available for this service. Choose another provider." };
         }
         const km = kmBetween(site, provider);
         if (km > service.radiusKm) {
@@ -243,8 +418,8 @@ export const useFieldly = create<State>()(
         if (request.declinedProviderIds?.includes(provider.id)) {
           return { ok: false, error: "You already declined this request." };
         }
-        if (!isEligible(provider, request.serviceId)) {
-          return { ok: false, error: "This machine is not eligible for the service. Check papers and WALTA if it is a rig." };
+        if (!isServiceOperational(provider, request.serviceId)) {
+          return { ok: false, error: "This service or its machines are paused or not approved. Decline the request or reactivate the service after checks." };
         }
         if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "Enter a price greater than zero." };
         if (note.trim().length < 8) {
@@ -585,10 +760,30 @@ export const useFieldly = create<State>()(
         }
         if (booking.review) return { ok: false, error: "This booking already has a review." };
         if (stars < 1 || stars > 5) return { ok: false, error: "Pick 1 to 5 stars." };
+        const provider = get().providerById(booking.providerId);
+        if (!provider) return { ok: false, error: "The assigned provider profile is unavailable." };
+        const now = Date.now();
+        const nextCount = provider.reviewCount + 1;
+        const nextRating = Number((((provider.rating * provider.reviewCount) + stars) / nextCount).toFixed(1));
+        const nextReview = {
+          name: booking.customerName,
+          stars,
+          text: text.trim() || "Rated without a comment.",
+          ago: "Just now",
+        };
         set((s) => ({
           bookings: s.bookings.map((b) =>
-            b.id === bookingId ? { ...b, review: { stars, text: text.trim(), at: Date.now() } } : b,
+            b.id === bookingId ? { ...b, review: { stars, text: text.trim(), at: now } } : b,
           ),
+          extras: [
+            ...s.extras.filter((p) => p.id !== provider.id),
+            {
+              ...provider,
+              rating: nextRating,
+              reviewCount: nextCount,
+              reviews: [nextReview, ...provider.reviews],
+            },
+          ],
         }));
         return { ok: true };
       },

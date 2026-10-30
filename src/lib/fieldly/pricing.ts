@@ -87,7 +87,7 @@ export function priceJob(
   }
 
   if (serviceId === "tractor" || serviceId === "agri") {
-    if (req.work === "Hauling") {
+    if (req.work === "Hauling" || req.work === "Trailer hauling") {
       const hours = num(req.hours, 3);
       const amount = Math.round(hours * rate.rate * 0.85);
       return {
@@ -124,6 +124,14 @@ export function priceJob(
   if (serviceId === "tipper") {
     const loads = num(req.loads, 1);
     const band = req.distance_band || "Under 10 km";
+    if (band.startsWith("Over 50 km")) {
+      return {
+        amount: 0,
+        summary: "Provider quote required",
+        includes,
+        note: "Long-haul transport needs a provider quote covering the lawful route, return journey, tolls, loading and unloading before acceptance.",
+      };
+    }
     const bandMul = band === "25–50 km" ? 1.8 : band === "10–25 km" ? 1.35 : 1;
     const amount = Math.round(loads * rate.rate * bandMul);
     return {
