@@ -117,6 +117,9 @@ function DeskHome({ providerId }: { providerId: string }) {
 
   const mine = bookings.filter((b) => b.providerId === providerId);
   const earned = mine.filter((b) => b.status === "PAID").reduce((sum, b) => sum + b.amount, 0);
+  const canOfferApprovedService = provider?.onboarding
+    ? provider.onboarding.services.some((service) => isEligible(provider, service.serviceId))
+    : Boolean(provider?.approved);
 
   if (!provider) return <p className="px-4 py-10">Operator missing.</p>;
 
@@ -133,19 +136,43 @@ function DeskHome({ providerId }: { providerId: string }) {
         <button
           type="button"
           onClick={() => setOnline(provider.id, !online)}
+          disabled={!canOfferApprovedService}
           className={
-            online
-              ? "h-11 rounded-full bg-field px-4 text-sm font-semibold text-on-field"
-              : "h-11 rounded-full bg-ink px-4 text-sm font-semibold text-on-ink"
+            !canOfferApprovedService
+              ? "h-11 cursor-not-allowed rounded-full bg-line px-4 text-sm font-semibold text-muted"
+              : online
+                ? "h-11 rounded-full bg-field px-4 text-sm font-semibold text-on-field"
+                : "h-11 rounded-full bg-ink px-4 text-sm font-semibold text-on-ink"
           }
         >
-          {online ? "Online" : "Offline"}
+          {!canOfferApprovedService ? "Not approved yet" : online ? "Online" : "Offline"}
         </button>
       </div>
-      {!provider.approved && (
+      {provider.onboarding ? (
+        <section className="mt-4 grid gap-3 rounded-2xl border border-line bg-card p-4">
+          <div>
+            <p className="font-semibold">Business profile · {provider.onboarding.businessStatus.replaceAll("_", " ")}</p>
+            <p className="mt-1 text-xs text-muted">
+              {provider.onboarding.business.tradeName} · {provider.onboarding.business.businessType.replaceAll("_", " ")}
+            </p>
+          </div>
+          <div className="grid gap-2">
+            {provider.onboarding.services.map((service) => (
+              <div key={service.serviceId} className="flex items-center justify-between gap-3 rounded-xl bg-paper p-3">
+                <span className="text-sm font-semibold">{getService(service.serviceId)?.name ?? service.serviceId}</span>
+                <span className="text-xs font-semibold text-muted">{service.status.replaceAll("_", " ")}</span>
+              </div>
+            ))}
+          </div>
+          <div className="grid gap-1 text-xs text-muted">
+            <p>{provider.onboarding.assets.length} machine(s) submitted for review.</p>
+            <p>Payout setup: {provider.onboarding.payoutStatus.replaceAll("_", " ")}.</p>
+            <p>Customers can book a service only after its business, service and linked asset checks are approved.</p>
+          </div>
+        </section>
+      ) : !provider.approved && (
         <p className="mt-4 rounded-2xl bg-gold-soft p-4 text-sm text-gold">
-          Papers are still in review, so customers cannot see you. Approve for this preview from the join confirmation,
-          or check the listing page.
+          Papers are still in review, so customers cannot see this listing.
         </p>
       )}
       {!isEligible(provider, provider.services[0] ?? "") && provider.approved && (
