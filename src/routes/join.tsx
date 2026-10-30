@@ -34,6 +34,7 @@ const phoneSchema = z.string().regex(/^[6-9]\d{9}$/);
 const initialService = "jcb";
 
 type AssetDraft = {
+  localId?: string;
   serviceIds: string[];
   assetType: string;
   make: string;
@@ -235,6 +236,7 @@ function JoinPage() {
       ...current,
       {
         ...assetDraft,
+        localId: "asset_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 7),
         registration: normalized.slice(-4),
         serial: assetDraft.serial.replace(/\s+/g, "").toUpperCase().slice(-4),
       },
@@ -356,7 +358,7 @@ function JoinPage() {
     }));
 
     const providerAssets: ProviderAsset[] = completedAssets.map((asset, index) => ({
-      id: providerId + "_asset_" + (index + 1),
+      id: providerId + "_" + (asset.localId ?? "asset_" + (index + 1)),
       serviceIds: asset.serviceIds,
       assetType: asset.assetType,
       make: asset.make.trim(),
