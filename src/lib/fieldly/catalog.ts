@@ -937,8 +937,8 @@ export function verificationLines(provider: Provider) {
  * service-linked assets provide more granular control. Accepted jobs are not
  * affected by these discovery switches.
  */
-export function isAvailableForService(provider: Provider, serviceId: string): boolean {
-  if (!provider.online || !isEligible(provider, serviceId)) return false;
+export function isServiceOperational(provider: Provider, serviceId: string): boolean {
+  if (!isEligible(provider, serviceId)) return false;
   if (provider.serviceAvailability?.[serviceId] === false) return false;
 
   if (provider.onboarding) {
@@ -951,4 +951,8 @@ export function isAvailableForService(provider: Provider, serviceId: string): bo
   }
 
   return true;
+}
+
+export function isAvailableForService(provider: Provider, serviceId: string): boolean {
+  return provider.online && isServiceOperational(provider, serviceId);
 }
