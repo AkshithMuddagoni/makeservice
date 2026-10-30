@@ -47,9 +47,9 @@ type AssetDraft = {
   specifications: Record<string, string>;
 };
 
-const emptyAsset = (): AssetDraft => ({
-  serviceIds: [initialService],
-  assetType: SERVICE_ONBOARDING[initialService].assetTypes[0],
+const emptyAsset = (serviceId: string = initialService): AssetDraft => ({
+  serviceIds: [serviceId],
+  assetType: SERVICE_ONBOARDING[serviceId].assetTypes[0],
   make: "",
   model: "",
   year: "",
@@ -89,6 +89,7 @@ function JoinPage() {
   const [district, setDistrict] = useState("");
   const [pincode, setPincode] = useState("");
   const [gstStatus, setGstStatus] = useState<ProviderBusinessProfile["gstStatus"]>("NOT_SURE");
+  const [aggregateTurnoverBand, setAggregateTurnoverBand] = useState<ProviderBusinessProfile["aggregateTurnoverBand"]>("NOT_SURE");
   const [authorisedRepresentative, setAuthorisedRepresentative] = useState(false);
   const [udyamProvided, setUdyamProvided] = useState(false);
   const [years, setYears] = useState("1");
@@ -160,14 +161,27 @@ function JoinPage() {
   }
 
   function toggleService(serviceId: string) {
-    setServiceTasks((current) => {
-      const next = { ...current };
-      if (next[serviceId]) {
-        delete next[serviceId];
-      } else {
-        next[serviceId] = [];
-      }
-      return next;
+    const next = { ...serviceTasks };
+    if (next[serviceId]) {
+      delete next[serviceId];
+    } else {
+      next[serviceId] = [];
+    }
+    const nextServices = Object.keys(next);
+    setServiceTasks(next);
+    setAssets((current) => current.map((asset) => ({
+      ...asset,
+      serviceIds: asset.serviceIds.filter((id) => nextServices.includes(id)),
+    })).filter((asset) => asset.serviceIds.length > 0));
+    setAssetDraft((current) => {
+      const linked = current.serviceIds.filter((id) => nextServices.includes(id));
+      const serviceIds = linked.length ? linked : [nextServices[0] ?? initialService];
+      const availableTypes = Array.from(new Set(serviceIds.flatMap((id) => SERVICE_ONBOARDING[id]?.assetTypes ?? [])));
+      return {
+        ...current,
+        serviceIds,
+        assetType: availableTypes.includes(current.assetType) ? current.assetType : availableTypes[0] ?? current.assetType,
+      };
     });
   }
 
@@ -209,7 +223,7 @@ function JoinPage() {
         serial: assetDraft.serial.replace(/\s+/g, "").toUpperCase().slice(-4),
       },
     ]);
-    setAssetDraft(emptyAsset());
+    setAssetDraft(emptyAsset(selectedServices[0] ?? initialService));
     toast.success("Machine added to this registration.");
   }
 
@@ -293,6 +307,7 @@ function JoinPage() {
       pincode,
       state: site?.state || "Telangana",
       gstStatus,
+      aggregateTurnoverBand,
       udyamProvided,
       authorisedRepresentative,
       declarationAcceptedAt: now,
@@ -469,6 +484,14 @@ function JoinPage() {
               <option value="NOT_REGISTERED">Not registered — tax eligibility must be checked</option>
               <option value="NOT_SURE">Not sure — request tax review</option>
             </select>
+          </Field>
+          <Field label="Approximate all-India aggregate turnover from all business activities">
+            <select value={aggregateTurnoverBand} onChange={(e) => setAggregateTurnoverBand(e.target.value as ProviderBusinessProfile["aggregateTurnoverBand"])} className={controlClass}>
+              <option value="UNDER_20_LAKH">Below ₹20 lakh</option>
+              <option value="20_LAKH_OR_MORE">₹20 lakh or more</option>
+              <option value="NOT_SURE">Not sure — request tax review</option>
+            </select>
+            <span className="text-xs leading-5 text-muted">This is a tax-review declaration, not a final GST eligibility decision. Aggregate turnover, inter-state supply, notified services and the platform's tax role must be checked by Fieldly's CA.</span>
           </Field>
           <label className="flex items-start gap-3 text-sm">
             <input type="checkbox" checked={udyamProvided} onChange={(e) => setUdyamProvided(e.target.checked)} className="mt-1 size-4" />
@@ -752,7 +775,7 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle: string }
   return <div><h2 className="font-display text-xl font-bold">{title}</h2><p className="mt-1 text-sm leading-5 text-muted">{subtitle}</p></div>;
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return <label className="grid min-w-0 gap-1.5"><span className="text-sm font-semibold">{label}</span>{children}{hint && <span className="text-xs leading-5 text-muted">{hint}</span>}</label>;
 }
 
