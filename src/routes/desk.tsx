@@ -18,8 +18,8 @@ export const Route = createFileRoute("/desk")({ component: DeskPage });
 
 const phoneSchema = z.string().regex(/^[6-9]\d{9}$/);
 type Tab = "overview" | "requests" | "jobs" | "fleet" | "earnings" | "business";
-type JobFilter = "active" | "history" | "disputes";
-const ACTIVE = ["CONFIRMED", "ON_THE_WAY", "ARRIVED", "SERVICE_STARTED", "SERVICE_COMPLETED"];
+type JobFilter = "active" | "awaiting_payment" | "history" | "disputes";
+const ACTIVE = ["CONFIRMED", "ON_THE_WAY", "ARRIVED", "SERVICE_STARTED"];
 
 function DeskPage() {
   const lang = useFieldly((s) => s.lang);
@@ -94,6 +94,7 @@ function DeskHome({ providerId }: { providerId: string }) {
 
   const mine = bookings.filter((b) => b.providerId === providerId);
   const activeJobs = mine.filter((b) => ACTIVE.includes(b.status));
+  const awaitingPaymentJobs = mine.filter((b) => b.status === "SERVICE_COMPLETED");
   const historyJobs = mine.filter((b) => b.status === "PAID" || b.status === "CANCELLED");
   const disputes = mine.filter((b) => b.status === "DISPUTED");
   const customerPaid = mine.filter((b) => b.status === "PAID").reduce((sum, b) => sum + b.amount, 0);
@@ -161,8 +162,8 @@ function DeskHome({ providerId }: { providerId: string }) {
 
       <section className="mt-5 grid grid-cols-2 gap-2 lg:grid-cols-4">
         <Metric icon={ClipboardList} label="Open requests" value={String(openRequests.length)} note="Assigned to registered services" />
-        <Metric icon={BriefcaseBusiness} label="Active bookings" value={String(activeJobs.length)} note="Includes work awaiting payment" />
-        <Metric icon={CheckCircle2} label="Completed jobs" value={String(mine.filter((b) => b.status === "SERVICE_COMPLETED" || b.status === "PAID").length)} note="Marked complete or paid" />
+        <Metric icon={BriefcaseBusiness} label="In-progress bookings" value={String(activeJobs.length)} note="Confirmed, travel, arrived or working" />
+        <Metric icon={CheckCircle2} label="Completed · awaiting payment" value={String(awaitingPaymentJobs.length)} note="Work done; customer payment pending" />
         <Metric icon={Banknote} label="Customer-marked paid" value={inr(customerPaid)} note="Preview record · not a payout" />
       </section>
       <section className="mt-3 grid gap-3 rounded-2xl border border-line bg-card p-4 sm:grid-cols-[auto_1fr] sm:items-center">
@@ -216,7 +217,8 @@ function DeskHome({ providerId }: { providerId: string }) {
           </section>
           <section className="rounded-3xl border border-line bg-card p-4 sm:p-5">
             <div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold">Work queue</h2><CalendarClock className="size-5 text-muted" /></div>
-            {activeJobs.length ? <div className="mt-3 grid gap-2">{activeJobs.slice(0, 4).map((b) => <JobRow key={b.id} booking={b} />)}<button className="text-left text-sm font-semibold underline" onClick={() => { setTab("jobs"); setJobFilter("active"); }}>View all bookings</button></div> : <Empty icon={BriefcaseBusiness} title="No active bookings" detail="Accepted jobs and work awaiting customer payment appear here." />}
+            {activeJobs.length ? <div className="mt-3 grid gap-2">{activeJobs.slice(0, 3).map((b) => <JobRow key={b.id} booking={b} />)}<button className="text-left text-sm font-semibold underline" onClick={() => { setTab("jobs"); setJobFilter("active"); }}>View in-progress bookings</button></div> : <Empty icon={BriefcaseBusiness} title="No in-progress bookings" detail="Accepted jobs that haven't been completed appear here." />}
+            {awaitingPaymentJobs.length > 0 && <div className="mt-4 border-t border-line pt-4"><p className="text-sm font-semibold">Completed · customer payment pending · {awaitingPaymentJobs.length}</p>{awaitingPaymentJobs.slice(0, 3).map((b) => <div key={b.id} className="mt-2"><JobRow booking={b} /></div>)}<button className="mt-2 text-sm font-semibold underline" onClick={() => { setTab("jobs"); setJobFilter("awaiting_payment"); }}>View completed jobs awaiting payment</button></div>}
             <div className="mt-4 border-t border-line pt-4"><p className="text-sm font-semibold">Open requests · {openRequests.length}</p>{openRequests.slice(0, 3).map(({ request }) => <p key={request.id} className="mt-2 text-sm text-muted">{getService(request.serviceId)?.name} · {request.site.area} · {request.whenLabel}</p>)}{openRequests.length > 0 && <button onClick={() => setTab("requests")} className="mt-3 text-sm font-semibold underline">Respond to requests</button>}</div>
           </section>
           <section className="rounded-3xl border border-line bg-card p-4 sm:p-5 lg:col-span-2">
@@ -240,9 +242,10 @@ function DeskHome({ providerId }: { providerId: string }) {
 
       {tab === "jobs" && (
         <section className="mt-4">
-          <div className="flex flex-wrap gap-2">{([["active", "Active · " + activeJobs.length], ["history", "History · " + historyJobs.length], ["disputes", "Disputes · " + disputes.length]] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setJobFilter(key)} className={cn("rounded-xl px-3 py-2 text-sm font-semibold", jobFilter === key ? "bg-ink text-on-ink" : "border border-line bg-card")}>{label}</button>)}</div>
+          <div className="flex flex-wrap gap-2">{([["active", "In progress · " + activeJobs.length], ["awaiting_payment", "Awaiting payment · " + awaitingPaymentJobs.length], ["history", "History · " + historyJobs.length], ["disputes", "Disputes · " + disputes.length]] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setJobFilter(key)} className={cn("rounded-xl px-3 py-2 text-sm font-semibold", jobFilter === key ? "bg-ink text-on-ink" : "border border-line bg-card")}>{label}</button>)}</div>
           <div className="mt-3 grid gap-2">
-            {jobFilter === "active" && (activeJobs.length ? activeJobs.map((b) => <JobRow key={b.id} booking={b} />) : <Empty icon={BriefcaseBusiness} title="No active bookings" detail="Accepted jobs, work in progress and completed jobs awaiting payment show here." />)}
+            {jobFilter === "active" && (activeJobs.length ? activeJobs.map((b) => <JobRow key={b.id} booking={b} />) : <Empty icon={BriefcaseBusiness} title="No in-progress bookings" detail="Confirmed jobs, travel, arrival and work in progress show here." />)}
+            {jobFilter === "awaiting_payment" && (awaitingPaymentJobs.length ? awaitingPaymentJobs.map((b) => <JobRow key={b.id} booking={b} />) : <Empty icon={Banknote} title="No completed jobs awaiting payment" detail="A completed service appears here until the customer records payment." />)}
             {jobFilter === "history" && (historyJobs.length ? historyJobs.map((b) => <JobRow key={b.id} booking={b} />) : <Empty icon={History} title="No booking history yet" detail="Paid and cancelled bookings appear here." />)}
             {jobFilter === "disputes" && (disputes.length ? disputes.map((b) => <JobRow key={b.id} booking={b} />) : <Empty icon={LifeBuoy} title="No disputed bookings" detail="Bookings that need reviewer attention appear here." />)}
           </div>
@@ -261,7 +264,7 @@ function DeskHome({ providerId }: { providerId: string }) {
       {tab === "earnings" && (
         <section className="mt-4 grid gap-4">
           <div className="rounded-2xl border border-gold/30 bg-gold-soft p-4 text-xs leading-5 text-gold">Preview accounting only. “Customer-marked paid” means the customer used the local preview control; it is not gateway-confirmed money, provider payout, bank settlement or a tax statement. Cashfree and real payout processing are deferred.</div>
-          <div className="grid gap-2 sm:grid-cols-3"><MoneyMetric label="Customer-marked paid" amount={customerPaid} detail={mine.filter((b) => b.status === "PAID").length + " booking(s)"} /><MoneyMetric label="Completed · awaiting customer payment" amount={awaitingPayment} detail={mine.filter((b) => b.status === "SERVICE_COMPLETED").length + " booking(s)"} /><MoneyMetric label="Quoted value of open work" amount={mine.filter((b) => ACTIVE.includes(b.status)).reduce((sum, b) => sum + b.amount, 0)} detail="Not money received" /></div>
+          <div className="grid gap-2 sm:grid-cols-3"><MoneyMetric label="Customer-marked paid" amount={customerPaid} detail={mine.filter((b) => b.status === "PAID").length + " booking(s)"} /><MoneyMetric label="Completed · awaiting customer payment" amount={awaitingPayment} detail={mine.filter((b) => b.status === "SERVICE_COMPLETED").length + " booking(s)"} /><MoneyMetric label="Active booked value" amount={mine.filter((b) => ACTIVE.includes(b.status)).reduce((sum, b) => sum + b.amount, 0)} detail="Not money received" /></div>
           <section className="rounded-3xl border border-line bg-card p-4"><h2 className="font-display text-xl font-bold">Payment activity</h2>{mine.filter((b) => b.payment || b.status === "SERVICE_COMPLETED").length ? <div className="mt-3 grid gap-2">{mine.filter((b) => b.payment || b.status === "SERVICE_COMPLETED").sort((a, b) => (b.payment?.at ?? b.timestamps.SERVICE_COMPLETED ?? 0) - (a.payment?.at ?? a.timestamps.SERVICE_COMPLETED ?? 0)).map((b) => <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line p-3"><div><p className="text-sm font-semibold">{b.code} · {getService(b.serviceId)?.name}</p><p className="mt-1 text-xs text-muted">{b.site.area} · {b.payment ? b.payment.method + " · " + b.payment.ref : "Awaiting customer payment"}</p></div><div className="text-right"><p className="font-display text-xl font-bold">{inr(b.amount)}</p><p className="text-xs text-muted">{b.status.replaceAll("_", " ")}</p></div></div>)}</div> : <Empty icon={Wallet} title="No payment activity" detail="Customer-side records appear after work is marked complete." />}</section>
           <section className="rounded-3xl border border-line bg-card p-4"><h2 className="font-display text-xl font-bold">Service-wise totals</h2><div className="mt-3 grid gap-2">{provider.services.map((id) => { const rows = mine.filter((b) => b.serviceId === id); const total = rows.filter((b) => b.status === "PAID").reduce((sum, b) => sum + b.amount, 0); return <div key={id} className="flex items-center justify-between rounded-xl bg-paper p-3"><span className="text-sm font-semibold">{getService(id)?.name ?? id}<span className="ml-2 text-xs font-normal text-muted">{rows.length} jobs</span></span><span className="font-semibold">{inr(total)}</span></div>; })}</div></section>
           <p className="text-xs text-muted">A real settlement statement, commission deductions, GST/TDS/TCS, refunds, chargebacks and payout reconciliation belong to the deferred payment integration.</p>
