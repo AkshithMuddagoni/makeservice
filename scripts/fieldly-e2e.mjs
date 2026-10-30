@@ -443,7 +443,7 @@ async function testMobileCustomerJourney() {
     await page.getByPlaceholder("482609").fill("482609");
     await page.getByRole("button", { name: "Open desk", exact: true }).click();
     await page.waitForTimeout(500);
-    await page.getByRole("button", { name: "Requests", exact: true }).click();
+    await page.getByRole("button", { name: /Requests/ }).click();
     const providerDeskText = await page.locator("body").innerText();
     log("operator desk after explicit login: " + providerDeskText.replace(/\\s+/g, " ").slice(-1200));
     assert.ok(await page.getByRole("heading", { name: "Sri Sai Borewell Works", exact: true }).count() === 1,
