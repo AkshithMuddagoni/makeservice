@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { useMemo } from "react";
-import { CATALOG_PROVIDERS, getService, isEligible } from "./catalog";
+import { CATALOG_PROVIDERS, getService, isAvailableForService, isEligible } from "./catalog";
 import { kmBetween, travelMinutes } from "./geo";
 import { priceJob } from "./pricing";
 import type {
@@ -175,11 +175,74 @@ export const useFieldly = create<State>()(
         if (id in map) return map[id];
         return get().providerById(id)?.online ?? false;
       },
-      setOnline: (id, online) =>
+      setOnline: (id, online) => {
+        const session = get().session;
+        if (session?.role !== "provider" || session.providerId !== id) return;
+        const provider = get().providerById(id);
+        if (!provider) return;
+        if (online) {
+          const canOffer = provider.services.some((serviceId) =>
+            isEligible(provider, serviceId) &&
+            provider.serviceAvailability?.[serviceId] !== false &&
+            (!provider.onboarding || provider.onboarding.assets.some(
+              (asset) => asset.serviceIds.includes(serviceId) && asset.status === "APPROVED" && asset.available !== false,
+            )),
+          );
+          if (!canOffer) return;
+        }
         set((s) => ({
           availability: { ...s.availability, [id]: online },
           extras: s.extras.map((p) => (p.id === id ? { ...p, online } : p)),
-        })),
+        }));
+      },
+      setServiceAvailability: (id, serviceId, available) => {
+        const session = get().session;
+        if (session?.role !== "provider" || session.providerId !== id) {
+          return { ok: false, error: "Only this provider account can change its service availability." };
+        }
+        const provider = get().providerById(id);
+        if (!provider || !provider.services.includes(serviceId)) {
+          return { ok: false, error: "This service is not registered on the business account." };
+        }
+        if (available && !isEligible(provider, serviceId)) {
+          return { ok: false, error: "This service is not approved yet. Complete its business, service and machine checks first." };
+        }
+        if (available && provider.onboarding && !provider.onboarding.assets.some(
+          (asset) => asset.serviceIds.includes(serviceId) && asset.status === "APPROVED" && asset.available !== false,
+        )) {
+          return { ok: false, error: "No approved available machine is linked to this service." };
+        }
+        set((s) => ({
+          extras: s.extras.map((p) => p.id === id
+            ? { ...p, serviceAvailability: { ...(p.serviceAvailability ?? {}), [serviceId]: available } }
+            : p),
+        }));
+        return { ok: true };
+      },
+      setAssetAvailability: (id, assetId, available) => {
+        const session = get().session;
+        if (session?.role !== "provider" || session.providerId !== id) {
+          return { ok: false, error: "Only this provider account can change its machine availability." };
+        }
+        const provider = get().providerById(id);
+        const asset = provider?.onboarding?.assets.find((item) => item.id === assetId);
+        if (!provider || !asset) return { ok: false, error: "Machine not found." };
+        if (available && asset.status !== "APPROVED") {
+          return { ok: false, error: "This machine is not approved for customer bookings." };
+        }
+        set((s) => ({
+          extras: s.extras.map((p) => p.id === id && p.onboarding
+            ? {
+                ...p,
+                onboarding: {
+                  ...p.onboarding,
+                  assets: p.onboarding.assets.map((item) => item.id === assetId ? { ...item, available } : item),
+                },
+              }
+            : p),
+        }));
+        return { ok: true };
+      },
       addProvider: (provider) => set((s) => ({ extras: [...s.extras.filter((p) => p.id !== provider.id), provider] })),
       createRequest: ({ serviceId, providerId, detailsConsent }) => {
         const { site, draft, session } = get();
@@ -191,8 +254,8 @@ export const useFieldly = create<State>()(
         if (!service) return { ok: false, error: "Unknown service." };
         if (!providerId) return { ok: false, error: "Choose a provider before sending a request." };
         const provider = get().providerById(providerId);
-        if (!provider || !isEligible(provider, serviceId) || !get().isOnline(providerId)) {
-          return { ok: false, error: "This provider is no longer available or eligible. Choose another provider." };
+        if (!provider || !isAvailableForService({ ...provider, online: get().isOnline(providerId) }, serviceId)) {
+          return { ok: false, error: "This provider is no longer available for this service. Choose another provider." };
         }
         const km = kmBetween(site, provider);
         if (km > service.radiusKm) {
@@ -243,8 +306,8 @@ export const useFieldly = create<State>()(
         if (request.declinedProviderIds?.includes(provider.id)) {
           return { ok: false, error: "You already declined this request." };
         }
-        if (!isEligible(provider, request.serviceId)) {
-          return { ok: false, error: "This machine is not eligible for the service. Check papers and WALTA if it is a rig." };
+        if (!isEligible(provider, request.serviceId) || provider.serviceAvailability?.[request.serviceId] === false) {
+          return { ok: false, error: "This service or its machines are paused or not approved. Decline the request or reactivate the service after checks." };
         }
         if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "Enter a price greater than zero." };
         if (note.trim().length < 8) {
