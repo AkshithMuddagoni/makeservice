@@ -8,6 +8,7 @@ import {
 
 const base = {
   businessType: "PROPRIETORSHIP" as const,
+  state: "Telangana",
   gstStatus: "NOT_REGISTERED" as const,
   authorisedRepresentative: false,
   services: [],
@@ -178,4 +179,23 @@ test("service capability selection accepts only tasks from that service", () => 
     serviceId: "tractor",
     selectedTasks: [],
   }), false);
+});
+
+
+test("borewell rig registration is state-aware outside Telangana", () => {
+  const result = keys({
+    ...base,
+    state: "Andhra Pradesh",
+    services: [{ serviceId: "borewell", selectedTasks: ["New borewell drilling"] }],
+    assets: [{
+      serviceIds: ["borewell"],
+      ownership: "OWNED",
+      roadUse: "TRAILER_MOVED",
+      vehicleClass: "CONSTRUCTION_EQUIPMENT",
+      assetType: "Drilling rig",
+    }],
+  });
+
+  assert.equal(result.has("WALTA_FORM16"), false);
+  assert.equal(result.has("STATE_GROUNDWATER_RIG_REVIEW"), true);
 });
