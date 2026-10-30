@@ -117,7 +117,8 @@ export type ProviderAssetRoadUse =
   | "COMMERCIAL_TRANSPORT"
   | "TRAILER_MOVED"
   | "OFF_ROAD"
-  | "NOT_APPLICABLE";
+  | "NOT_APPLICABLE"
+  | "NEEDS_REVIEW";
 
 export type ProviderVerificationStatus =
   | "DRAFT"
