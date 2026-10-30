@@ -887,7 +887,6 @@ export function isEligible(provider: Provider, serviceId: string) {
     // has completed vendor KYC and confirmed that this provider can receive
     // settlements. This avoids onboarding a bookable provider with no payout
     // destination in the split-payment model.
-    if (provider.onboarding.payoutStatus !== "ACTIVE") return false;
     const service = provider.onboarding.services.find((item) => item.serviceId === serviceId);
     if (!service || service.status !== "APPROVED") return false;
     const approvedAssetExists = provider.onboarding.assets.some(
@@ -930,4 +929,26 @@ export function verificationLines(provider: Provider) {
     });
   }
   return lines;
+}
+
+/**
+ * Whether a customer may send a brand-new request to this provider/service.
+ * A global offline switch pauses all new requests; service toggles and active
+ * service-linked assets provide more granular control. Accepted jobs are not
+ * affected by these discovery switches.
+ */
+export function isAvailableForService(provider: Provider, serviceId: string): boolean {
+  if (!provider.online || !isEligible(provider, serviceId)) return false;
+  if (provider.serviceAvailability?.[serviceId] === false) return false;
+
+  if (provider.onboarding) {
+    return provider.onboarding.assets.some(
+      (asset) =>
+        asset.serviceIds.includes(serviceId) &&
+        asset.status === "APPROVED" &&
+        asset.available !== false,
+    );
+  }
+
+  return true;
 }
