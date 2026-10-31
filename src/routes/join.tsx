@@ -83,17 +83,17 @@ function JoinPage() {
   const existingProvider = useFieldly((s) => activeProviderId ? s.providerById(activeProviderId) : undefined);
   const existingBusiness = existingProvider?.onboarding?.business;
   const { data: authSession, isPending: authSessionPending } = authClient.useSession();
-  const verifiedPhone = authEnabled ? (authSession?.user?.phoneNumber ?? "") : phone;
-  const verifiedPhoneDigits = verifiedPhone.startsWith("+91") ? verifiedPhone.slice(3) : verifiedPhone;
-  const verifiedMobile = authEnabled
-    ? Boolean(authSession?.user?.phoneNumberVerified && /^\\+91[6-9]\\d{9}$/.test(verifiedPhone))
-    : phoneVerified;
 
   const [step, setStep] = useState(existingProvider ? 2 : 1);
   const [ownerName, setOwnerName] = useState(existingBusiness?.ownerFullName ?? "");
   const [phone, setPhone] = useState(existingProvider?.phone ?? "");
   const [previewOtp, setPreviewOtp] = useState("");
   const [phoneVerified, setPhoneVerified] = useState(Boolean(existingProvider));
+  const verifiedPhone = authEnabled ? (authSession?.user?.phoneNumber ?? "") : phone;
+  const verifiedPhoneDigits = verifiedPhone.startsWith("+91") ? verifiedPhone.slice(3) : verifiedPhone;
+  const verifiedMobile = authEnabled
+    ? Boolean(authSession?.user?.phoneNumberVerified && /^\\+91[6-9]\\d{9}$/.test(verifiedPhone))
+    : phoneVerified;
   const [businessType, setBusinessType] = useState<ProviderBusinessType>(existingBusiness?.businessType ?? "PROPRIETORSHIP");
   const [legalName, setLegalName] = useState(existingBusiness?.legalName ?? "");
   const [tradeName, setTradeName] = useState(existingBusiness?.tradeName ?? "");
