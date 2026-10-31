@@ -505,7 +505,7 @@ export type ProviderDashboardApplication = {
     id: string;
     serviceId: string;
     selectedTasks: string[];
-    specifications: Record<string, unknown>;
+    specifications: Record<string, string>;
     verificationStatus: string;
     isListed: boolean;
     isAvailable: boolean;
@@ -523,7 +523,7 @@ export type ProviderDashboardApplication = {
     vehicleClass: string | null;
     registrationLast4: string | null;
     serialLast4: string | null;
-    specifications: Record<string, unknown>;
+    specifications: Record<string, string>;
     verificationStatus: string;
     isAvailable: boolean;
     reviewerNote: string | null;
@@ -598,7 +598,7 @@ export async function getProviderDashboardForUser(
         id: string;
         service_id: string;
         selected_tasks: string[];
-        specifications: Record<string, unknown>;
+        specifications: Record<string, string>;
         verification_status: string;
         is_listed: boolean;
         is_available: boolean;
@@ -624,7 +624,7 @@ export async function getProviderDashboardForUser(
         vehicle_class: string | null;
         registration_last4: string | null;
         serial_last4: string | null;
-        specifications: Record<string, unknown>;
+        specifications: Record<string, string>;
         verification_status: string;
         is_available: boolean;
         reviewer_note: string | null;
