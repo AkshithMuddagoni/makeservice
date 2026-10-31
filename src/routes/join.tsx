@@ -429,15 +429,6 @@ function JoinPage() {
               serialLast4: asset.serial || null,
               specifications: asset.specifications,
             })),
-            documentRequirements: documentRequirements.map((document) => ({
-              key: document.key,
-              label: document.label,
-              description: document.description,
-              requiredForApproval: document.requiredForApproval,
-              secureOnly: Boolean(document.secureOnly),
-              jobSpecific: Boolean(document.jobSpecific),
-              selectedInPreview: false,
-            })),
             declarationAccepted: true,
           },
         });
