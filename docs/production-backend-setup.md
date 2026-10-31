@@ -62,21 +62,39 @@ without the Better Auth schema and checks that tables/RLS are created.
 
 ## Supabase migration setup
 
-The Supabase Dashboard screenshot for the current `makeservice` project
-shows it marked **PRODUCTION**. Keep that project untouched during the first
-migration test. Create a separate Supabase project named
-`makeservice-staging` in the Free organization (provided the organization has
-an unused project slot), and apply the schema there first. Supabase Free
-currently includes two active free projects; paused projects do not count
-toward that limit.
+A separate `makeservice-staging` project is recommended for isolated testing,
+but it is **not technically required**. Your screenshot shows the existing
+`makeservice` project labelled **PRODUCTION**. You can use that project if it
+is dedicated to MakeService, has no unrelated application tables/data that
+must be preserved, and you have reviewed the read-only inventory below.
 
-Use the same region as the production database when practical. Do not connect
-the staging database to the existing public Render production service. For the
-first migration test, use a local PowerShell terminal with the staging
-connection string set only for that terminal session, then clear it after the
-migration.
+The earlier five-table check confirmed only that those five named tables were
+absent; it did not prove the entire public schema was empty. First run this
+read-only query in the SQL Editor:
 
-1. In the staging project's Supabase Dashboard, open **Connect** and copy the
+```sql
+select schemaname, tablename
+from pg_tables
+where schemaname = 'public'
+order by tablename;
+```
+
+Review the full list before choosing the existing production project. The
+permission-lockdown migration has now been scoped to MakeService and Better
+Auth tables only; it no longer revokes permissions across unrelated public
+tables.
+
+Preferred safe path: test on a separate staging project first, then migrate
+production. Simpler path for a brand-new, dedicated MakeService database:
+review the public-schema inventory, take/confirm an appropriate backup or
+export, then run the migrations directly against this existing project from a
+local PowerShell session. Do not run them until the inventory is reviewed.
+
+For either path, keep the database credential in a local PowerShell session and
+do not add it to the public Render service until authentication and migration
+verification are complete.
+
+1. In the chosen Supabase project's Dashboard, open **Connect** and copy a
    PostgreSQL connection string. Do not construct the pooler hostname or
    username manually.
 2. Render does not support IPv6 addresses. For Render networking, use the
@@ -97,7 +115,7 @@ chat, GitHub issues, source files or screenshots.
 
 #### Run the first staging migration from VS Code
 
-After the new Supabase staging project is ready, open the MakeService repository
+After the chosen Supabase project is ready, open the MakeService repository
 in VS Code and run this in the integrated PowerShell terminal:
 
 ```powershell
@@ -115,8 +133,8 @@ Remove-Item Env:DATABASE_URL
 ```
 
 If the local branch already exists, use `git switch
-feat/production-backend-foundation` instead of creating it again. Do not run
-this command against the current `makeservice` production project.
+feat/production-backend-foundation` instead of creating it again. Only use the current `makeservice` project after reviewing the full public
+table inventory and confirming it is dedicated to MakeService.
 
 A successful run should report five applied migrations:
 `0001_auth.sql`, `0001_fieldly_core.sql`,
