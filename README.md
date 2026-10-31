@@ -48,12 +48,16 @@ A successful GitHub push or live Render URL is not, by itself, evidence that pro
 
 ## Backend migrations
 
-The app-owned schema is in `migrations/fieldly/*.sql`:
+The ordered schema is in `migrations/auth/*.sql` and
+`migrations/fieldly/*.sql`:
 
-1. `0001_fieldly_core.sql` — marketplace data model.
-2. `0002_lock_down_browser_data_access.sql` — browser database access lockdown and RLS.
+1. `migrations/auth/0001_auth.sql` — generated Better Auth identity/session schema (kept byte-for-byte).
+2. `migrations/fieldly/0001_fieldly_core.sql` — marketplace data model.
+3. `migrations/fieldly/0002_lock_down_browser_data_access.sql` — browser database access lockdown and RLS.
 
-The generated Better Auth schema remains in `migrations/auth/0001_auth.sql` and is not automatically applied in the auth-off demo. When real auth is provisioned, the existing auth-on workflow copies that file byte-for-byte to `migrations/0001_auth.sql`.
+Both production and PGLite migration discovery explicitly include these folders.
+The Fieldly SQL is also tested independently without auth tables so its
+PostgreSQL schema does not depend on Supabase Auth UUIDs.
 
 `supabase/schema.sql` is retired. It contains an explanatory notice only; do not apply it. Its earlier `auth.uid()` policies assumed Supabase Auth identities and are incompatible with this app's Better Auth identity model.
 
@@ -69,7 +73,7 @@ If production authentication has not been provisioned, do not connect a real dat
 
 ## Authentication and data security
 
-Better Auth is the intended identity source. Fieldly ownership columns use TEXT user IDs rather than Supabase Auth UUIDs. The app-owned SQL migrations are independent of the optional Better Auth migration so the local auth-off preview can still build its schema.
+Better Auth is the intended identity source. Fieldly ownership columns use TEXT user IDs rather than Supabase Auth UUIDs. The generated Better Auth SQL remains untouched; the app-owned Fieldly SQL is independently testable and does not rely on Supabase Auth. The current customer sign-in screen is still the fixed-code demo and does not send SMS or create a real session. A production India phone-OTP flow (Better Auth Phone Number plugin plus a DLT-configured SMS provider) is a remaining auth milestone.
 
 The database is accessed from the server through `src/lib/db.ts`. Supabase Data API roles `anon` and `authenticated` receive no access to Fieldly application tables; RLS is enabled without browser-facing policies. Client-facing operations must use authenticated server functions with verified session context and explicit customer/provider/admin ownership checks.
 
