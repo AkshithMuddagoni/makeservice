@@ -62,27 +62,38 @@ without the Better Auth schema and checks that tables/RLS are created.
 
 ## Supabase migration setup
 
-Do not connect Supabase to the public Render service until production
-authentication is provisioned and credentials have been rotated.
+The Supabase Dashboard screenshot for the current `makeservice` project
+shows it marked **PRODUCTION**. Keep that project untouched during the first
+migration test. Create a separate Supabase project named
+`makeservice-staging` in the Free organization (provided the organization has
+an unused project slot), and apply the schema there first. Supabase Free
+currently includes two active free projects; paused projects do not count
+toward that limit.
 
-For a controlled staging database:
+Use the same region as the production database when practical. Do not connect
+the staging database to the existing public Render production service. For the
+first migration test, use a local PowerShell terminal with the staging
+connection string set only for that terminal session, then clear it after the
+migration.
 
-1. In Supabase Dashboard, open **Connect** and copy a PostgreSQL connection
-   string. Do not construct the pooler hostname or username manually.
-2. Render's current networking documentation says Render services do not
-   support IPv6. For this Render deployment, therefore, use the Supabase
-   **shared pooler — session mode, port 5432** as the default connection.
+1. In the staging project's Supabase Dashboard, open **Connect** and copy the
+   PostgreSQL connection string. Do not construct the pooler hostname or
+   username manually.
+2. Render does not support IPv6 addresses. For Render networking, use the
+   Supabase **shared pooler — session mode, port 5432** as the safe default.
+   Supabase documents this pooler as IPv4 reachable on every plan. The direct
+   Supabase endpoint is IPv6 by default unless the project has its IPv4 add-on.
 3. Copy the session-pooler host and username from Supabase Connect; do not
-   construct either value. Supabase documents this pooler as IPv4 reachable on
-   every plan. The direct Supabase endpoint is IPv6 by default unless the
-   project has the IPv4 add-on.
-4. Avoid transaction pooler mode (port 6543) for the current persistent
-   node-postgres pool and Better Auth adapter.
-5. Keep TLS enabled (the Supabase connection string normally contains
-   `sslmode=require`).
+   construct either value. Avoid transaction pooler mode (port 6543) for the
+   current persistent node-postgres pool and Better Auth adapter.
+4. Keep TLS enabled (the Supabase connection string normally contains
+   `sslmode=require`). URL-encode reserved characters in the database password
+   if Supabase's copied connection string requires it.
 
-Set `DATABASE_URL` only in Render Environment settings or an untracked local
-`.env`. Never prefix it with `VITE_`, expose it in browser code or commit it.
+Set `DATABASE_URL` only in the one PowerShell session used for the migration
+or in an untracked local `.env`. Never prefix it with `VITE_`, expose it in
+browser code or commit it. Never paste the connection string or password into
+chat, GitHub issues, source files or screenshots.
 
 After applying the migrations, verify in the Supabase SQL Editor:
 
