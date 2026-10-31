@@ -1,16 +1,24 @@
-# Fieldly — local service marketplace
+# Fieldly — MakeService local-services marketplace
 
-Fieldly is a responsive marketplace prototype for discovering equipment and site services across India: borewell drilling, JCB/excavator hire, cranes, tractors, water tankers, tippers, and related work.
+Fieldly is a responsive marketplace for discovering equipment and site services across India: borewell drilling, JCB/excavator hire, cranes, tractors, water tankers, tippers, and related work.
 
 **Live preview:** https://makeservice.onrender.com/
 
-## Current status: prototype, not ready for real bookings
+## Current status: prototype UI + production backend foundation in progress
 
-The repository contains the user interface and prototype workflows. The main Fieldly marketplace store in `src/lib/fieldly/store.ts` persists sessions, provider changes, requests, quotes, bookings, messages, and reviews in browser `localStorage`. This is per-browser demo state, not a shared marketplace database.
+The existing customer/provider screens remain a prototype. The main Fieldly marketplace store in `src/lib/fieldly/store.ts` still persists sessions, provider changes, requests, quotes, bookings, messages, and reviews in browser `localStorage`. That is per-browser demo state, not a shared marketplace database.
 
-The location picker supports searches across India and quick shortcuts for major cities. The current seeded provider catalogue is still concentrated around Warangal/Hanamkonda, so other cities may show no example providers until real regional listings are connected.
+The sign-in page still uses a fixed preview code. Provider records, ratings, prices, reviews, and verification flags include seeded demo data. Payment confirmation remains a local preview action and does not move money. Do not use these UI workflows to accept real customers, payment, identity documents, or sensitive information.
 
-The sign-in page uses a fixed preview code. Provider records, ratings, prices, reviews, and verification flags include seeded demo data. Payment confirmation is also a local preview action; it does not move money. Do not use these flows to accept real customers, payment, identity documents, or sensitive information.
+A new branch, `feat/production-backend-foundation`, contains the first backend foundation:
+- Ordered Better Auth + Fieldly PostgreSQL migrations.
+- Better Auth TEXT user IDs (not Supabase Auth UUIDs).
+- Core marketplace schema for businesses, provider services, assets, documents, job requests, quotes, bookings, messages, location, payments and reviews.
+- Browser-role database lockdown and RLS enablement.
+- Authenticated server functions for creating/reading the current Fieldly account.
+- Supabase/Render setup and payment gateway evaluation documents.
+
+The UI has **not** yet been switched to these server functions and the branch has not been deployed. Do not treat this milestone as production launch approval.
 
 ## Requirements
 
@@ -20,16 +28,12 @@ The sign-in page uses a fixed preview code. Provider records, ratings, prices, r
 
 ## Run locally
 
-1. Clone or download this repository.
-2. Open the repository root in VS Code.
-3. Run:
+```bash
+npm install
+npm run dev
+```
 
-   ```bash
-   npm install
-   npm run dev
-   ```
-
-4. Open the local URL printed by the terminal (normally `http://localhost:8080`).
+Open the local URL printed by the terminal (normally `http://localhost:8080`). Local preview uses PGLite in-memory storage when `DATABASE_URL` is not configured. Its data resets when the dev server restarts.
 
 ## Build and checks
 
@@ -38,33 +42,44 @@ npm run build
 npm run typecheck
 npm test
 npm run lint
-``
+```
 
-Run these checks locally and review the output before deploying changes. A successful GitHub push or a live Render URL is not, by itself, evidence that the production workflows are safe.
+A successful GitHub push or live Render URL is not, by itself, evidence that production workflows are safe.
+
+## Backend migrations
+
+The canonical schema is in `migrations/*.sql`:
+
+1. `0001_auth.sql` — Better Auth tables.
+2. `0002_fieldly_core.sql` — marketplace data model.
+3. `0003_lock_down_browser_data_access.sql` — browser database access lockdown and RLS.
+
+`supabase/schema.sql` is retired. It contains an explanatory notice only; do not apply it. Its earlier `auth.uid()` policies assumed Supabase Auth identities and are incompatible with this app's Better Auth identity model.
+
+For setup and migration verification, see [docs/production-backend-setup.md](docs/production-backend-setup.md).
 
 ## Render
 
 The repository includes `render.yaml` as a starting point for a Render Node web service. It specifies Node.js 22, `npm install && npm run build`, and `npm run start`.
 
-Configure production secrets only in Render's Environment settings. Do not commit database URLs, passwords, OAuth secrets, or other credentials to GitHub.
+Production secrets must be configured only in Render's Environment settings. The production app must have a real Better Auth identity configuration, a strong `BETTER_AUTH_SECRET`, and a Supabase PostgreSQL `DATABASE_URL`. Do not put database URLs, passwords, OAuth secrets, payment secrets or private keys in frontend variables or GitHub.
 
-## Supabase integration status
+If production authentication has not been provisioned, do not connect a real database to the public application and do not accept live bookings. The server is intended to fail closed rather than use a shared demo identity against real data.
 
-`supabase/schema.sql` is a starter schema, not a completed integration. The current Fieldly UI/store does not use the Supabase JavaScript client for marketplace records, and adding a URL or database connection string alone will not make bookings shared across devices. The existing database adapter and migration script serve a separate server-side database/auth setup and do not automatically apply `supabase/schema.sql`.
+## Authentication and data security
 
-Before enabling a real backend:
-1. Select and implement one production authentication system.
-2. Review and replace the starter database policies; test every allowed and denied action with customer, provider, and administrator identities.
-3. Move request, quote, booking, message, provider, and review writes to authenticated server/database operations.
-4. Add verified provider onboarding, secure document storage, notifications, payment-provider verification, monitoring, and backups.
-5. Add automated workflow tests and verify the deployment before launch.
+Better Auth is the identity source. The Fieldly data tables reference Better Auth's TEXT user IDs; they do not reference `auth.users` or `auth.uid()`.
 
-Never put a Supabase secret/service-role key or a database password in frontend code. Browser code may use a publishable/anon key only with appropriately secured and tested RLS policies.
+The database is accessed from the server through `src/lib/db.ts`. Supabase Data API roles `anon` and `authenticated` receive no access to the application/auth tables; RLS is enabled without browser-facing policies. Client-facing operations must use authenticated server functions with verified session context and explicit customer/provider/admin ownership checks.
 
-## Security response required
+Private KYC/document bytes belong in a private Supabase Storage bucket. Store file metadata in PostgreSQL and use short-lived signed URLs after server-side ownership checks. Never store full PAN, Aadhaar, bank account numbers, IFSC, payment card data or raw OTPs in browser storage.
 
-A database credential was previously committed in this repository's README, and an upstream preview OAuth credential was hard-coded in source. Treat exposed credentials as compromised: rotate/revoke them with the service owner, update any legitimate deployment using them, and review Git history. Removing a secret from the latest file does not remove it from older commits. The preview OAuth code now reads optional values from server environment variables instead of embedding a secret. Do not restore credentials to source files or commit a real `.env` file.
+A database credential was previously committed in this repository's README, and an upstream preview OAuth credential was hard-coded in source. Treat exposed credentials as compromised: rotate/revoke them with the service owner, update any legitimate deployment using them, and review Git history. Removing a secret from the latest file does not remove it from older commits. Do not restore credentials to source files or commit a real `.env` file.
+
+## Payment gateway evaluation
+
+Cashfree Easy Split and Razorpay Route are both under evaluation. See [docs/payment-gateway-evaluation.md](docs/payment-gateway-evaluation.md). No gateway is selected or enabled. Any real checkout must use server-created orders, verified webhooks, idempotent ledger updates, reconciliation and audited vendor settlement.
 
 ## Technology stack
 
-React 19, TanStack Start/Router, Vite, TypeScript, Tailwind CSS 4, Lucide, MapLibre GL, Zustand, Node.js, and Render. Supabase/PostgreSQL remains planned for the production marketplace and is not yet connected to the current Fieldly business workflows.
+React 19, TanStack Start/Router, Vite, TypeScript, Tailwind CSS 4, Lucide, MapLibre GL, Zustand, Node.js, Render and Supabase PostgreSQL.
