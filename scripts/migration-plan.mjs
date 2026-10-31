@@ -23,6 +23,17 @@ export function migrationName(path) {
 }
 
 /**
+ * Find legacy ledger entries that were stored as full Windows/POSIX paths.
+ * @param {Iterable<string>} applied
+ * @returns {Array<{ legacy: string, canonical: string }>}
+ */
+export function legacyMigrationNames(applied) {
+  return [...applied]
+    .map((legacy) => ({ legacy, canonical: migrationName(legacy) }))
+    .filter(({ legacy, canonical }) => legacy !== canonical);
+}
+
+/**
  * @param {string} path
  * @returns {boolean}
  */
