@@ -15,10 +15,10 @@ export const getCurrentFieldlyAccount = createServerFn({ method: "GET" })
   });
 
 export const ensureCurrentFieldlyAccount = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
   .validator(z.object({
     displayName: z.string().trim().min(1).max(100).nullable(),
   }).strict())
-  .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const { ensureFieldlyAccountForUser } = await import("./repository.server");
     return ensureFieldlyAccountForUser(context.userId, data.displayName);
