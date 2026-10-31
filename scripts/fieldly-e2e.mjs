@@ -27,7 +27,28 @@ async function testBetterAuthUnauthenticatedSession() {
     null,
     "A signed-out browser should receive a null session without creating an account",
   );
-  log("Better Auth unauthenticated session endpoint passed");
+
+  // A deliberately invalid token forces Better Auth through its configured
+  // session adapter lookup. In local runs that can be PostgreSQL/Supabase;
+  // in CI it is the isolated PGLite database. It must never create a session.
+  const lookupResponse = await fetch(BASE_URL + "/api/auth/get-session", {
+    headers: {
+      accept: "application/json",
+      cookie: "__Host-grok-auth.session_token=invalid-read-only-session-probe",
+    },
+  });
+  assert.equal(
+    lookupResponse.status,
+    200,
+    "Better Auth must handle a session lookup against its configured database",
+  );
+  const invalidSession = await lookupResponse.json();
+  assert.equal(
+    invalidSession,
+    null,
+    "An invalid session token must not resolve to a user",
+  );
+  log("Better Auth unauthenticated and invalid-session database probes passed");
 }
 
 async function waitForServer() {
