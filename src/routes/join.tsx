@@ -1,5 +1,7 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, type ChangeEvent, type ReactNode } from "react";
+import { authClient, authEnabled } from "@/lib/auth/client";
+import { submitCurrentProviderApplication } from "@/lib/fieldly/account.functions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { controlClass } from "@/components/fieldly/bits";
@@ -80,6 +82,12 @@ function JoinPage() {
   const activeProviderId = useFieldly((s) => s.session?.role === "provider" ? s.session.providerId : undefined);
   const existingProvider = useFieldly((s) => activeProviderId ? s.providerById(activeProviderId) : undefined);
   const existingBusiness = existingProvider?.onboarding?.business;
+  const { data: authSession, isPending: authSessionPending } = authClient.useSession();
+  const verifiedPhone = authEnabled ? (authSession?.user?.phoneNumber ?? "") : phone;
+  const verifiedPhoneDigits = verifiedPhone.startsWith("+91") ? verifiedPhone.slice(3) : verifiedPhone;
+  const verifiedMobile = authEnabled
+    ? Boolean(authSession?.user?.phoneNumberVerified && /^\\+91[6-9]\\d{9}$/.test(verifiedPhone))
+    : phoneVerified;
 
   const [step, setStep] = useState(existingProvider ? 2 : 1);
   const [ownerName, setOwnerName] = useState(existingBusiness?.ownerFullName ?? "");
@@ -128,6 +136,9 @@ function JoinPage() {
     existingProvider?.onboarding?.documents.filter((doc) => doc.selectedInPreview).map((doc) => doc.key) ?? [],
   );
   const [createdProviderId, setCreatedProviderId] = useState<string | null>(null);
+  const [isProductionSubmitted, setIsProductionSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [declarationAccepted, setDeclarationAccepted] = useState(false);
 
   const selectedServices = useMemo(
     () => Object.keys(serviceTasks).filter((id) => (serviceTasks[id] ?? []).length > 0),
@@ -286,6 +297,11 @@ function JoinPage() {
   function onDocumentSelect(key: string, event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     if (!file) return;
+    if (authEnabled) {
+      toast.info("Secure document upload is not enabled yet. Your checklist will be saved as pending; no file is uploaded.");
+      event.currentTarget.value = "";
+      return;
+    }
     const requirement = documentRequirements.find((doc) => doc.key === key);
     if (requirement?.secureOnly) {
       toast.info("This identity / tax item must be completed through secure production KYC, not the local preview.");
@@ -305,8 +321,10 @@ function JoinPage() {
 
   function validateStepOne() {
     if (ownerName.trim().length < 3) return "Enter the owner or authorised representative's full name.";
-    if (!phoneSchema.safeParse(phone).success) return "Enter a valid Indian mobile number.";
-    if (!phoneVerified) return "Verify the mobile number before continuing.";
+    if (!phoneSchema.safeParse(verifiedPhoneDigits).success) return "Enter a valid Indian mobile number.";
+    if (!verifiedMobile) return authEnabled
+      ? "Sign in with a verified Indian mobile number before continuing."
+      : "Verify the mobile number before continuing.";
     if (legalName.trim().length < 3) return "Enter the legal / proprietor name.";
     if (tradeName.trim().length < 2) return "Enter the public business / trade name.";
     if (businessAddress.trim().length < 6 || district.trim().length < 2) return "Enter the operating address and district.";
@@ -349,11 +367,94 @@ function JoinPage() {
     setStep(4);
   }
 
-  function submitForReview() {
-    if (!phoneVerified) return toast.error("Verify the mobile number first.");
+  async function submitForReview() {
+    if (!verifiedMobile) {
+      return toast.error(authEnabled
+        ? "A verified Indian mobile number is required for provider registration."
+        : "Verify the mobile number first.");
+    }
     if (!selectedServices.length || !completedAssets.length) {
       return toast.error("Add at least one service and at least one machine.");
     }
+    if (!declarationAccepted) {
+      return toast.error("Accept the provider declaration before submitting.");
+    }
+
+    if (authEnabled) {
+      if (authSessionPending || !authSession?.user?.id) {
+        return toast.error("Your sign-in session is still loading. Try again.");
+      }
+      setIsSubmitting(true);
+      try {
+        const result = await submitCurrentProviderApplication({
+          data: {
+            business: {
+              ownerFullName: ownerName.trim(),
+              legalName: legalName.trim(),
+              tradeName: tradeName.trim(),
+              businessType,
+              address: businessAddress.trim(),
+              district: district.trim(),
+              city: site?.city || district.trim(),
+              area: site?.area || businessAddress.trim(),
+              state: site?.state || "Telangana",
+              pincode,
+              gstStatus,
+              aggregateTurnoverBand,
+              udyamProvided,
+              authorisedRepresentative,
+            },
+            profile: {
+              latitude: site?.lat ?? 17.385,
+              longitude: site?.lng ?? 78.4867,
+              yearsExperience: Number(years) || 0,
+              languages: languages.split(",").map((item) => item.trim()).filter(Boolean),
+              bio: bio.trim(),
+            },
+            services: selectedServices.map((serviceId) => ({
+              serviceId,
+              selectedTasks: serviceTasks[serviceId] ?? [],
+              specifications: {},
+            })),
+            assets: completedAssets.map((asset) => ({
+              serviceIds: asset.serviceIds,
+              assetType: asset.assetType,
+              make: asset.make.trim(),
+              model: asset.model.trim(),
+              yearOfManufacture: asset.year ? Number(asset.year) : null,
+              ownership: asset.ownership,
+              roadUse: asset.roadUse,
+              vehicleClass: asset.vehicleClass,
+              registrationLast4: asset.registration || null,
+              serialLast4: asset.serial || null,
+              specifications: asset.specifications,
+            })),
+            documentRequirements: documentRequirements.map((document) => ({
+              key: document.key,
+              label: document.label,
+              description: document.description,
+              requiredForApproval: document.requiredForApproval,
+              secureOnly: Boolean(document.secureOnly),
+              jobSpecific: Boolean(document.jobSpecific),
+              selectedInPreview: false,
+            })),
+            declarationAccepted: true,
+          },
+        });
+        setIsProductionSubmitted(true);
+        setCreatedProviderId(result.businessId);
+        setStep(5);
+        toast.success(result.alreadyExists
+          ? "This business already has an application on your account."
+          : "Provider application saved securely and submitted for review.");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not submit provider application.");
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     const now = Date.now();
     const providerId = "yard_" + phone;
     const business: ProviderBusinessProfile = {
@@ -420,7 +521,7 @@ function JoinPage() {
     const machineNames = providerAssets.map((asset) => asset.make + " " + asset.model);
     const provider: Provider = {
       id: providerId,
-      phone,
+      phone: verifiedPhoneDigits,
       name: tradeName.trim(),
       city: site?.city || district.trim(),
       area: site?.area || businessAddress.trim(),
@@ -451,6 +552,7 @@ function JoinPage() {
     };
 
     addProvider(provider);
+    setIsProductionSubmitted(false);
     setCreatedProviderId(providerId);
     setStep(5);
     toast.success("Application saved in the local preview and remains unapproved.");
@@ -492,30 +594,49 @@ function JoinPage() {
           <Field label="Owner / authorised representative full name">
             <input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="As shown on identity proof" className={controlClass} />
           </Field>
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-            <Field label="Mobile number">
-              <input value={phone} onChange={(e) => { setPhone(e.target.value.replace(/\D/g, "").slice(0, 10)); setPhoneVerified(false); }} placeholder="10-digit Indian mobile number" inputMode="numeric" className={controlClass} />
-            </Field>
-            <div className="flex items-end">
-              <Button type="button" variant="secondary" className="w-full sm:w-auto" onClick={() => {
-                if (!phoneSchema.safeParse(phone).success) return toast.error("Enter a valid 10-digit mobile number.");
-                setPreviewOtp("482609");
-                toast.info("Preview OTP generated: 482609. Real SMS OTP is not active in this prototype.");
-              }}>Send preview OTP</Button>
+          {authEnabled ? (
+            <div className="rounded-xl border border-line bg-paper p-3 text-sm">
+              {authSessionPending ? (
+                <p className="text-muted">Checking your verified mobile session…</p>
+              ) : verifiedMobile ? (
+                <p className="font-semibold text-green-700">Mobile verified: {verifiedPhone}</p>
+              ) : (
+                <>
+                  <p className="font-semibold">Verified mobile sign-in required</p>
+                  <p className="mt-1 text-xs leading-5 text-muted">
+                    Provider registration uses the phone number verified by Better Auth. The preview OTP is not accepted in production.
+                  </p>
+                  <Link to="/account" className="mt-2 inline-block text-sm font-semibold underline">Open account sign-in</Link>
+                </>
+              )}
             </div>
-          </div>
-          {previewOtp && (
-            <div className="grid gap-2 rounded-xl bg-paper p-3 sm:grid-cols-[1fr_auto]">
-              <input value={previewOtp} onChange={(e) => { setPreviewOtp(e.target.value.replace(/\D/g, "").slice(0, 6)); setPhoneVerified(false); }} placeholder="Enter 6-digit OTP" inputMode="numeric" className={controlClass} />
-              <Button type="button" onClick={() => {
-                if (previewOtp !== "482609") return toast.error("The preview OTP is 482609.");
-                setPhoneVerified(true);
-                toast.success("Mobile verified in preview only.");
-              }}>Verify mobile</Button>
-            </div>
-          )}
-          <p className="text-xs text-muted">The current prototype uses a fixed demo OTP. Production must use a real SMS OTP provider with rate limits and fraud controls.</p>
-          <Field label="Business legal structure">
+          ) : (
+            <>
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <Field label="Mobile number">
+                  <input value={phone} onChange={(e) => { setPhone(e.target.value.replace(/\\D/g, "").slice(0, 10)); setPhoneVerified(false); }} placeholder="10-digit Indian mobile number" inputMode="numeric" className={controlClass} />
+                </Field>
+                <div className="flex items-end">
+                  <Button type="button" variant="secondary" className="w-full sm:w-auto" onClick={() => {
+                    if (!phoneSchema.safeParse(phone).success) return toast.error("Enter a valid 10-digit mobile number.");
+                    setPreviewOtp("482609");
+                    toast.info("Preview OTP generated: 482609. Real SMS OTP is not active in this prototype.");
+                  }}>Send preview OTP</Button>
+                </div>
+              </div>
+              {previewOtp && (
+                <div className="grid gap-2 rounded-xl bg-paper p-3 sm:grid-cols-[1fr_auto]">
+                  <input value={previewOtp} onChange={(e) => { setPreviewOtp(e.target.value.replace(/\\D/g, "").slice(0, 6)); setPhoneVerified(false); }} placeholder="Enter 6-digit OTP" inputMode="numeric" className={controlClass} />
+                  <Button type="button" onClick={() => {
+                    if (previewOtp !== "482609") return toast.error("The preview OTP is 482609.");
+                    setPhoneVerified(true);
+                    toast.success("Mobile verified in preview only.");
+                  }}>Verify mobile</Button>
+                </div>
+              )}
+              <p className="text-xs text-muted">Preview mode uses the fixed demo code. Production requires real verified mobile sign-in.</p>
+            </>
+          )}          <Field label="Business legal structure">
             <select value={businessType} onChange={(e) => setBusinessType(e.target.value as ProviderBusinessType)} className={controlClass}>
               {Object.entries(BUSINESS_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
@@ -774,18 +895,24 @@ function JoinPage() {
       {step === 5 && !createdProviderId && (
         <section className="mt-6 grid gap-4 rounded-3xl border border-line bg-card p-5">
           <SectionHeading title="5. Review and submit" subtitle="Check the business, services, equipment and documents before sending your application for review." />
-          <Summary label="Owner / contact" value={ownerName + " · " + phone + " · mobile preview-verified"} />
+          <Summary label="Owner / contact" value={ownerName + " · " + verifiedPhoneDigits + (authEnabled ? " · Better Auth verified" : " · mobile preview-verified")} />
           <Summary label="Business" value={tradeName + " · " + legalName + " · " + BUSINESS_TYPE_LABELS[businessType]} />
           <Summary label="Business address" value={businessAddress + ", " + district + " – " + pincode} />
           <Summary label="Services" value={selectedServices.map((id) => SERVICE_ONBOARDING[id].label + " (" + (serviceTasks[id] ?? []).length + " task types)").join("; ")} />
           <Summary label="Machines" value={completedAssets.map((asset) => asset.make + " " + asset.model + " — " + asset.assetType).join("; ")} />
-          <Summary label="Documents" value={selectedDocumentKeys.length + " marked ready in preview; none have been uploaded or verified."} />
+          <Summary label="Documents" value={authEnabled ? (documentRequirements.length + " checklist requirements saved; no files uploaded yet.") : (selectedDocumentKeys.length + " marked ready in preview; none have been uploaded or verified.")} />
           <div className="rounded-xl bg-paper p-3 text-xs leading-5 text-muted">
             By submitting, you confirm that the business information is accurate, you are authorised to list the equipment, and all required licences, permits, insurance and site-specific approvals will remain valid for the work offered. Misleading claims, expired documents, unsafe equipment or missing legal permission may lead to rejection or suspension.
           </div>
+          <label className="flex items-start gap-3 rounded-xl border border-line p-3 text-sm">
+            <input type="checkbox" checked={declarationAccepted} onChange={(event) => setDeclarationAccepted(event.target.checked)} className="mt-0.5 size-4 accent-current" />
+            <span>I confirm that the details are accurate and accept the provider registration declaration.</span>
+          </label>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => setStep(4)}>Back</Button>
-            <Button onClick={submitForReview}>Submit provider application</Button>
+            <Button onClick={() => void submitForReview()} disabled={isSubmitting || !declarationAccepted}>
+              {isSubmitting ? "Submitting…" : "Submit provider application"}
+            </Button>
           </div>
         </section>
       )}
@@ -795,7 +922,9 @@ function JoinPage() {
           <div className="grid size-12 place-items-center rounded-2xl bg-gold-soft text-xl">✓</div>
           <h2 className="mt-4 font-display text-2xl font-bold">Application submitted</h2>
           <p className="mt-2 text-sm leading-6 text-muted">
-            Your preview application has been saved on this browser. It has not uploaded documents, completed real OTP/KYC or been approved by an administrator. Customers cannot book the listing yet.
+            {isProductionSubmitted
+              ? "Your application has been saved in the MakeService database. It is submitted for review and remains unapproved. Document files have not been uploaded, and customers cannot book this listing yet."
+              : "Your preview application has been saved on this browser. It has not uploaded documents, completed real OTP/KYC or been approved by an administrator. Customers cannot book the listing yet."}
           </p>
           <div className="mt-4 grid gap-2">
             {selectedServices.map((id) => (
@@ -811,12 +940,18 @@ function JoinPage() {
             <p>Payout onboarding: Not started</p>
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
-            <Button onClick={addAnotherService}>Add another service</Button>
-            <Button variant="secondary" onClick={() => {
-              signInProvider(createdProviderId);
-              toast.info("Preview desk opened. Your account remains unapproved.");
-              void navigate({ to: "/desk" });
-            }}>Open provider desk</Button>
+            {isProductionSubmitted ? (
+              <Button variant="secondary" onClick={() => void navigate({ to: "/account" })}>Go to account</Button>
+            ) : (
+              <>
+                <Button onClick={addAnotherService}>Add another service</Button>
+                <Button variant="secondary" onClick={() => {
+                  signInProvider(createdProviderId);
+                  toast.info("Preview desk opened. Your account remains unapproved.");
+                  void navigate({ to: "/desk" });
+                }}>Open provider desk</Button>
+              </>
+            )}
           </div>
         </section>
       )}
