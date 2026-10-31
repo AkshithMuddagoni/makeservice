@@ -1,7 +1,7 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
 
 /** Which database backend is active. */
-export type DbSource = "neon" | "pglite";
+export type DbSource = "postgres" | "pglite";
 
 // An empty/whitespace DATABASE_URL (an easy misconfig in deploy UIs) must mean
 // "unset" — otherwise production would silently run on the PGLite fallback.
@@ -11,12 +11,11 @@ const databaseUrl =
   rawDatabaseUrl && rawDatabaseUrl.trim() ? rawDatabaseUrl : undefined;
 
 /**
- * Active backend: real **Neon** when `DATABASE_URL` is set (deployed / configured
- * sandbox), otherwise a local embedded **PGLite** (Postgres compiled to WASM) so
- * the app has a working database even with nothing configured — the live preview
- * included. Swap in Neon later by just setting `DATABASE_URL`; no code changes.
+ * Active backend: a real PostgreSQL database (Supabase in production) when
+ * `DATABASE_URL` is set, otherwise local embedded **PGLite** for preview/dev.
+ * The database URL is read only on the server and must never be exposed to Vite.
  */
-export const dbSource: DbSource = databaseUrl ? "neon" : "pglite";
+export const dbSource: DbSource = databaseUrl ? "postgres" : "pglite";
 
 /**
  * Minimal shared SQL surface, satisfied by both Neon and PGLite. Both the
@@ -85,15 +84,21 @@ function toSql(run: Run): Sql {
   return sql;
 }
 
-function createNeonSql(): Promise<Sql> {
+function createPostgresSql(): Promise<Sql> {
   globalRef.__pgSqlPromise__ ??= (async () => {
-    // Regular Postgres driver: node-postgres (`pg`) — works directly with Neon's
-    // pooled endpoint. One pool per process; warm serverless instances reuse it.
+    // Persistent Render Node service: use a small process-wide pool. Supabase's
+    // direct endpoint or session pooler is supported; choose the endpoint in
+    // Supabase Connect based on Render outbound IPv4/IPv6 connectivity.
     const { Pool, types } = await import("pg");
     types.setTypeParser(OID_INT8, Number);
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
-    const pool = new Pool({ connectionString: databaseUrl });
+    const pool = new Pool({
+      connectionString: databaseUrl,
+      max: 5,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 10_000,
+    });
     return toSql(async <T>(text: string, params: unknown[]) => {
       const res = await pool.query(text, params);
       return res.rows as T[];
@@ -176,11 +181,11 @@ async function createSql(): Promise<Sql> {
         "or a server route loader, never from client code.",
     );
   }
-  return dbSource === "neon" ? createNeonSql() : createPgliteSql();
+  return dbSource === "postgres" ? createPostgresSql() : createPgliteSql();
 }
 
 /**
- * Get the shared, **server-only** SQL client. Neon when `DATABASE_URL` is set,
+ * Get the shared, **server-only** SQL client. PostgreSQL when `DATABASE_URL` is set,
  * otherwise the local PGLite fallback. Memoized — safe to call per request.
  *
  * Schema comes from `migrations/*.sql`, auto-applied before the first query on
@@ -197,7 +202,7 @@ export function getSql(): Promise<Sql> {
 /**
  * The shared PGLite instance (preview only), with `migrations/*.sql` applied.
  * Lets Better Auth persist to the SAME embedded DB as app data in preview (via a
- * Kysely dialect). Throws when `DATABASE_URL` is set (that path uses Neon).
+ * Kysely dialect). Throws when `DATABASE_URL` is set (that path uses the configured PostgreSQL database).
  */
 export async function getPglite(): Promise<import("@electric-sql/pglite").PGlite> {
   if (dbSource !== "pglite") {
@@ -214,7 +219,7 @@ export async function getPglite(): Promise<import("@electric-sql/pglite").PGlite
  *
  * - **PGLite** (preview / no `DATABASE_URL`): open the in-memory DB and apply
  *   `migrations/*.sql`. Idempotent — concurrent callers share one promise.
- * - **Neon**: no-op (pool is created lazily on first query).
+ * - **PostgreSQL**: no-op (pool is created lazily on first query).
  *
  * Vite `configureServer` awaits this at dev startup; production imports of this
  * module kick it off immediately (see bottom of file).
