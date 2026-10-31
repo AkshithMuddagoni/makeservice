@@ -67,15 +67,6 @@ const providerApplicationSchema = z.object({
     serialLast4: z.string().regex(/^[A-Z0-9]{4}$/).nullable(),
     specifications: z.record(z.string(), z.string().max(500)).default({}),
   }).strict()).min(1).max(30),
-  documentRequirements: z.array(z.object({
-    key: z.string().regex(/^[A-Z0-9_-]{2,100}$/),
-    label: z.string().trim().min(2).max(160),
-    description: z.string().trim().max(1000),
-    requiredForApproval: z.boolean(),
-    secureOnly: z.boolean(),
-    jobSpecific: z.boolean(),
-    selectedInPreview: z.boolean(),
-  }).strict()).max(100),
   declarationAccepted: z.literal(true),
 }).strict();
 
