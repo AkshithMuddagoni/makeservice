@@ -16,7 +16,10 @@
  * @returns {string}
  */
 export function migrationName(path) {
-  return path.split("/").pop() ?? path;
+  // Node returns native path separators from readdir/join. Windows uses \\,
+  // while Vite import.meta.glob paths use /. Normalize both before extracting
+  // the basename so the migration ledger is portable across dev and Render.
+  return path.split(/[\\\\/]/).pop() ?? path;
 }
 
 /**
