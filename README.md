@@ -8,7 +8,7 @@ Fieldly is a responsive marketplace for discovering equipment and site services 
 
 The existing customer/provider screens remain a prototype. The main Fieldly marketplace store in `src/lib/fieldly/store.ts` still persists sessions, provider changes, requests, quotes, bookings, messages, and reviews in browser `localStorage`. That is per-browser demo state, not a shared marketplace database.
 
-Local preview still uses the fixed code 482609. When production Better Auth and MSG91 settings are configured, the customer dialog uses server-verified phone OTP instead. Provider records, ratings, prices, reviews, and verification flags still include seeded demo data. Booking, chat, tracking and payment confirmation remain local preview actions and do not create real marketplace transactions. Do not use those flows to accept real work or payments yet.
+Local preview still uses the fixed code 482609. When production Better Auth and MSG91 settings are configured, the customer dialog uses server-verified phone OTP instead. Provider records, ratings, prices, reviews, and verification flags still include seeded demo data. Provider `/join` submissions now have an authenticated database path, but it requires a verified Indian Better Auth phone session; MSG91/DLT has not yet been configured. The provider desk/review approvals, discovery, bookings, chat, GPS, KYC file uploads and payments still contain preview/local-state paths. Do not accept real work or payments through those remaining prototype workflows.
 
 A new branch, `feat/production-backend-foundation`, contains the first backend foundation:
 - Ordered Better Auth + Fieldly PostgreSQL migrations.
@@ -16,7 +16,8 @@ A new branch, `feat/production-backend-foundation`, contains the first backend f
 - Core marketplace schema for businesses, provider services, assets, documents, job requests, quotes, bookings, messages, location, payments and reviews.
 - Browser-role database lockdown and RLS enablement.
 - Authenticated server functions for creating/reading the current Fieldly account and storing customer display names.
-- Better Auth Phone Number plugin with an optional MSG91 Flow/DLT delivery adapter and PostgreSQL-backed rate limiting.
+- Better Auth Phone Number plugin with optional MSG91 Flow/DLT delivery and PostgreSQL-backed rate limiting.
+- Authenticated provider registration writes business, service, machine, asset links and document checklist in one transaction, scoped to the verified Better Auth user.
 - Sign-out clears the Better Auth server session before clearing the legacy local UI identity.
 - Supabase/Render setup and payment gateway evaluation documents.
 
@@ -59,6 +60,7 @@ The ordered schema is in `migrations/auth/*.sql` and
 4. `migrations/auth/0002_phone_number_fields.sql` — verified phone-number columns for Better Auth.
 5. `migrations/auth/0003_rate_limit.sql` — persistent Better Auth request counters with RLS enabled.
 6. `migrations/auth/0004_lock_down_auth_data_access.sql` — Better Auth table-only browser access lockdown.
+7. `migrations/fieldly/0005_provider_onboarding.sql` — provider details, ownership foreign keys and document-requirement checklist.
 
 Both production and PGLite migration discovery explicitly include these folders.
 The Fieldly SQL is also tested independently without auth tables so its
@@ -78,7 +80,7 @@ If production authentication has not been provisioned, do not connect a real dat
 
 ## Authentication and data security
 
-Better Auth is the intended identity source. Fieldly ownership columns use TEXT user IDs rather than Supabase Auth UUIDs. The generated Better Auth SQL remains untouched; the app-owned Fieldly SQL is independently testable and does not rely on Supabase Auth. Local preview still uses the fixed-code demo. Production phone sign-in is wired through Better Auth Phone Number and MSG91 Flow when the private MSG91 and Better Auth credentials are configured. The SMS template must be approved under Indian DLT requirements. The rest of the marketplace workflows remain prototype/local state until each is moved to authenticated server functions.
+Better Auth is the intended identity source. Fieldly ownership columns use TEXT user IDs rather than Supabase Auth UUIDs. The generated Better Auth SQL remains untouched; the app-owned Fieldly SQL is independently testable and does not rely on Supabase Auth. Local preview still uses the fixed-code demo. Production phone sign-in is wired through Better Auth Phone Number and MSG91 Flow when the private MSG91 and Better Auth credentials are configured. The SMS template must be approved under Indian DLT requirements. Provider registration now has an authenticated database submission path, but that path requires a verified +91 phone session. Provider review, provider desk, discovery, bookings, GPS, chat, document upload and payments still need their server-side workflow integrations.
 
 The database is accessed from the server through `src/lib/db.ts`. Supabase Data API roles `anon` and `authenticated` receive no access to Fieldly application tables; RLS is enabled without browser-facing policies. Client-facing operations must use authenticated server functions with verified session context and explicit customer/provider/admin ownership checks.
 
