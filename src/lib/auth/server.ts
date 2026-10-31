@@ -70,20 +70,37 @@ const env = (key: string): string | undefined => {
   return value ? value : undefined;
 };
 
-// Explicit off-switch. The deployer sets `VITE_AUTH_ENABLED=true` when it
-// provisions auth; set it to "false" to force auth off everywhere (dev user).
+// Explicit off-switch. The local prototype sets VITE_AUTH_ENABLED=false.
+// Production must set it to true only after provisioning this app's own auth
+// broker client and BETTER_AUTH_SECRET.
 const authDisabled = env("VITE_AUTH_ENABLED") === "false";
+const isProduction = env("NODE_ENV") === "production";
+const configuredBetterAuthSecret = env("BETTER_AUTH_SECRET");
 
-// Broker federation creds: the deployer injects a per-app client when deployed;
-// otherwise fall back to the shared live-preview client, which the broker accepts
-// for any `*.grok-sandbox.com` callback (see `./preview`).
+// Shared preview credentials are allowed only outside production and only for
+// the sandbox hosts accepted by the preview broker. A Render/public production
+// deployment must never silently inherit preview credentials.
 const grokIssuer = env("GROK_AUTH_ISSUER") ?? GROK_ISSUER_DEFAULT;
-const grokClientId = env("GROK_AUTH_CLIENT_ID") ?? PREVIEW_CLIENT_ID;
-const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PREVIEW_CLIENT_SECRET;
+const grokClientId =
+  env("GROK_AUTH_CLIENT_ID") ?? (isProduction ? undefined : PREVIEW_CLIENT_ID);
+const grokClientSecret =
+  env("GROK_AUTH_CLIENT_SECRET") ?? (isProduction ? undefined : PREVIEW_CLIENT_SECRET);
 
-/** True when federated sign-in is active (real auth is enforced). */
+/** True only when all required identity credentials are present. */
 export const authConfigured =
-  !authDisabled && Boolean(grokClientId && grokClientSecret);
+  !authDisabled &&
+  Boolean(
+    grokClientId &&
+    grokClientSecret &&
+    (!isProduction || configuredBetterAuthSecret),
+  );
+
+if (isProduction && !authDisabled && !authConfigured) {
+  console.error(
+    "[auth] Production sign-in is disabled until app-specific GROK_AUTH_CLIENT_ID, " +
+      "GROK_AUTH_CLIENT_SECRET and BETTER_AUTH_SECRET are configured.",
+  );
+}
 
 // This app's own Better Auth origin. When deployed the deployer injects the
 // public URL. In the sandbox live preview there's no fixed URL (each preview gets
@@ -176,7 +193,7 @@ export const auth = betterAuth({
   baseURL,
   // Deployed apps inject BETTER_AUTH_SECRET. Preview: process-stable secret on
   // globalThis so HMR doesn't invalidate PGLite-backed sessions (see above).
-  secret: env("BETTER_AUTH_SECRET") ?? previewAuthSecret(),
+  secret: configuredBetterAuthSecret ?? previewAuthSecret(),
   database,
 
   // CSRF / origin check for credentialed auth POSTs (email sign-up/sign-in, …).
