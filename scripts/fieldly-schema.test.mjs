@@ -83,6 +83,13 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
     );
     assert.equal(authUser.rows[0].user_exists, true);
 
+    const phoneColumns = await db.query(
+      "select column_name from information_schema.columns where table_name = 'user'",
+    );
+    const phoneColumnNames = new Set(phoneColumns.rows.map((row) => row.column_name));
+    assert.ok(phoneColumnNames.has("phoneNumber"));
+    assert.ok(phoneColumnNames.has("phoneNumberVerified"));
+
     const appTables = await db.query(
       "select tablename, rowsecurity from pg_tables where schemaname = 'public'",
     );
