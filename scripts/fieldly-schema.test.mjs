@@ -33,7 +33,6 @@ test("Fieldly PostgreSQL migrations apply cleanly without Supabase Auth tables",
       "provider_businesses",
       "provider_services",
       "provider_assets",
-      "provider_document_requirements",
       "provider_documents",
       "provider_document_requirements",
       "job_requests",
@@ -174,7 +173,6 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
       assert.equal(rowsAfterRollback.rows.length, 0);
     } finally {
       await rollbackDb.close();
-    }
     }
   } finally {
     await db.close();
