@@ -184,6 +184,77 @@ order by tablename;
 
 Every listed application table should report `rowsecurity = true`.
 
+## Test Better Auth locally against the existing Supabase database
+
+The Better Auth catch-all HTTP route is mounted at
+`src/routes/api/auth/$.ts`. CI verifies that `GET /api/auth/get-session`
+returns HTTP 200 with a null session when signed out, and that an invalid
+session-cookie lookup also returns null. These checks do not create a user,
+session, or OTP.
+
+To run the same harmless session lookup against your Supabase PostgreSQL
+database from Windows PowerShell:
+
+1. Pull the latest `feat/production-backend-foundation` branch.
+2. In a VS Code PowerShell terminal, set the following environment variables.
+   Use your existing Supabase Session pooler URI for `DATABASE_URL`; never
+   put it in source code or paste it into chat.
+
+```powershell
+$env:DATABASE_URL = "YOUR_SUPABASE_SESSION_POOLER_URI"
+$env:VITE_AUTH_ENABLED = "true"
+$env:VITE_PHONE_OTP_ENABLED = "false"
+Remove-Item Env:BETTER_AUTH_URL -ErrorAction SilentlyContinue
+
+npm run dev
+```
+
+3. Keep that terminal running. Open a second PowerShell terminal and call the
+   session endpoint with a deliberately invalid cookie:
+
+```powershell
+$response = Invoke-WebRequest `
+  -Uri "http://127.0.0.1:8080/api/auth/get-session" `
+  -Method GET `
+  -Headers @{
+    Accept = "application/json"
+    Cookie = "__Host-grok-auth.session_token=invalid-read-only-session-probe"
+  }
+
+"HTTP status: $($response.StatusCode)"
+"Response body: $($response.Content)"
+```
+
+Expected: HTTP 200 and JSON `null`. A successful response proves the
+Better Auth route can use its configured PostgreSQL adapter for a harmless
+session lookup. No MSG91 credentials are needed and no SMS is sent. If the
+server returns an error, stop and share the error text with credentials and
+hostnames removed.
+
+4. Stop the dev server with Ctrl+C. In the first terminal, clear the temporary
+   variables:
+
+```powershell
+Remove-Item Env:DATABASE_URL
+Remove-Item Env:VITE_AUTH_ENABLED
+Remove-Item Env:VITE_PHONE_OTP_ENABLED
+```
+
+5. Confirm the probe created no identity/session records:
+
+```sql
+select
+  (select count(*) from public."user") as auth_users,
+  (select count(*) from public."session") as auth_sessions;
+```
+
+Both counts should remain unchanged (currently expected to be zero for this
+new project).
+
+This is a connection/session-read test only. It does not yet enable phone OTP;
+that requires MSG91 Flow credentials, an approved Indian DLT template, and a
+separate controlled SMS test.
+
 ## Render environment variables
 
 Configure these in the Render service's **Environment** settings:
