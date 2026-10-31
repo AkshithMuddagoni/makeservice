@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { normalizeIndiaMobile, sendOtpWithMsg91 } from "./msg91.server";
+import { normalizeIndiaMobile, sendOtpWithMsg91 } from "./msg91.server.ts";
 
 const settings = {
   authKey: "test-auth-key",
