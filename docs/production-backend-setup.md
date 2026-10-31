@@ -32,17 +32,16 @@ App-owned SQL is intentionally separate from the opt-in Better Auth schema:
    bookings, messages, GPS, payment ledger, payout metadata and reviews.
 2. `migrations/fieldly/0002_lock_down_browser_data_access.sql` — revoke
    Supabase browser-role access and enable RLS for Fieldly tables.
-3. `migrations/auth/0001_auth.sql` — generated Better Auth reference schema.
-   This file is deliberately outside the automatic migration glob and must not
-   be edited. The repository's existing auth-on convention copies it byte-for-
-   byte to `migrations/0001_auth.sql` only when the app intentionally enables
-   real Better Auth and provisions its identity credentials. The auth-off
-   preview must not have that root-level copy.
+3. `migrations/auth/0001_auth.sql` — generated Better Auth reference
+   schema. This file is deliberately kept byte-for-byte as generated. The
+   production migrator and PGLite migration glob explicitly include this
+   directory; they do not copy it into the root migrations folder.
 
-When auth is enabled, the migration name ordering applies the root
-`0001_auth.sql` before Fieldly's `0001_fieldly_core.sql`. When auth is not
-enabled, Fieldly schema still applies locally without requiring an auth user
-table.
+Migration files are sorted by basename, so Better Auth's `0001_auth.sql`
+runs before `0001_fieldly_core.sql`, followed by the Fieldly lockdown
+migration. The Fieldly schema test also checks that its app-owned SQL can be
+applied independently without Supabase Auth tables; that test does not replace
+the full ordered migration run.
 
 ## Local checks
 
@@ -136,6 +135,21 @@ This is a first integration slice, not the full production marketplace.
 Provider onboarding, discovery, quote handling, bookings, job-state transitions,
 documents, GPS, chat and payment operations still need authenticated server
 functions and UI wiring.
+
+### Phone OTP status
+
+The current customer sign-in UI still uses the fixed preview code and writes to
+the browser-local demo store. It does not send an SMS or create a Better Auth
+session. The existing Better Auth server is wired for its current OAuth broker;
+production India mobile OTP is **not** connected yet.
+
+The next authentication slice should add Better Auth's Phone Number plugin and
+client plugin, a server-only SMS adapter (for example, MSG91 after account and
+DLT setup), +91 E.164 validation, rate limits/cooldowns, abuse monitoring and
+a verified-phone onboarding flow. The generated Better Auth schema should be
+extended through a new app-owned migration for the plugin's phone fields; do
+not edit `migrations/auth/0001_auth.sql`. Do not remove the demo UI until the
+real send/verify flow and session handling pass end-to-end tests.
 
 ## Sensitive data rules
 
