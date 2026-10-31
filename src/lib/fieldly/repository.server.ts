@@ -1,5 +1,6 @@
 import { DEV_USER_ID } from "../auth/verify.server";
 import { getSql } from "../db";
+import { getProviderDocumentRequirements, SERVICE_ONBOARDING } from "./provider-onboarding";
 
 export type FieldlyProfile = {
   user_id: string;
@@ -147,15 +148,6 @@ export type ProviderApplicationInput = {
     serialLast4: string | null;
     specifications: Record<string, string>;
   }>;
-  documentRequirements: Array<{
-    key: string;
-    label: string;
-    description: string;
-    requiredForApproval: boolean;
-    secureOnly: boolean;
-    jobSpecific: boolean;
-    selectedInPreview: boolean;
-  }>;
   declarationAccepted: true;
 };
 
@@ -194,16 +186,30 @@ function validateProviderApplication(input: ProviderApplicationInput): void {
   if (serviceIds.size !== input.services.length) {
     throw new Error("A service can only be registered once per business.");
   }
-  if (input.assets.some((asset) =>
-    asset.serviceIds.length < 1 || asset.serviceIds.some((serviceId) => !serviceIds.has(serviceId))
-  )) {
-    throw new Error("Every machine must be linked to one or more services in this application.");
+  for (const service of input.services) {
+    const definition = SERVICE_ONBOARDING[service.serviceId];
+    if (!definition) throw new Error("One of the selected services is not supported for provider registration.");
+    if (service.selectedTasks.some((task) => !definition.tasks.includes(task))) {
+      throw new Error("A selected task does not belong to its service.");
+    }
+    const allowedSpecificationKeys = new Set(definition.fields.map((field) => field.key));
+    if (Object.keys(service.specifications).some((key) => !allowedSpecificationKeys.has(key))) {
+      throw new Error("A service contains an unsupported specification field.");
+    }
+  }
+  for (const asset of input.assets) {
+    if (asset.serviceIds.length < 1 || asset.serviceIds.some((serviceId) => !serviceIds.has(serviceId))) {
+      throw new Error("Every machine must be linked to one or more services in this application.");
+    }
+    const allowedAssetTypes = new Set(
+      asset.serviceIds.flatMap((serviceId) => SERVICE_ONBOARDING[serviceId]?.assetTypes ?? []),
+    );
+    if (!allowedAssetTypes.has(asset.assetType)) {
+      throw new Error("A machine type does not match any service it is linked to.");
+    }
   }
   if (input.profile.yearsExperience < 0 || input.profile.yearsExperience > 80) {
     throw new Error("Enter experience between 0 and 80 years.");
-  }
-  if (input.documentRequirements.length > 100) {
-    throw new Error("Too many document checklist items were submitted.");
   }
   if (!input.declarationAccepted) {
     throw new Error("Accept the provider declaration before submitting.");
@@ -225,6 +231,20 @@ export async function submitProviderApplicationForUser(
 ): Promise<ProviderApplicationResult> {
   assertProductionIdentity(userId);
   validateProviderApplication(input);
+  const calculatedRequirements = getProviderDocumentRequirements({
+    businessType: input.business.businessType,
+    state: input.business.state,
+    gstStatus: input.business.gstStatus,
+    authorisedRepresentative: input.business.authorisedRepresentative,
+    services: input.services.map(({ serviceId, selectedTasks }) => ({ serviceId, selectedTasks })),
+    assets: input.assets.map(({ serviceIds, ownership, roadUse, vehicleClass, assetType }) => ({
+      serviceIds,
+      ownership,
+      roadUse,
+      vehicleClass,
+      assetType,
+    })),
+  });
   const sql = await getSql();
   const now = new Date();
 
@@ -388,7 +408,7 @@ export async function submitProviderApplicationForUser(
         }
       }
 
-      for (const requirement of input.documentRequirements) {
+      for (const requirement of calculatedRequirements) {
         await tx.query(
           `insert into public.provider_document_requirements (
              business_id, requirement_key, label, description, required_for_approval,
@@ -403,7 +423,7 @@ export async function submitProviderApplicationForUser(
             requirement.requiredForApproval,
             requirement.secureOnly,
             requirement.jobSpecific,
-            requirement.selectedInPreview,
+            false,
           ],
         );
       }
@@ -420,7 +440,7 @@ export async function submitProviderApplicationForUser(
         businessStatus: businesses[0].verification_status,
         serviceCount: input.services.length,
         assetCount: input.assets.length,
-        documentRequirementCount: input.documentRequirements.length,
+        documentRequirementCount: calculatedRequirements.length,
         alreadyExists: false,
       };
     });
