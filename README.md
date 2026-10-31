@@ -15,8 +15,9 @@ A new branch, `feat/production-backend-foundation`, contains the first backend f
 - Better Auth TEXT user IDs (not Supabase Auth UUIDs).
 - Core marketplace schema for businesses, provider services, assets, documents, job requests, quotes, bookings, messages, location, payments and reviews.
 - Browser-role database lockdown and RLS enablement.
-- Authenticated server functions for creating/reading the current Fieldly account.
-- Better Auth Phone Number plugin with an optional MSG91 Flow/DLT delivery adapter.
+- Authenticated server functions for creating/reading the current Fieldly account and storing customer display names.
+- Better Auth Phone Number plugin with an optional MSG91 Flow/DLT delivery adapter and PostgreSQL-backed rate limiting.
+- Sign-out clears the Better Auth server session before clearing the legacy local UI identity.
 - Supabase/Render setup and payment gateway evaluation documents.
 
 The UI has **not** yet been switched to these server functions and the branch has not been deployed. Do not treat this milestone as production launch approval.
@@ -55,6 +56,8 @@ The ordered schema is in `migrations/auth/*.sql` and
 1. `migrations/auth/0001_auth.sql` — generated Better Auth identity/session schema (kept byte-for-byte).
 2. `migrations/fieldly/0001_fieldly_core.sql` — marketplace data model.
 3. `migrations/fieldly/0002_lock_down_browser_data_access.sql` — browser database access lockdown and RLS.
+4. `migrations/auth/0002_phone_number_fields.sql` — verified phone-number columns for Better Auth.
+5. `migrations/auth/0003_rate_limit.sql` — persistent Better Auth request counters with RLS enabled.
 
 Both production and PGLite migration discovery explicitly include these folders.
 The Fieldly SQL is also tested independently without auth tables so its
