@@ -221,7 +221,10 @@ function waitForPopupToken(popup: Window): Promise<string | null> {
  * a hand-rolled control must catch it and let the visitor retry. In the live
  * preview the local clear is sufficient, so it always resolves.
  */
-export async function signOut(redirectTo = "/"): Promise<void> {
+export async function signOut(
+  redirectTo = "/",
+  afterSessionClear?: () => void,
+): Promise<void> {
   await runSignOut({
     livePreview: inLivePreview(),
     hasBearer: Boolean(getBearerToken()),
@@ -231,7 +234,11 @@ export async function signOut(redirectTo = "/"): Promise<void> {
       const { error } = await authClient.signOut();
       if (error) throw new Error(error.message ?? "Sign-out failed");
     },
-    clearToken: () => setBearerToken(null),
+    clearToken: () => {
+      setBearerToken(null);
+      // Keep the prototype-only Zustand identity in sync with the real session.
+      afterSessionClear?.();
+    },
     redirect: () => {
       window.location.href = redirectTo;
     },
