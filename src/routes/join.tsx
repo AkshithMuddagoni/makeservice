@@ -932,7 +932,7 @@ function JoinPage() {
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
             {isProductionSubmitted ? (
-              <Button variant="secondary" onClick={() => void navigate({ to: "/account" })}>Go to account</Button>
+              <Button variant="secondary" onClick={() => void navigate({ to: "/desk" })}>Open provider dashboard</Button>
             ) : (
               <>
                 <Button onClick={addAnotherService}>Add another service</Button>
