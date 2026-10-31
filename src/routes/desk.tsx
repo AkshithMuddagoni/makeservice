@@ -1,8 +1,11 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Activity, ArrowUpRight, Banknote, BriefcaseBusiness, CalendarClock, CheckCircle2, ClipboardList, FileCheck2, History, LifeBuoy, MapPin, PauseCircle, PlayCircle, Plus, Settings2, ShieldCheck, Truck, UserRound, Wallet, Wrench } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { StatusPill, requirementLines } from "@/components/fieldly/bits";
+import { authClient, authEnabled } from "@/lib/auth/client";
+import { getCurrentProviderDashboard } from "@/lib/fieldly/account.functions";
+import { SERVICE_ONBOARDING } from "@/lib/fieldly/provider-onboarding";
 import { Button } from "@/components/ui/button";
 import { getService, isAvailableForService, isEligible, isServiceOperational } from "@/lib/fieldly/catalog";
 import { inr } from "@/lib/fieldly/format";
@@ -27,6 +30,7 @@ function DeskPage() {
   const providers = useProviders();
   const signInProvider = useFieldly((s) => s.signInProvider);
   const hydrated = useFieldly((s) => s.hydrated);
+  const { data: authSession, isPending: authSessionPending } = authClient.useSession();
   const [phone, setPhone] = useState("9000000001");
   const [code, setCode] = useState("");
 
@@ -37,6 +41,38 @@ function DeskPage() {
     const match = providers.find((p) => p.phone === phone);
     if (!match) return toast.error("No machine is listed on that number. Join first.");
     signInProvider(match.id);
+  }
+
+  if (authEnabled) {
+    if (authSessionPending) {
+      return <div className="mx-auto max-w-5xl px-4 py-14 text-sm text-muted">Checking your secure provider session…</div>;
+    }
+    if (!authSession?.user) {
+      return (
+        <div className="mx-auto max-w-lg px-4 py-12">
+          <p className="text-xs font-semibold uppercase tracking-widest text-field">Provider workspace</p>
+          <h1 className="mt-1 font-display text-4xl font-bold">Your provider desk</h1>
+          <p className="mt-3 text-sm leading-6 text-muted">Sign in with your verified MakeService mobile account to view your submitted businesses, machinery and verification progress.</p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Button asChild><Link to="/account">Sign in to MakeService</Link></Button>
+            <Button asChild variant="secondary"><Link to="/join">Register your business</Link></Button>
+          </div>
+        </div>
+      );
+    }
+    const phone = authSession.user.phoneNumber ?? "";
+    const phoneVerified = Boolean(authSession.user.phoneNumberVerified && /^\\+91[6-9]\\d{9}$/.test(phone));
+    if (!phoneVerified) {
+      return (
+        <div className="mx-auto max-w-lg px-4 py-12">
+          <p className="text-xs font-semibold uppercase tracking-widest text-field">Provider workspace</p>
+          <h1 className="mt-1 font-display text-4xl font-bold">Verify your mobile</h1>
+          <p className="mt-3 text-sm leading-6 text-muted">Provider access requires a verified Indian mobile number. MSG91/DLT setup is still pending, so real phone verification is not active yet. The preview code is not accepted in production.</p>
+          <Button asChild className="mt-5"><Link to="/account">Go to account</Link></Button>
+        </div>
+      );
+    }
+    return <ProductionDeskHome />;
   }
 
   if (session?.role !== "provider" || !session.providerId) {
@@ -60,6 +96,198 @@ function DeskPage() {
     );
   }
   return <DeskHome providerId={session.providerId} />;
+}
+
+type ProductionApplication = Awaited<ReturnType<typeof getCurrentProviderDashboard>>[number];
+
+const reviewLabel = (status: string) => status.replaceAll("_", " ").replace(/\\b\\w/g, (letter) => letter.toUpperCase());
+const reviewTone = (status: string) => {
+  const value = status.toLowerCase();
+  if (value === "approved" || value === "verified") return "bg-field-soft text-field";
+  if (value === "rejected" || value === "suspended") return "bg-red-50 text-red-700";
+  if (value === "needs_information") return "bg-amber-50 text-amber-800";
+  return "bg-paper text-muted";
+};
+
+function ProductionDeskHome() {
+  const { data: authSession } = authClient.useSession();
+  const [applications, setApplications] = useState<ProductionApplication[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadApplications = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError("");
+    try {
+      const data = await getCurrentProviderDashboard();
+      setApplications(data);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "We couldn't load your provider applications.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadApplications();
+  }, [loadApplications]);
+
+  const userName = authSession?.user?.name || "Provider";
+  const totalServices = applications.reduce((sum, app) => sum + app.services.length, 0);
+  const totalAssets = applications.reduce((sum, app) => sum + app.assets.length, 0);
+  const pendingDocs = applications.reduce(
+    (sum, app) => sum + app.documentRequirements.filter((doc) => doc.requiredForApproval && !["verified", "not_applicable"].includes(doc.status)).length,
+    0,
+  );
+
+  if (loading) {
+    return <div className="mx-auto max-w-5xl px-4 py-14 text-sm text-muted">Loading your provider applications from Supabase…</div>;
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-8 pb-16">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-field">MakeService provider workspace</p>
+          <h1 className="mt-1 font-display text-3xl font-bold sm:text-4xl">Welcome, {userName}</h1>
+          <p className="mt-2 text-sm text-muted">Your provider applications and verification progress, securely loaded from your account.</p>
+        </div>
+        <Button variant="secondary" onClick={() => void loadApplications(true)} disabled={refreshing}>
+          <Activity className="mr-2 size-4" />{refreshing ? "Refreshing…" : "Refresh"}
+        </Button>
+      </header>
+
+      {error && (
+        <div role="alert" className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          {error}
+          <button type="button" className="ml-2 font-semibold underline" onClick={() => void loadApplications(true)}>Try again</button>
+        </div>
+      )}
+
+      <section className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Metric icon={BriefcaseBusiness} label="Businesses" value={String(applications.length)} note="Owned by your account" />
+        <Metric icon={Wrench} label="Registered services" value={String(totalServices)} note="Across your businesses" />
+        <Metric icon={Truck} label="Machines & assets" value={String(totalAssets)} note="Registered equipment" />
+        <Metric icon={FileCheck2} label="Documents pending" value={String(pendingDocs)} note="Required checklist items" />
+      </section>
+
+      {!applications.length && !error && (
+        <section className="mt-6 rounded-3xl border border-line bg-card p-6 sm:p-8">
+          <div className="flex size-12 items-center justify-center rounded-2xl bg-paper"><BriefcaseBusiness className="size-6" /></div>
+          <h2 className="mt-4 font-display text-2xl font-bold">No provider application yet</h2>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-muted">Register your business, services and machines. Your application will be stored under your verified account and will remain unavailable to customers until the required checks and admin approval are complete.</p>
+          <Button asChild className="mt-5"><Link to="/join"><Plus className="mr-2 size-4" />Register a business or machine</Link></Button>
+        </section>
+      )}
+
+      <div className="mt-6 grid gap-5">
+        {applications.map((application) => (
+          <article key={application.id} className="overflow-hidden rounded-3xl border border-line bg-card">
+            <div className="border-b border-line p-5 sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-field">Business application</p>
+                  <h2 className="mt-1 break-words font-display text-2xl font-bold">{application.tradeName}</h2>
+                  <p className="mt-1 text-sm text-muted">{application.legalName} · {application.businessType.replaceAll("_", " ")}</p>
+                  <p className="mt-2 flex items-center gap-1 text-xs text-muted"><MapPin className="size-3.5" />{application.area}, {application.city ?? application.district}, {application.state} · {application.pincode}</p>
+                </div>
+                <span className={cn("rounded-full px-3 py-1.5 text-xs font-bold", reviewTone(application.verificationStatus))}>
+                  {reviewLabel(application.verificationStatus)}
+                </span>
+              </div>
+              {application.reviewerNote && (
+                <div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+                  <span className="font-semibold">Reviewer note:</span> {application.reviewerNote}
+                </div>
+              )}
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <InfoMini label="Owner" value={application.ownerFullName} />
+                <InfoMini label="Experience" value={application.yearsExperience + " years"} />
+                <InfoMini label="Payout onboarding" value={reviewLabel(application.payoutStatus)} />
+              </div>
+            </div>
+
+            <section className="p-5 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-display text-lg font-bold">Registered services</h3>
+                <span className="text-xs text-muted">{application.services.length} service(s)</span>
+              </div>
+              {application.services.length ? (
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {application.services.map((service) => (
+                    <div key={service.id} className="rounded-2xl border border-line p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="font-semibold">{SERVICE_ONBOARDING[service.serviceId]?.label ?? service.serviceId}</div>
+                        <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", reviewTone(service.verificationStatus))}>{reviewLabel(service.verificationStatus)}</span>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-muted">{service.selectedTasks.join(" · ") || "No tasks recorded"}</p>
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                        <span className="rounded-full bg-paper px-2.5 py-1">{service.isListed ? "Listed" : "Not listed"}</span>
+                        <span className="rounded-full bg-paper px-2.5 py-1">{service.isAvailable ? "Available" : "Unavailable"}</span>
+                      </div>
+                      {service.reviewerNote && <p className="mt-3 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">{service.reviewerNote}</p>}
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="mt-3 text-sm text-muted">No services on this application.</p>}
+            </section>
+
+            <section className="border-t border-line p-5 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-display text-lg font-bold">Machines & equipment</h3>
+                <span className="text-xs text-muted">{application.assets.length} asset(s)</span>
+              </div>
+              {application.assets.length ? (
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {application.assets.map((asset) => (
+                    <div key={asset.id} className="rounded-2xl border border-line p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div><p className="font-semibold">{asset.make} {asset.model}</p><p className="mt-1 text-xs text-muted">{asset.assetType}{asset.yearOfManufacture ? " · " + asset.yearOfManufacture : ""}</p></div>
+                        <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", reviewTone(asset.verificationStatus))}>{reviewLabel(asset.verificationStatus)}</span>
+                      </div>
+                      <p className="mt-2 text-xs text-muted">{reviewLabel(asset.ownership)} · {reviewLabel(asset.roadUse)}</p>
+                      <p className="mt-1 text-xs text-muted">For: {asset.serviceIds.map((id) => SERVICE_ONBOARDING[id]?.label ?? id).join(", ")}</p>
+                      {asset.registrationLast4 && <p className="mt-1 text-xs text-muted">Registration ending {asset.registrationLast4}</p>}
+                      {asset.reviewerNote && <p className="mt-3 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">{asset.reviewerNote}</p>}
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="mt-3 text-sm text-muted">No machines recorded.</p>}
+            </section>
+
+            <section className="border-t border-line p-5 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-display text-lg font-bold">Verification checklist</h3>
+                <span className="text-xs text-muted">{application.documentRequirements.filter((item) => item.requiredForApproval).length} required item(s)</span>
+              </div>
+              {application.documentRequirements.length ? (
+                <div className="mt-3 divide-y divide-line rounded-2xl border border-line">
+                  {application.documentRequirements.map((document) => (
+                    <div key={document.key} className="flex flex-wrap items-start justify-between gap-3 p-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">{document.label}{document.requiredForApproval && <span className="ml-1 text-amber-700">*</span>}</p>
+                        <p className="mt-1 text-xs leading-5 text-muted">{document.description}</p>
+                        {document.secureOnly && <p className="mt-1 text-[11px] font-semibold text-muted">Secure verification required</p>}
+                      </div>
+                      <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold", reviewTone(document.status))}>{reviewLabel(document.status)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="mt-3 text-sm text-muted">No verification requirements recorded.</p>}
+              <p className="mt-3 text-xs leading-5 text-muted">This page shows checklist status only. Actual KYC files are not uploaded here. Do not email or message identity documents; secure document upload will be enabled separately.</p>
+            </section>
+          </article>
+        ))}
+      </div>
+
+      <section className="mt-6 rounded-2xl bg-paper p-4 text-xs leading-5 text-muted">
+        New registrations remain unapproved and unavailable to customers until MakeService completes document verification and administrative approval. Online status, customer requests, quotations, bookings, payouts and GPS tracking will appear here after their server-side workflows are connected.
+      </section>
+    </div>
+  );
 }
 
 function DeskHome({ providerId }: { providerId: string }) {
