@@ -9,6 +9,258 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as AccountRouteImport } from './routes/account'
+import { Route as DeskRouteImport } from './routes/desk'
+import { Route as JoinRouteImport } from './routes/join'
+import { Route as BookingsIndexRouteImport } from './routes/bookings.index'
+import { Route as BookingsBookingIdRouteImport } from './routes/bookings.$bookingId'
+import { Route as FindSlugRouteImport } from './routes/find.$slug'
+import { Route as ProvidersProviderIdRouteImport } from './routes/providers.$providerId'
+import { Route as RequestsRequestIdRouteImport } from './routes/requests.$requestId'
+import { Route as ServicesSlugRouteImport } from './routes/services.$slug'
+
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeskRoute = DeskRouteImport.update({
+  id: '/desk',
+  path: '/desk',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JoinRoute = JoinRouteImport.update({
+  id: '/join',
+  path: '/join',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BookingsIndexRoute = BookingsIndexRouteImport.update({
+  id: '/bookings/',
+  path: '/bookings/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BookingsBookingIdRoute = BookingsBookingIdRouteImport.update({
+  id: '/bookings/$bookingId',
+  path: '/bookings/$bookingId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FindSlugRoute = FindSlugRouteImport.update({
+  id: '/find/$slug',
+  path: '/find/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProvidersProviderIdRoute = ProvidersProviderIdRouteImport.update({
+  id: '/providers/$providerId',
+  path: '/providers/$providerId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RequestsRequestIdRoute = RequestsRequestIdRouteImport.update({
+  id: '/requests/$requestId',
+  path: '/requests/$requestId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ServicesSlugRoute = ServicesSlugRouteImport.update({
+  id: '/services/$slug',
+  path: '/services/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+
+export interface FileRoutesByFullPath {
+  '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/desk': typeof DeskRoute
+  '/join': typeof JoinRoute
+  '/bookings/$bookingId': typeof BookingsBookingIdRoute
+  '/find/$slug': typeof FindSlugRoute
+  '/providers/$providerId': typeof ProvidersProviderIdRoute
+  '/requests/$requestId': typeof RequestsRequestIdRoute
+  '/services/$slug': typeof ServicesSlugRoute
+  '/bookings/': typeof BookingsIndexRoute
+}
+export interface FileRoutesByTo {
+  '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/desk': typeof DeskRoute
+  '/join': typeof JoinRoute
+  '/bookings/$bookingId': typeof BookingsBookingIdRoute
+  '/find/$slug': typeof FindSlugRoute
+  '/providers/$providerId': typeof ProvidersProviderIdRoute
+  '/requests/$requestId': typeof RequestsRequestIdRoute
+  '/services/$slug': typeof ServicesSlugRoute
+  '/bookings': typeof BookingsIndexRoute
+}
+export interface FileRoutesById {
+  __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/desk': typeof DeskRoute
+  '/join': typeof JoinRoute
+  '/bookings/$bookingId': typeof BookingsBookingIdRoute
+  '/find/$slug': typeof FindSlugRoute
+  '/providers/$providerId': typeof ProvidersProviderIdRoute
+  '/requests/$requestId': typeof RequestsRequestIdRoute
+  '/services/$slug': typeof ServicesSlugRoute
+  '/bookings/': typeof BookingsIndexRoute
+}
+export interface FileRouteTypes {
+  fileRoutesByFullPath: FileRoutesByFullPath
+  fullPaths:
+    | '/'
+    | '/account'
+    | '/desk'
+    | '/join'
+    | '/bookings/$bookingId'
+    | '/find/$slug'
+    | '/providers/$providerId'
+    | '/requests/$requestId'
+    | '/services/$slug'
+    | '/bookings/'
+  fileRoutesByTo: FileRoutesByTo
+  to:
+    | '/'
+    | '/account'
+    | '/desk'
+    | '/join'
+    | '/bookings/$bookingId'
+    | '/find/$slug'
+    | '/providers/$providerId'
+    | '/requests/$requestId'
+    | '/services/$slug'
+    | '/bookings'
+  id:
+    | '__root__'
+    | '/'
+    | '/account'
+    | '/desk'
+    | '/join'
+    | '/bookings/$bookingId'
+    | '/find/$slug'
+    | '/providers/$providerId'
+    | '/requests/$requestId'
+    | '/services/$slug'
+    | '/bookings/'
+  fileRoutesById: FileRoutesById
+}
+export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
+  DeskRoute: typeof DeskRoute
+  JoinRoute: typeof JoinRoute
+  BookingsBookingIdRoute: typeof BookingsBookingIdRoute
+  FindSlugRoute: typeof FindSlugRoute
+  ProvidersProviderIdRoute: typeof ProvidersProviderIdRoute
+  RequestsRequestIdRoute: typeof RequestsRequestIdRoute
+  ServicesSlugRoute: typeof ServicesSlugRoute
+  BookingsIndexRoute: typeof BookingsIndexRoute
+}
+
+declare module '@tanstack/react-router' {
+  interface FileRoutesByPath {
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/desk': {
+      id: '/desk'
+      path: '/desk'
+      fullPath: '/desk'
+      preLoaderRoute: typeof DeskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/join': {
+      id: '/join'
+      path: '/join'
+      fullPath: '/join'
+      preLoaderRoute: typeof JoinRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bookings/': {
+      id: '/bookings/'
+      path: '/bookings'
+      fullPath: '/bookings/'
+      preLoaderRoute: typeof BookingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bookings/$bookingId': {
+      id: '/bookings/$bookingId'
+      path: '/bookings/$bookingId'
+      fullPath: '/bookings/$bookingId'
+      preLoaderRoute: typeof BookingsBookingIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/find/$slug': {
+      id: '/find/$slug'
+      path: '/find/$slug'
+      fullPath: '/find/$slug'
+      preLoaderRoute: typeof FindSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/providers/$providerId': {
+      id: '/providers/$providerId'
+      path: '/providers/$providerId'
+      fullPath: '/providers/$providerId'
+      preLoaderRoute: typeof ProvidersProviderIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/requests/$requestId': {
+      id: '/requests/$requestId'
+      path: '/requests/$requestId'
+      fullPath: '/requests/$requestId'
+      preLoaderRoute: typeof RequestsRequestIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/services/$slug': {
+      id: '/services/$slug'
+      path: '/services/$slug'
+      fullPath: '/services/$slug'
+      preLoaderRoute: typeof ServicesSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+  }
+}
+
+const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
+  AccountRoute: AccountRoute,
+  DeskRoute: DeskRoute,
+  JoinRoute: JoinRoute,
+  BookingsBookingIdRoute: BookingsBookingIdRoute,
+  FindSlugRoute: FindSlugRoute,
+  ProvidersProviderIdRoute: ProvidersProviderIdRoute,
+  RequestsRequestIdRoute: RequestsRequestIdRoute,
+  ServicesSlugRoute: ServicesSlugRoute,
+  BookingsIndexRoute: BookingsIndexRoute,
+}
+export const routeTree = rootRouteImport
+  ._addFileChildren(rootRouteChildren)
+  ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
+
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as DeskRouteImport } from './routes/desk'
