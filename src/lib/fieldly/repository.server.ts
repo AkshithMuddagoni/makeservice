@@ -475,3 +475,266 @@ export async function getProviderApplicationsForUser(userId: string) {
     [userId],
   );
 }
+
+
+export type ProviderDashboardApplication = {
+  id: string;
+  legalName: string;
+  tradeName: string;
+  businessType: string;
+  ownerFullName: string;
+  address: string;
+  area: string;
+  district: string;
+  city: string | null;
+  state: string;
+  pincode: string;
+  gstStatus: string;
+  aggregateTurnoverBand: string;
+  udyamProvided: boolean;
+  authorisedRepresentative: boolean;
+  yearsExperience: number;
+  languages: string[];
+  bio: string;
+  verificationStatus: string;
+  reviewerNote: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  payoutStatus: string;
+  services: Array<{
+    id: string;
+    serviceId: string;
+    selectedTasks: string[];
+    specifications: Record<string, unknown>;
+    verificationStatus: string;
+    isListed: boolean;
+    isAvailable: boolean;
+    reviewerNote: string | null;
+    reviewedAt: string | null;
+  }>;
+  assets: Array<{
+    id: string;
+    assetType: string;
+    make: string;
+    model: string;
+    yearOfManufacture: number | null;
+    ownership: string;
+    roadUse: string;
+    vehicleClass: string | null;
+    registrationLast4: string | null;
+    serialLast4: string | null;
+    specifications: Record<string, unknown>;
+    verificationStatus: string;
+    isAvailable: boolean;
+    reviewerNote: string | null;
+    reviewedAt: string | null;
+    serviceIds: string[];
+  }>;
+  documentRequirements: Array<{
+    key: string;
+    label: string;
+    description: string;
+    requiredForApproval: boolean;
+    secureOnly: boolean;
+    jobSpecific: boolean;
+    status: string;
+  }>;
+};
+
+/**
+ * Return all provider applications belonging to the authenticated user.
+ * Every child query is constrained by a business id selected from the
+ * owner-scoped business query above; the browser never supplies an owner id.
+ * No document paths, full identity values or bank data are returned.
+ */
+export async function getProviderDashboardForUser(
+  userId: string,
+): Promise<ProviderDashboardApplication[]> {
+  assertProductionIdentity(userId);
+  const sql = await getSql();
+
+  const businesses = await sql.query<{
+    id: string;
+    legal_name: string;
+    trading_name: string;
+    business_type: string;
+    owner_full_name: string;
+    address_line: string;
+    area: string;
+    district: string;
+    city: string | null;
+    state: string;
+    pincode: string;
+    gst_status: string;
+    aggregate_turnover_band: string;
+    udyam_provided: boolean;
+    authorised_representative: boolean;
+    years_experience: number;
+    languages: string[];
+    bio: string;
+    verification_status: string;
+    reviewer_note: string | null;
+    reviewed_at: string | null;
+    created_at: string;
+  }>(
+    `select
+       id, legal_name, trading_name, business_type, owner_full_name,
+       address_line, area, district, city, state, pincode, gst_status,
+       aggregate_turnover_band, udyam_provided, authorised_representative,
+       years_experience, languages, bio,
+       verification_status::text as verification_status,
+       reviewer_note, reviewed_at, created_at
+     from public.provider_businesses
+     where owner_user_id = $1 and is_suspended = false
+     order by created_at desc
+     limit 20`,
+    [userId],
+  );
+
+  const applications: ProviderDashboardApplication[] = [];
+  for (const business of businesses) {
+    const [services, assets, requirements, payouts] = await Promise.all([
+      sql.query<{
+        id: string;
+        service_id: string;
+        selected_tasks: string[];
+        specifications: Record<string, unknown>;
+        verification_status: string;
+        is_listed: boolean;
+        is_available: boolean;
+        reviewer_note: string | null;
+        reviewed_at: string | null;
+      }>(
+        `select id, service_id, selected_tasks, specifications,
+                verification_status::text as verification_status,
+                is_listed, is_available, reviewer_note, reviewed_at
+         from public.provider_services
+         where business_id = $1
+         order by created_at asc`,
+        [business.id],
+      ),
+      sql.query<{
+        id: string;
+        asset_type: string;
+        make: string;
+        model: string;
+        year_of_manufacture: number | null;
+        ownership: string;
+        road_use: string;
+        vehicle_class: string | null;
+        registration_last4: string | null;
+        serial_last4: string | null;
+        specifications: Record<string, unknown>;
+        verification_status: string;
+        is_available: boolean;
+        reviewer_note: string | null;
+        reviewed_at: string | null;
+        service_ids: string[] | null;
+      }>(
+        `select
+           pa.id, pa.asset_type, pa.make, pa.model, pa.year_of_manufacture,
+           pa.ownership, pa.road_use, pa.vehicle_class,
+           pa.registration_last4, pa.serial_last4, pa.specifications,
+           pa.verification_status::text as verification_status,
+           pa.is_available, pa.reviewer_note, pa.reviewed_at,
+           coalesce(array_agg(ps.service_id) filter (where ps.service_id is not null), '{}') as service_ids
+         from public.provider_assets pa
+         left join public.provider_asset_services pas on pas.asset_id = pa.id
+         left join public.provider_services ps
+           on ps.id = pas.provider_service_id and ps.business_id = pa.business_id
+         where pa.business_id = $1
+         group by pa.id
+         order by pa.created_at asc`,
+        [business.id],
+      ),
+      sql.query<{
+        requirement_key: string;
+        label: string;
+        description: string;
+        required_for_approval: boolean;
+        secure_only: boolean;
+        job_specific: boolean;
+        status: string;
+      }>(
+        `select requirement_key, label, description, required_for_approval,
+                secure_only, job_specific, status
+         from public.provider_document_requirements
+         where business_id = $1
+         order by required_for_approval desc, label asc`,
+        [business.id],
+      ),
+      sql.query<{ onboarding_status: string }>(
+        `select onboarding_status
+         from public.provider_payout_profiles
+         where business_id = $1
+         limit 1`,
+        [business.id],
+      ),
+    ]);
+
+    applications.push({
+      id: business.id,
+      legalName: business.legal_name,
+      tradeName: business.trading_name,
+      businessType: business.business_type,
+      ownerFullName: business.owner_full_name,
+      address: business.address_line,
+      area: business.area,
+      district: business.district,
+      city: business.city,
+      state: business.state,
+      pincode: business.pincode,
+      gstStatus: business.gst_status,
+      aggregateTurnoverBand: business.aggregate_turnover_band,
+      udyamProvided: business.udyam_provided,
+      authorisedRepresentative: business.authorised_representative,
+      yearsExperience: Number(business.years_experience ?? 0),
+      languages: business.languages ?? [],
+      bio: business.bio,
+      verificationStatus: business.verification_status,
+      reviewerNote: business.reviewer_note,
+      reviewedAt: business.reviewed_at,
+      createdAt: business.created_at,
+      payoutStatus: payouts[0]?.onboarding_status ?? "not_started",
+      services: services.map((service) => ({
+        id: service.id,
+        serviceId: service.service_id,
+        selectedTasks: service.selected_tasks ?? [],
+        specifications: service.specifications ?? {},
+        verificationStatus: service.verification_status,
+        isListed: service.is_listed,
+        isAvailable: service.is_available,
+        reviewerNote: service.reviewer_note,
+        reviewedAt: service.reviewed_at,
+      })),
+      assets: assets.map((asset) => ({
+        id: asset.id,
+        assetType: asset.asset_type,
+        make: asset.make,
+        model: asset.model,
+        yearOfManufacture: asset.year_of_manufacture,
+        ownership: asset.ownership,
+        roadUse: asset.road_use,
+        vehicleClass: asset.vehicle_class,
+        registrationLast4: asset.registration_last4,
+        serialLast4: asset.serial_last4,
+        specifications: asset.specifications ?? {},
+        verificationStatus: asset.verification_status,
+        isAvailable: asset.is_available,
+        reviewerNote: asset.reviewer_note,
+        reviewedAt: asset.reviewed_at,
+        serviceIds: asset.service_ids ?? [],
+      })),
+      documentRequirements: requirements.map((requirement) => ({
+        key: requirement.requirement_key,
+        label: requirement.label,
+        description: requirement.description,
+        requiredForApproval: requirement.required_for_approval,
+        secureOnly: requirement.secure_only,
+        jobSpecific: requirement.job_specific,
+        status: requirement.status,
+      })),
+    });
+  }
+  return applications;
+}
