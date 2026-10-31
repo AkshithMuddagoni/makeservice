@@ -614,7 +614,7 @@ function JoinPage() {
             <>
               <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                 <Field label="Mobile number">
-                  <input value={phone} onChange={(e) => { setPhone(e.target.value.replace(/\\D/g, "").slice(0, 10)); setPhoneVerified(false); }} placeholder="10-digit Indian mobile number" inputMode="numeric" className={controlClass} />
+                  <input value={phone} onChange={(e) => { setPhone(e.target.value.replace(/\D/g, "").slice(0, 10)); setPhoneVerified(false); }} placeholder="10-digit Indian mobile number" inputMode="numeric" className={controlClass} />
                 </Field>
                 <div className="flex items-end">
                   <Button type="button" variant="secondary" className="w-full sm:w-auto" onClick={() => {
@@ -626,7 +626,7 @@ function JoinPage() {
               </div>
               {previewOtp && (
                 <div className="grid gap-2 rounded-xl bg-paper p-3 sm:grid-cols-[1fr_auto]">
-                  <input value={previewOtp} onChange={(e) => { setPreviewOtp(e.target.value.replace(/\\D/g, "").slice(0, 6)); setPhoneVerified(false); }} placeholder="Enter 6-digit OTP" inputMode="numeric" className={controlClass} />
+                  <input value={previewOtp} onChange={(e) => { setPreviewOtp(e.target.value.replace(/\D/g, "").slice(0, 6)); setPhoneVerified(false); }} placeholder="Enter 6-digit OTP" inputMode="numeric" className={controlClass} />
                   <Button type="button" onClick={() => {
                     if (previewOtp !== "482609") return toast.error("The preview OTP is 482609.");
                     setPhoneVerified(true);
