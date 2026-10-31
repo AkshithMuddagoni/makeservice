@@ -111,7 +111,10 @@ export function CustomerSignInDialog({ open, onClose, onSuccess }: CustomerSignI
         });
       }
 
-      signInCustomer(normalizedPhone, name.trim() || "Customer");
+      // Production keeps the phone number in Better Auth/PostgreSQL only.
+      // The local session exists only as transient UI state for the prototype
+      // components; the store's production partializer never persists it.
+      signInCustomer(authEnabled ? "" : normalizedPhone, name.trim() || "Customer");
       onSuccess();
     } catch {
       setError("We couldn't complete sign-in. Check your connection and try again.");
