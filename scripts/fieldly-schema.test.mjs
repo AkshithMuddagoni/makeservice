@@ -73,6 +73,7 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
       "migrations/auth/0001_auth.sql",
       ...migrationFiles,
       "migrations/auth/0002_phone_number_fields.sql",
+      "migrations/auth/0003_rate_limit.sql",
     ];
     for (const file of orderedFiles) {
       await db.exec(await readFile(join(root, file), "utf8"));
@@ -89,6 +90,12 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
     const phoneColumnNames = new Set(phoneColumns.rows.map((row) => row.column_name));
     assert.ok(phoneColumnNames.has("phoneNumber"));
     assert.ok(phoneColumnNames.has("phoneNumberVerified"));
+
+    const rateLimitTable = await db.query(
+      "select tablename, rowsecurity from pg_tables where schemaname = 'public' and tablename = 'rateLimit'",
+    );
+    assert.equal(rateLimitTable.rows.length, 1);
+    assert.equal(rateLimitTable.rows[0].rowsecurity, true);
 
     const appTables = await db.query(
       "select tablename, rowsecurity from pg_tables where schemaname = 'public'",
