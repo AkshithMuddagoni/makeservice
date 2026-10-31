@@ -6,16 +6,20 @@ import { test } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const migrationFiles = [
+const independentFieldlyMigrations = [
   "migrations/fieldly/0001_fieldly_core.sql",
   "migrations/fieldly/0002_lock_down_browser_data_access.sql",
+];
+const migrationFiles = [
+  ...independentFieldlyMigrations,
+  "migrations/fieldly/0005_provider_onboarding.sql",
 ];
 
 test("Fieldly PostgreSQL migrations apply cleanly without Supabase Auth tables", async () => {
   const db = new PGlite();
   try {
     await db.waitReady;
-    for (const file of migrationFiles) {
+    for (const file of independentFieldlyMigrations) {
       await db.exec(await readFile(join(root, file), "utf8"));
     }
 
@@ -29,7 +33,9 @@ test("Fieldly PostgreSQL migrations apply cleanly without Supabase Auth tables",
       "provider_businesses",
       "provider_services",
       "provider_assets",
+      "provider_document_requirements",
       "provider_documents",
+      "provider_document_requirements",
       "job_requests",
       "provider_quotes",
       "bookings",
@@ -71,10 +77,10 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
     await db.waitReady;
     const orderedFiles = [
       "migrations/auth/0001_auth.sql",
-      ...migrationFiles,
       "migrations/auth/0002_phone_number_fields.sql",
       "migrations/auth/0003_rate_limit.sql",
       "migrations/auth/0004_lock_down_auth_data_access.sql",
+      ...migrationFiles,
     ];
     for (const file of orderedFiles) {
       await db.exec(await readFile(join(root, file), "utf8"));
@@ -135,6 +141,40 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
        "payment_webhook_events"].includes(row.tablename)
     )) {
       assert.equal(row.rowsecurity, true, `RLS is not enabled on ${row.tablename}`);
+    }
+
+    const providerFks = await db.query(
+      `select conname
+       from pg_constraint
+       where conrelid = 'public.provider_businesses'::regclass
+         and confrelid = 'public.user'::regclass`,
+    );
+    assert.ok(
+      providerFks.rows.some((row) => row.conname === "provider_businesses_owner_fk"),
+      "provider businesses must be owned by an authenticated Better Auth user",
+    );
+
+    const requirementsTable = appTables.rows.find(
+      (row) => row.tablename === "provider_document_requirements",
+    );
+    assert.equal(requirementsTable?.rowsecurity, true);
+
+    const rollbackDb = new PGlite();
+    try {
+      await rollbackDb.waitReady;
+      await rollbackDb.exec("create table tx_probe (id integer primary key)");
+      await assert.rejects(
+        rollbackDb.transaction(async (tx) => {
+          await tx.query("insert into tx_probe (id) values (1)");
+          throw new Error("force rollback");
+        }),
+        /force rollback/,
+      );
+      const rowsAfterRollback = await rollbackDb.query("select id from tx_probe");
+      assert.equal(rowsAfterRollback.rows.length, 0);
+    } finally {
+      await rollbackDb.close();
+    }
     }
   } finally {
     await db.close();
