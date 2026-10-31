@@ -116,7 +116,22 @@ or in an untracked local `.env`. Never prefix it with `VITE_`, expose it in
 browser code or commit it. Never paste the connection string or password into
 chat, GitHub issues, source files or screenshots.
 
-#### Run the first staging migration from VS Code
+#### Run migrations and normalize an earlier Windows ledger
+
+The migration runner now normalizes Windows absolute paths from earlier runs
+to canonical migration basenames before checking what is pending. It preserves
+the original `applied_at` timestamps and does not execute those SQL files
+again. This is important because Render runs Linux while local development may
+run Windows.
+
+Since an earlier Windows run may have recorded absolute paths, pull the latest
+feature branch and run `npm run db:migrate` once more. Expected output is a
+line similar to `[migrate] normalized 6 legacy migration ledger entries.`
+followed by `[migrate] up to date.` It should **not** print any `applied`
+lines. If it does print an `applied` line, stop and inspect the ledger before
+continuing; do not deploy.
+
+#### Run migrations from VS Code
 
 After the chosen Supabase project is ready, open the MakeService repository
 in VS Code and run this in the integrated PowerShell terminal:
