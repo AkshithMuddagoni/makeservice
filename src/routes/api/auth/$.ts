@@ -9,7 +9,7 @@ import { auth } from "@/lib/auth/server";
  * Request/Response bridge; authorization and validation belong in Better
  * Auth plugins and authenticated server functions.
  */
-export const Route = createFileRoute("/api/auth/$")({
+export const Route = createFileRoute("/api/auth/$" as any)({
   server: {
     handlers: {
       GET: async ({ request }: { request: Request }) => auth.handler(request),
