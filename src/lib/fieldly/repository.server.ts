@@ -1,5 +1,5 @@
+import { DEV_USER_ID } from "../auth/verify.server";
 import { getSql } from "../db";
-import { DEV_USER_ID, requireUserId } from "../auth/verify.server";
 
 export type FieldlyProfile = {
   user_id: string;
@@ -17,26 +17,23 @@ export type FieldlyAccount = {
 };
 
 /**
- * Return the verified Better Auth user id for a server-side operation.
- *
- * The preview's shared "dev-user" identity is intentionally not allowed to
- * touch production marketplace records. Every caller must scope its SQL by the
- * returned user id and must never accept an owner/customer id from the browser.
+ * User ids passed here must come from authMiddleware's verified request
+ * context. Never call these repository methods with a browser-supplied id.
+ * The shared preview/dev fallback is rejected even when authentication is
+ * disabled, so demo identities cannot create production marketplace records.
  */
-export async function requireFieldlyUserId(): Promise<string> {
-  const userId = await requireUserId();
+function assertProductionIdentity(userId: string): void {
   if (!userId || userId === DEV_USER_ID) {
     throw new Error("A real signed-in account is required for marketplace data.");
   }
-  return userId;
 }
 
 /**
  * Create the Fieldly profile and default customer role for a verified user.
- * The identity itself remains owned by Better Auth's "user" table.
+ * Better Auth remains the identity source; this stores only app-specific data.
  */
-export async function ensureCurrentFieldlyAccount(): Promise<FieldlyAccount> {
-  const userId = await requireFieldlyUserId();
+export async function ensureFieldlyAccountForUser(userId: string): Promise<FieldlyAccount> {
+  assertProductionIdentity(userId);
   const sql = await getSql();
 
   const identities = await sql.query<{ name: string }>(
@@ -78,9 +75,9 @@ export async function ensureCurrentFieldlyAccount(): Promise<FieldlyAccount> {
   return { profile, roles: roleRows.map((row) => row.role) };
 }
 
-/** Read only the current user's profile and roles. */
-export async function getCurrentFieldlyAccount(): Promise<FieldlyAccount | null> {
-  const userId = await requireFieldlyUserId();
+/** Read only the supplied verified user's profile and roles. */
+export async function getFieldlyAccountForUser(userId: string): Promise<FieldlyAccount | null> {
+  assertProductionIdentity(userId);
   const sql = await getSql();
 
   const profiles = await sql.query<FieldlyProfile>(
