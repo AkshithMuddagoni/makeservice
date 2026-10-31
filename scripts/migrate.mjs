@@ -16,7 +16,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import pg from "pg";
-import { pendingMigrations } from "./migration-plan.mjs";
+import { isMigrationFile, pendingMigrations } from "./migration-plan.mjs";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -36,8 +36,22 @@ async function main() {
     console.log("[migrate] no migrations/ directory — nothing to do.");
     return;
   }
+  // App-owned migrations live in migrations/fieldly/. The generated Better Auth
+  // schema remains in migrations/auth/ and is never traversed automatically.
+  const fieldlyDir = join(migrationsDir, "fieldly");
+  let fieldlyEntries = [];
+  try {
+    fieldlyEntries = await readdir(fieldlyDir);
+  } catch {
+    // An app without Fieldly schema can still use the optional auth migration.
+  }
+  const migrationPaths = [
+    ...entries.filter(isMigrationFile).map((name) => join(migrationsDir, name)),
+    ...fieldlyEntries.filter(isMigrationFile).map((name) => join(fieldlyDir, name)),
+  ];
+
   // An app with no schema of its own must not pay for a database connection.
-  if (pendingMigrations(entries, []).length === 0) {
+  if (pendingMigrations(migrationPaths, []).length === 0) {
     console.log("[migrate] no migrations — nothing to do.");
     return;
   }
@@ -53,8 +67,8 @@ async function main() {
     );
 
     let count = 0;
-    for (const { name } of pendingMigrations(entries, applied)) {
-      const text = await readFile(join(migrationsDir, name), "utf8");
+    for (const { name, path } of pendingMigrations(migrationPaths, applied)) {
+      const text = await readFile(path, "utf8");
       try {
         await client.query("BEGIN");
         // pg's simple-query protocol runs a whole multi-statement file at once.
