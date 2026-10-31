@@ -6,8 +6,9 @@
  * in ../migrations to DATABASE_URL. Each file is applied in one transaction and
  * recorded in a `_migrations` table, so it runs once and is safe to re-run.
  *
- * The read is non-recursive, so the opt-in auth schema under migrations/auth/
- * is not applied to an app that never asked for sign-in.
+ * The generated Better Auth schema is explicitly read from migrations/auth/;
+ * app-owned marketplace migrations are read from migrations/fieldly/. Both
+ * are applied in basename order so the identity table exists before app FKs.
  *
  * No DATABASE_URL (local / preview builds) -> skip; the PGLite fallback applies
  * the same files at startup instead (see src/lib/db.ts).
@@ -36,8 +37,15 @@ async function main() {
     console.log("[migrate] no migrations/ directory — nothing to do.");
     return;
   }
-  // App-owned migrations live in migrations/fieldly/. The generated Better Auth
-  // schema remains in migrations/auth/ and is never traversed automatically.
+  // The generated Better Auth schema is the identity prerequisite for the
+  // Fieldly tables. Read it explicitly; do not copy or edit the generated file.
+  const authDir = join(migrationsDir, "auth");
+  let authEntries = [];
+  try {
+    authEntries = await readdir(authDir);
+  } catch {
+    throw new Error("Required Better Auth schema folder migrations/auth/ is missing.");
+  }
   const fieldlyDir = join(migrationsDir, "fieldly");
   let fieldlyEntries = [];
   try {
@@ -46,6 +54,7 @@ async function main() {
     // An app without Fieldly schema can still use the optional auth migration.
   }
   const migrationPaths = [
+    ...authEntries.filter(isMigrationFile).map((name) => join(authDir, name)),
     ...entries.filter(isMigrationFile).map((name) => join(migrationsDir, name)),
     ...fieldlyEntries.filter(isMigrationFile).map((name) => join(fieldlyDir, name)),
   ];
