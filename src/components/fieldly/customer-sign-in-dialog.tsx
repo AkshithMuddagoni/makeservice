@@ -1,4 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { authClient, authEnabled, phoneOtpEnabled } from "@/lib/auth/client";
+import { ensureCurrentFieldlyAccount } from "@/lib/fieldly/account.functions";
 import { ArrowRight, ShieldCheck, Smartphone, X } from "lucide-react";
 import { useFieldly } from "@/lib/fieldly/store";
 
@@ -18,6 +20,7 @@ export function CustomerSignInDialog({ open, onClose, onSuccess }: CustomerSignI
   const [sent, setSent] = useState(false);
   const [failures, setFailures] = useState(0);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -40,36 +43,79 @@ export function CustomerSignInDialog({ open, onClose, onSuccess }: CustomerSignI
 
   if (!open) return null;
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
 
-    if (!sent) {
-      const normalizedPhone = phone.replace(/\s+/g, "");
-      if (!/^[6-9]\d{9}$/.test(normalizedPhone)) {
-        setError("Enter a valid 10-digit Indian mobile number.");
+    const normalizedPhone = phone.replace(/\\s+/g, "");
+    if (!/^[6-9]\\d{9}$/.test(normalizedPhone)) {
+      setError("Enter a valid 10-digit Indian mobile number.");
+      return;
+    }
+
+    if (authEnabled && !phoneOtpEnabled) {
+      setError("Mobile OTP is not configured on this deployment yet.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      if (!sent) {
+        if (!authEnabled) {
+          // Local-only prototype path. The fixed code is never accepted when
+          // Better Auth is enabled in a deployment.
+          setPhone(normalizedPhone);
+          setSent(true);
+          return;
+        }
+
+        const { error: sendError } = await authClient.phoneNumber.sendOtp({
+          phoneNumber: `+91${normalizedPhone}`,
+        });
+        if (sendError) {
+          setError(sendError.message ?? "Unable to send the verification code.");
+          return;
+        }
+        setPhone(normalizedPhone);
+        setSent(true);
         return;
       }
-      setPhone(normalizedPhone);
-      setSent(true);
-      return;
-    }
 
-    if (code.trim() !== PREVIEW_CODE) {
-      const nextFailures = failures + 1;
-      setFailures(nextFailures);
-      setError(nextFailures >= 5
-        ? "Too many incorrect attempts. Request the preview code again."
-        : "That code is incorrect. Use the preview code shown below.");
-      if (nextFailures >= 5) {
-        setSent(false);
-        setCode("");
+      if (!authEnabled) {
+        if (code.trim() !== PREVIEW_CODE) {
+          const nextFailures = failures + 1;
+          setFailures(nextFailures);
+          setError(nextFailures >= 5
+            ? "Too many incorrect attempts. Request the preview code again."
+            : "That code is incorrect. Use the preview code shown below.");
+          if (nextFailures >= 5) {
+            setSent(false);
+            setCode("");
+          }
+          return;
+        }
+      } else {
+        const { error: verifyError } = await authClient.phoneNumber.verify({
+          phoneNumber: `+91${normalizedPhone}`,
+          code: code.trim(),
+        });
+        if (verifyError) {
+          setError(verifyError.message ?? "The verification code was not accepted.");
+          return;
+        }
+        // Ensure the server has established the Better Auth session before
+        // creating the corresponding Fieldly profile.
+        await authClient.getSession();
+        await ensureCurrentFieldlyAccount();
       }
-      return;
-    }
 
-    signInCustomer(phone, name.trim() || "Customer");
-    onSuccess();
+      signInCustomer(normalizedPhone, name.trim() || "Customer");
+      onSuccess();
+    } catch {
+      setError("We couldn't complete sign-in. Check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -153,9 +199,15 @@ export function CustomerSignInDialog({ open, onClose, onSuccess }: CustomerSignI
                   className="h-12 w-full rounded-xl border border-line bg-white px-3 font-normal tracking-[0.25em] outline-none focus:border-field focus:ring-2 focus:ring-field/15"
                 />
               </label>
-              <p className="rounded-xl bg-sky-50 px-3 py-2.5 text-xs leading-5 text-sky-950">
-                Preview mode: use code <strong>{PREVIEW_CODE}</strong>. Real SMS delivery is not connected yet.
-              </p>
+              {authEnabled ? (
+                <p className="rounded-xl bg-sky-50 px-3 py-2.5 text-xs leading-5 text-sky-950">
+                  Enter the 6-digit code sent to +91 {phone}.
+                </p>
+              ) : (
+                <p className="rounded-xl bg-sky-50 px-3 py-2.5 text-xs leading-5 text-sky-950">
+                  Preview mode: use code <strong>{PREVIEW_CODE}</strong>. No SMS is sent in local preview.
+                </p>
+              )}
             </>
           )}
 
@@ -163,9 +215,10 @@ export function CustomerSignInDialog({ open, onClose, onSuccess }: CustomerSignI
 
           <button
             type="submit"
-            className="mt-1 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 font-bold text-on-ink transition hover:bg-field"
+            disabled={busy || (authEnabled && !phoneOtpEnabled)}
+            className="mt-1 inline-flex h-12 w-full disabled:cursor-not-allowed disabled:opacity-50 items-center justify-center gap-2 rounded-xl bg-ink px-4 font-bold text-on-ink transition hover:bg-field"
           >
-            {sent ? "Sign in and continue" : "Continue with mobile"}
+            {busy ? "Please wait…" : sent ? "Sign in and continue" : "Continue with mobile"}
             <ArrowRight className="size-4" />
           </button>
         </form>
