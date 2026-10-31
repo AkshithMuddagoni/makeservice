@@ -306,11 +306,20 @@ businesses, services and assets start in **submitted / unapproved / unavailable*
 state; nothing is automatically listed to customers.
 
 The `provider_document_requirements` table stores only checklist metadata.
+The production `/desk` route now reads provider businesses, services, machines,
+document-checklist status and payout-onboarding status through an authenticated
+server function. Every business query is scoped to the Better Auth user ID
+from `authMiddleware`; child rows are fetched only for those owned business
+IDs. The dashboard does not return storage paths, full identity values or bank
+details, and it does not allow the owner to approve themselves or mark a
+listing available.
+
 The browser file picker is not a document upload: production file selection is
 blocked until private Supabase Storage uploads and server-signed URLs are
 implemented. PAN, Aadhaar, bank details and actual KYC files are not stored by
-this flow. Provider desk, review/admin approval, secure uploads and provider
-discovery still require their own server-side wiring.
+this flow. Admin review/approval, private uploads, approved-provider discovery,
+provider availability, requests, bookings, GPS, chat and payment workflows
+still require their own server-side integration.
 
 **Phone OTP is currently not enabled on your public site.** You deferred MSG91
 and DLT setup, so this production path will reject provider submissions until
