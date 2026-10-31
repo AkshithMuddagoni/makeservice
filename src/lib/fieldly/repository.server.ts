@@ -583,7 +583,7 @@ export async function getProviderDashboardForUser(
        aggregate_turnover_band, udyam_provided, authorised_representative,
        years_experience, languages, bio,
        verification_status::text as verification_status,
-       reviewer_note, reviewed_at, created_at
+       reviewer_note, reviewed_at::text as reviewed_at, created_at::text as created_at
      from public.provider_businesses
      where owner_user_id = $1 and is_suspended = false
      order by created_at desc
@@ -607,7 +607,8 @@ export async function getProviderDashboardForUser(
       }>(
         `select id, service_id, selected_tasks, specifications,
                 verification_status::text as verification_status,
-                is_listed, is_available, reviewer_note, reviewed_at
+                is_listed, is_available, reviewer_note,
+                reviewed_at::text as reviewed_at
          from public.provider_services
          where business_id = $1
          order by created_at asc`,
@@ -636,7 +637,7 @@ export async function getProviderDashboardForUser(
            pa.ownership, pa.road_use, pa.vehicle_class,
            pa.registration_last4, pa.serial_last4, pa.specifications,
            pa.verification_status::text as verification_status,
-           pa.is_available, pa.reviewer_note, pa.reviewed_at,
+           pa.is_available, pa.reviewer_note, pa.reviewed_at::text as reviewed_at,
            coalesce(array_agg(ps.service_id) filter (where ps.service_id is not null), '{}') as service_ids
          from public.provider_assets pa
          left join public.provider_asset_services pas on pas.asset_id = pa.id
