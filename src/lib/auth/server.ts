@@ -87,21 +87,13 @@ const grokClientId =
 const grokClientSecret =
   env("GROK_AUTH_CLIENT_SECRET") ?? (isProduction ? undefined : PREVIEW_CLIENT_SECRET);
 
-/** True only when all required identity credentials are present. */
-export const authConfigured =
+/** OAuth is optional when the app supports phone-only sign-in. */
+const oauthConfigured = Boolean(
   !authDisabled &&
-  Boolean(
-    grokClientId &&
-    grokClientSecret &&
-    (!isProduction || configuredBetterAuthSecret),
-  );
-
-if (isProduction && !authDisabled && !authConfigured) {
-  console.warn(
-    "[auth] OAuth sign-in is unavailable until app-specific GROK_AUTH_CLIENT_ID " +
-      "and GROK_AUTH_CLIENT_SECRET are configured. Phone OTP can be enabled separately.",
-  );
-}
+  grokClientId &&
+  grokClientSecret &&
+  (!isProduction || configuredBetterAuthSecret),
+);
 
 const msg91AuthKey = env("MSG91_AUTH_KEY");
 const msg91TemplateId = env("MSG91_FLOW_TEMPLATE_ID");
@@ -110,16 +102,26 @@ export const phoneOtpConfigured = Boolean(
   !authDisabled && configuredBetterAuthSecret && msg91AuthKey && msg91TemplateId,
 );
 
+/** Used by request middleware: either configured auth method is sufficient. */
+export const authConfigured = oauthConfigured || phoneOtpConfigured;
+
+if (isProduction && !authDisabled && !authConfigured) {
+  console.error(
+    "[auth] Production sign-in is disabled until either app-specific OAuth " +
+      "credentials or Better Auth + MSG91 phone OTP credentials are configured.",
+  );
+}
+
 const phoneNumberAuthPlugin = phoneOtpConfigured
   ? phoneNumber({
       otpLength: 6,
       expiresIn: 300,
       allowedAttempts: 3,
       requireVerification: true,
-      phoneNumberValidator: (phone) => /^\+91[6-9]\d{9}$/.test(phone),
+      phoneNumberValidator: (phone) => /^\\+91[6-9]\\d{9}$/.test(phone),
       signUpOnVerification: {
         getTempEmail: (phone) =>
-          `customer+${phone.replace(/\D/g, "")}@phone.fieldly.invalid`,
+          `customer+${phone.replace(/\\D/g, "")}@phone.fieldly.invalid`,
         getTempName: () => "MakeService customer",
       },
       // Better Auth owns OTP generation and verification. MSG91 only delivers
@@ -219,7 +221,7 @@ export const SESSION_TOKEN_COOKIE = "__Host-grok-auth.session_token";
 
 // Built separately so the `betterAuth({...})` call stays easy to edit without
 // breaking brackets (models often trip on the conditional plugin spread).
-const grokOAuthPlugin = authConfigured
+const grokOAuthPlugin = oauthConfigured
   ? genericOAuth({
       config: GROK_PROVIDERS.map(({ providerId, idp }) => ({
         providerId,
