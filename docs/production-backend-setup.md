@@ -39,14 +39,17 @@ App-owned SQL is intentionally separate from the opt-in Better Auth schema:
    and verified flag without editing the generated migration.
 5. `migrations/auth/0003_rate_limit.sql` — persistent Better Auth rate-limit
    counters, with RLS enabled and no browser-facing policies.
+6. `migrations/auth/0004_lock_down_auth_data_access.sql` — revoke public and
+   Supabase browser-role access only on Better Auth identity/session tables.
 
 Production and PGLite migrators explicitly include both auth and Fieldly
 folders. Files are sorted by basename, so the production order is
 `0001_auth.sql`, `0001_fieldly_core.sql`,
 `0002_lock_down_browser_data_access.sql`,
-`0002_phone_number_fields.sql`, then `0003_rate_limit.sql`. The Fieldly
-schema test separately checks that its own tables can be applied without
-Supabase Auth tables.
+`0002_phone_number_fields.sql`, `0003_rate_limit.sql`, then
+`0004_lock_down_auth_data_access.sql`. The Fieldly schema test separately
+checks that its own tables can be applied without Better Auth tables, and a
+second test checks the complete auth + marketplace migration sequence.
 
 ## Local checks
 
@@ -136,10 +139,11 @@ If the local branch already exists, use `git switch
 feat/production-backend-foundation` instead of creating it again. Only use the current `makeservice` project after reviewing the full public
 table inventory and confirming it is dedicated to MakeService.
 
-A successful run should report five applied migrations:
+A successful run should report six applied migrations:
 `0001_auth.sql`, `0001_fieldly_core.sql`,
 `0002_lock_down_browser_data_access.sql`,
-`0002_phone_number_fields.sql`, and `0003_rate_limit.sql`.
+`0002_phone_number_fields.sql`, `0003_rate_limit.sql`, and
+`0004_lock_down_auth_data_access.sql`.
 If the runner reports any SQL or connection error, stop and share only the
 error text with credentials and hostnames removed. Do not retry against
 production.
