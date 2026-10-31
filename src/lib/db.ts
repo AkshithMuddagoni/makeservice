@@ -192,8 +192,10 @@ async function createSql(): Promise<Sql> {
  * Get the shared, **server-only** SQL client. PostgreSQL when `DATABASE_URL` is set,
  * otherwise the local PGLite fallback. Memoized — safe to call per request.
  *
- * Schema comes from app-owned `migrations/fieldly/*.sql` (plus any explicit root migrations), auto-applied before the first query on
- * both backends — define tables there, never inline in server functions.
+ * Schema comes from `migrations/auth/*.sql` plus app-owned
+ * `migrations/fieldly/*.sql` (and any explicit root migrations), auto-applied
+ * before the first query on both backends — define tables there, never inline
+ * in server functions.
  */
 export function getSql(): Promise<Sql> {
   sqlPromise ??= createSql().catch((err) => {
@@ -222,7 +224,8 @@ export async function getPglite(): Promise<import("@electric-sql/pglite").PGlite
  * Finish DB bootstrap before the server handles traffic.
  *
  * - **PGLite** (preview / no `DATABASE_URL`): open the in-memory DB and apply
- *   `migrations/*.sql`. Idempotent — concurrent callers share one promise.
+ *   the explicitly globbed auth and Fieldly SQL migrations. Idempotent —
+ *   concurrent callers share one promise.
  * - **PostgreSQL**: no-op (pool is created lazily on first query).
  *
  * Vite `configureServer` awaits this at dev startup; production imports of this
