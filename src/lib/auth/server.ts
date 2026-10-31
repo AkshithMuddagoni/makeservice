@@ -159,7 +159,12 @@ const grokUserInfoUrl = `${issuerBase}/api/auth/oauth2/userinfo`;
 // schema from `migrations/auth/0001_auth.sql`, copied into `migrations/` when
 // the app turns sign-in on.
 const database = databaseUrl
-  ? new Pool({\n      connectionString: databaseUrl,\n      max: 5,\n      idleTimeoutMillis: 30_000,\n      connectionTimeoutMillis: 10_000,\n    })
+  ? new Pool({
+      connectionString: databaseUrl,
+      max: 5,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 10_000,
+    })
   : { dialect: pgliteDialect(() => getPglite()), type: "postgres" as const };
 
 /** Session token cookie name — also read by the live-preview popup completion page. */
