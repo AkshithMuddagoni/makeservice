@@ -134,15 +134,19 @@ async function createPgliteSql(): Promise<Sql> {
   });
   const pg = await globalRef.__pgliteInstance__;
 
-  // Apply migrations/ (the single schema source) so preview matches production.
-  // SQL is inlined by the bundler via import.meta.glob (no runtime fs); applied
-  // files are tracked in _migrations. The glob does not descend, so the opt-in
-  // auth schema under migrations/auth/ stays out. Runs once per module instance
+  // Apply generated Better Auth schema plus app-owned migrations so preview
+  // matches production. SQL is inlined by import.meta.glob (no runtime fs);
+  // applied files are tracked in _migrations and sorted by migration basename.
+  // Runs once per module instance
   // — so an HMR reload after adding a migration file applies it live — with
   // passes serialized on a global chain so concurrent callers never
   // double-apply.
   const migrate = async (): Promise<void> => {
-    const migrations = import.meta.glob(["/migrations/*.sql", "/migrations/fieldly/*.sql"], {
+    const migrations = import.meta.glob([
+      "/migrations/auth/*.sql",
+      "/migrations/*.sql",
+      "/migrations/fieldly/*.sql",
+    ], {
       query: "?raw",
       import: "default",
       eager: true,
