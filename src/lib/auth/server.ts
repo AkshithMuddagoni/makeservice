@@ -277,6 +277,9 @@ export const auth = betterAuth({
   // Better Auth's Phone Number plugin separately caps wrong guesses per code.
   rateLimit: {
     enabled: isProduction,
+    // Persist counters in the same PostgreSQL database as Better Auth.
+    // This survives Render restarts and is shared by all app instances.
+    storage: "database",
     window: 60,
     max: 20,
     customRules: {
