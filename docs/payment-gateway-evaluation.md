@@ -64,8 +64,11 @@ Official sources:
   https://razorpay.com/route/
 - Razorpay Route compliance / payer-payee transparency:
   https://tfs.np.razorpay.in/docs/payments/route/
-- Razorpay Route APIs:
-  https://d6xcmfyh68wv8.cloudfront.net/docs/api/payments/route/apis/
+- Razorpay Route APIs and transfer holds:
+  https://razorpay.com/docs/api/payments/route/create-transfers-payments/
+- RBI's current PA-CB notification, which references the domestic PA
+  guidelines dated 17 March 2020:
+  https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12561&Mode=0
 
 ## Preliminary recommendation
 
@@ -82,6 +85,15 @@ review is a specific onboarding gate to resolve for this platform.
 This is a product-fit recommendation, not confirmation that either provider
 will approve MakeService. Both providers must review the actual business model,
 provider relationship, money flow and refund/cancellation policy.
+
+A specific MakeService requirement is still open: the current UI design places
+customer payment after service completion. That is different from taking an
+advance at booking and holding a provider transfer until the job ends. Keep the
+first release aligned to the completed-job payment flow unless we deliberately
+change the product design. Ask both providers to confirm the exact split,
+refund and settlement treatment for that flow. If later adding booking advances,
+confirm transfer holds and maximum release windows against the actual job and
+dispute duration.
 
 ## Questions to send to both providers
 
@@ -102,6 +114,12 @@ provider relationship, money flow and refund/cancellation policy.
 7. Provide a written fee sheet covering checkout MDR, Easy Split/Route fees,
    transfer/payout fees, refunds, chargebacks, GST, reserves and settlement
    minimums.
+8. Confirm the regulatory and contractual funds-flow model for an Indian
+   marketplace under the RBI Payment Aggregator framework: who is the
+   collecting merchant, whether MakeService requires any separate
+   authorisation/arrangement, how escrow/settlement accounts are handled, and
+   who owns merchant KYC, customer refunds and disputes. Get this in writing
+   from the gateway and have Indian payments counsel review the final flow.
 
 Do not compare only advertised checkout MDR. Effective cost is checkout fees +
 marketplace split/transfer fees + payout fees + refund/chargeback exposure +
