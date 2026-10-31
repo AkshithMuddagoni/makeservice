@@ -84,3 +84,12 @@ export const getCurrentProviderApplications = createServerFn({ method: "GET" })
     const { getProviderApplicationsForUser } = await import("./repository.server");
     return getProviderApplicationsForUser(context.userId);
   });
+
+
+/** Read the full provider dashboard for the authenticated account only. */
+export const getCurrentProviderDashboard = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const { getProviderDashboardForUser } = await import("./repository.server");
+    return getProviderDashboardForUser(context.userId);
+  });
