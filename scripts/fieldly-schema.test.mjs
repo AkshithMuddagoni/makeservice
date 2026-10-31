@@ -77,8 +77,10 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
       await db.exec(await readFile(join(root, file), "utf8"));
     }
 
-    const authUser = await db.query("select to_regclass('public.user') as user_table");
-    assert.equal(authUser.rows[0].user_table, "user");
+    const authUser = await db.query(
+      "select exists (select 1 from pg_class where relname = 'user' and relkind = 'r') as user_exists",
+    );
+    assert.equal(authUser.rows[0].user_exists, true);
 
     const appTables = await db.query(
       "select tablename, rowsecurity from pg_tables where schemaname = 'public'",
