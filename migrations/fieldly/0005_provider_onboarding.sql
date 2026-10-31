@@ -23,8 +23,7 @@ alter table public.provider_businesses
   add column if not exists years_experience smallint not null default 0,
   add column if not exists languages text[] not null default '{}',
   add column if not exists bio text not null default '',
-  add column if not exists area text not null default '',
-  add column if not exists owner_phone_e164 text;
+  add column if not exists area text not null default '';
 
 alter table public.provider_businesses
   add constraint provider_businesses_owner_fk
