@@ -63,3 +63,51 @@ test("Fieldly PostgreSQL migrations apply cleanly without Supabase Auth tables",
     await db.close();
   }
 });
+
+
+test("full Better Auth and Fieldly migration order applies cleanly", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    const orderedFiles = [
+      "migrations/auth/0001_auth.sql",
+      ...migrationFiles,
+    ];
+    for (const file of orderedFiles) {
+      await db.exec(await readFile(join(root, file), "utf8"));
+    }
+
+    const authUser = await db.query("select to_regclass('public.user') as user_table");
+    assert.equal(authUser.rows[0].user_table, "user");
+
+    const appTables = await db.query(
+      "select tablename, rowsecurity from pg_tables where schemaname = 'public'",
+    );
+    const names = new Set(appTables.rows.map((row) => row.tablename));
+    for (const name of [
+      "fieldly_profiles",
+      "fieldly_user_roles",
+      "provider_businesses",
+      "provider_documents",
+      "job_requests",
+      "provider_quotes",
+      "bookings",
+      "booking_live_locations",
+      "payment_intents",
+      "payment_webhook_events",
+    ]) {
+      assert.ok(names.has(name), `missing expected table after full migration: ${name}`);
+    }
+    for (const row of appTables.rows.filter((row) =>
+      row.tablename.startsWith("fieldly_") ||
+      row.tablename.startsWith("provider_") ||
+      ["job_requests", "job_request_targets", "bookings", "booking_events",
+       "booking_messages", "booking_live_locations", "payment_intents",
+       "payment_webhook_events"].includes(row.tablename)
+    )) {
+      assert.equal(row.rowsecurity, true, `RLS is not enabled on ${row.tablename}`);
+    }
+  } finally {
+    await db.close();
+  }
+});
