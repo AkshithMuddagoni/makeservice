@@ -85,6 +85,7 @@ create table if not exists public.provider_document_requirements (
   required_for_approval boolean not null default false,
   secure_only boolean not null default false,
   job_specific boolean not null default false,
+  selected_in_preview boolean not null default false,
   status text not null default 'pending'
     check (status in ('pending', 'uploaded', 'under_review', 'verified', 'rejected', 'not_applicable')),
   created_at timestamptz not null default now(),
