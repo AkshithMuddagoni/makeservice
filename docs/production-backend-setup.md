@@ -25,31 +25,21 @@ Auth users.
 
 ## Migration layout
 
-App-owned SQL is intentionally separate from the opt-in Better Auth schema:
+The canonical migration sequence is:
 
-1. `migrations/fieldly/0001_fieldly_core.sql` — Fieldly profiles, roles,
-   provider businesses/services/assets/operators/documents, requests, quotes,
-   bookings, messages, GPS, payment ledger, payout metadata and reviews.
-2. `migrations/fieldly/0002_lock_down_browser_data_access.sql` — revoke
-   Supabase browser-role access and enable RLS for Fieldly tables.
-3. `migrations/auth/0001_auth.sql` — generated Better Auth identity
-   schema, kept byte-for-byte as generated.
-4. `migrations/auth/0002_phone_number_fields.sql` — app-owned extension for
-   the Better Auth Phone Number plugin. It adds the unique phone-number field
-   and verified flag without editing the generated migration.
-5. `migrations/auth/0003_rate_limit.sql` — persistent Better Auth rate-limit
-   counters, with RLS enabled and no browser-facing policies.
-6. `migrations/auth/0004_lock_down_auth_data_access.sql` — revoke public and
-   Supabase browser-role access only on Better Auth identity/session tables.
+1. `migrations/auth/0001_auth.sql` — generated Better Auth identity/session schema, kept byte-for-byte.
+2. `migrations/auth/0002_phone_number_fields.sql` — verified phone-number fields.
+3. `migrations/auth/0003_rate_limit.sql` — PostgreSQL-backed Better Auth rate limits.
+4. `migrations/auth/0004_lock_down_auth_data_access.sql` — Better Auth table-only RLS and browser-role lockdown.
+5. `migrations/fieldly/0001_fieldly_core.sql` — Fieldly profiles, roles, provider businesses/services/assets/operators/documents, requests, quotes, bookings, messages, GPS, payment ledger, payout metadata and reviews.
+6. `migrations/fieldly/0002_lock_down_browser_data_access.sql` — Fieldly table-only RLS and browser-role lockdown.
+7. `migrations/fieldly/0005_provider_onboarding.sql` — provider business details, document-requirement checklist, and foreign keys from application ownership/reviewer fields to Better Auth users.
 
-Production and PGLite migrators explicitly include both auth and Fieldly
-folders. Files are sorted by basename, so the production order is
-`0001_auth.sql`, `0001_fieldly_core.sql`,
-`0002_lock_down_browser_data_access.sql`,
-`0002_phone_number_fields.sql`, `0003_rate_limit.sql`, then
-`0004_lock_down_auth_data_access.sql`. The Fieldly schema test separately
-checks that its own tables can be applied without Better Auth tables, and a
-second test checks the complete auth + marketplace migration sequence.
+The production and PGLite migrators discover the auth folder first and Fieldly
+folder second. Migration ledger entries use basenames, so keep every migration
+basename unique across both folders. The complete migration test applies this
+same ordered sequence and separately checks the Fieldly core migrations can run
+without Better Auth tables.
 
 ## Local checks
 
@@ -295,10 +285,36 @@ user ID.
   and default customer role.
 - `getCurrentFieldlyAccount` reads only that verified user's profile and roles.
 
-This is a first integration slice, not the full production marketplace.
-Provider onboarding, discovery, quote handling, bookings, job-state transitions,
-documents, GPS, chat and payment operations still need authenticated server
-functions and UI wiring.
+### Provider onboarding database integration
+
+The `/join` form now has two separate paths:
+
+- Local preview continues to use the demo OTP and browser-local provider store.
+- Production mode requires a Better Auth session with a verified +91 phone
+  number. It calls `submitCurrentProviderApplication`; the owner ID and phone
+  are derived server-side from the verified session, never accepted from the
+  browser.
+
+The server saves the business, selected services/tasks, machinery assets,
+asset-to-service links, and document-requirement checklist in one PostgreSQL
+transaction. It also adds the provider role to the authenticated account.
+Duplicate legal-business submissions by the same owner are detected. New
+businesses, services and assets start in **submitted / unapproved / unavailable**
+state; nothing is automatically listed to customers.
+
+The `provider_document_requirements` table stores only checklist metadata.
+The browser file picker is not a document upload: production file selection is
+blocked until private Supabase Storage uploads and server-signed URLs are
+implemented. PAN, Aadhaar, bank details and actual KYC files are not stored by
+this flow. Provider desk, review/admin approval, secure uploads and provider
+discovery still require their own server-side wiring.
+
+**Phone OTP is currently not enabled on your public site.** You deferred MSG91
+and DLT setup, so this production path will reject provider submissions until
+a Better Auth session with a verified Indian phone exists. The preview
+`482609` code is never accepted by this database endpoint.
+
+
 
 ### Phone OTP status
 
