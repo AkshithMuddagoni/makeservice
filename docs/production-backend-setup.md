@@ -64,13 +64,15 @@ For a controlled staging database:
 
 1. In Supabase Dashboard, open **Connect** and copy a PostgreSQL connection
    string. Do not construct the pooler hostname or username manually.
-2. Use the direct endpoint only if the Render runtime can reach its IPv6
-   endpoint (or your project has IPv4 support).
-3. For IPv4-only Render networking, use the Supabase shared pooler in
-   **session mode, port 5432**. The pooler hostname and username differ from the
-   direct connection; copy both from Supabase Connect.
-4. Avoid transaction pooler mode for the current persistent node-postgres pool
-   and Better Auth adapter.
+2. Render's current networking documentation says Render services do not
+   support IPv6. For this Render deployment, therefore, use the Supabase
+   **shared pooler — session mode, port 5432** as the default connection.
+3. Copy the session-pooler host and username from Supabase Connect; do not
+   construct either value. Supabase documents this pooler as IPv4 reachable on
+   every plan. The direct Supabase endpoint is IPv6 by default unless the
+   project has the IPv4 add-on.
+4. Avoid transaction pooler mode (port 6543) for the current persistent
+   node-postgres pool and Better Auth adapter.
 5. Keep TLS enabled (the Supabase connection string normally contains
    `sslmode=require`).
 
