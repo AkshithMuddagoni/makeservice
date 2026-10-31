@@ -1,5 +1,7 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { toast } from "sonner";
+import { authEnabled, signOut as signOutAuth } from "@/lib/auth/client";
 import { CustomerSignInDialog } from "@/components/fieldly/customer-sign-in-dialog";
 import { Button } from "@/components/ui/button";
 import { t } from "@/lib/fieldly/i18n";
@@ -12,8 +14,27 @@ function AccountPage() {
   const lang = useFieldly((state) => state.lang);
   const session = useFieldly((state) => state.session);
   const customer = useFieldly((state) => state.customer);
-  const signOut = useFieldly((state) => state.signOut);
+  const clearLocalSession = useFieldly((state) => state.signOut);
+  const [signingOut, setSigningOut] = useState(false);
   const resumeCustomer = useFieldly((state) => state.resumeCustomer);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      if (authEnabled) {
+        // Clear Better Auth's HttpOnly session (and preview bearer) first.
+        // The callback clears the legacy local UI identity only after the
+        // server confirms sign-out, so the page never falsely shows signed-out.
+        await signOutAuth("/", clearLocalSession);
+      } else {
+        clearLocalSession();
+        await navigate({ to: "/" });
+      }
+    } catch {
+      toast.error("Sign-out failed. Your account is still signed in; please retry.");
+      setSigningOut(false);
+    }
+  }
 
   if (!session && !customer) {
     return (
@@ -50,8 +71,8 @@ function AccountPage() {
           <Button asChild variant="secondary">
             <Link to="/desk">{t(lang, "nav_desk")}</Link>
           </Button>
-          <Button variant="danger" onClick={signOut}>
-            {t(lang, "sign_out")}
+          <Button variant="danger" disabled={signingOut} onClick={() => void handleSignOut()}>
+            {signingOut ? "Signing out…" : t(lang, "sign_out")}
           </Button>
         </div>
       </div>
