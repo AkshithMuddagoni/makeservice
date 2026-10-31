@@ -1,13 +1,9 @@
--- Lock down ONLY MakeService and Better Auth application tables.
--- Do not change grants on unrelated tables in the Supabase public schema.
--- The app connects through its server-side PostgreSQL role; browser roles do
--- not get direct access. Local PGLite has no Supabase anon/authenticated roles.
+-- Lock down ONLY MakeService marketplace tables.
+-- Better Auth table grants/RLS are handled by
+-- migrations/auth/0004_lock_down_auth_data_access.sql.
+-- Do not change privileges on unrelated tables in the public schema.
 
 revoke all privileges on table
-  public."user",
-  public."session",
-  public."account",
-  public."verification",
   public.fieldly_profiles,
   public.fieldly_user_roles,
   public.provider_businesses,
@@ -39,7 +35,6 @@ begin
     if exists (select 1 from pg_roles where rolname = role_name) then
       execute format(
         'revoke all privileges on table
-          public."user", public."session", public."account", public."verification",
           public.fieldly_profiles, public.fieldly_user_roles,
           public.provider_businesses, public.provider_services,
           public.provider_assets, public.provider_asset_services,
@@ -59,11 +54,6 @@ end $$;
 
 -- RLS is defense in depth for any future grants. There are intentionally no
 -- browser-facing policies; authenticated server operations use DATABASE_URL.
-alter table public."user" enable row level security;
-alter table public."session" enable row level security;
-alter table public."account" enable row level security;
-alter table public."verification" enable row level security;
-
 alter table public.fieldly_profiles enable row level security;
 alter table public.fieldly_user_roles enable row level security;
 alter table public.provider_businesses enable row level security;
