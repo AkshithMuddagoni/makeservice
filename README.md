@@ -58,6 +58,7 @@ The ordered schema is in `migrations/auth/*.sql` and
 3. `migrations/fieldly/0002_lock_down_browser_data_access.sql` — browser database access lockdown and RLS.
 4. `migrations/auth/0002_phone_number_fields.sql` — verified phone-number columns for Better Auth.
 5. `migrations/auth/0003_rate_limit.sql` — persistent Better Auth request counters with RLS enabled.
+6. `migrations/auth/0004_lock_down_auth_data_access.sql` — Better Auth table-only browser access lockdown.
 
 Both production and PGLite migration discovery explicitly include these folders.
 The Fieldly SQL is also tested independently without auth tables so its
