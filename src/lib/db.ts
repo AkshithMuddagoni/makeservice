@@ -142,7 +142,7 @@ async function createPgliteSql(): Promise<Sql> {
   // passes serialized on a global chain so concurrent callers never
   // double-apply.
   const migrate = async (): Promise<void> => {
-    const migrations = import.meta.glob("/migrations/*.sql", {
+    const migrations = import.meta.glob(["/migrations/*.sql", "/migrations/fieldly/*.sql"], {
       query: "?raw",
       import: "default",
       eager: true,
@@ -188,7 +188,7 @@ async function createSql(): Promise<Sql> {
  * Get the shared, **server-only** SQL client. PostgreSQL when `DATABASE_URL` is set,
  * otherwise the local PGLite fallback. Memoized — safe to call per request.
  *
- * Schema comes from `migrations/*.sql`, auto-applied before the first query on
+ * Schema comes from app-owned `migrations/fieldly/*.sql` (plus any explicit root migrations), auto-applied before the first query on
  * both backends — define tables there, never inline in server functions.
  */
 export function getSql(): Promise<Sql> {
