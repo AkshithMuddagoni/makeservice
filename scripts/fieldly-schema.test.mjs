@@ -74,6 +74,7 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
       ...migrationFiles,
       "migrations/auth/0002_phone_number_fields.sql",
       "migrations/auth/0003_rate_limit.sql",
+      "migrations/auth/0004_lock_down_auth_data_access.sql",
     ];
     for (const file of orderedFiles) {
       await db.exec(await readFile(join(root, file), "utf8"));
@@ -83,6 +84,17 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
       "select exists (select 1 from pg_class where relname = 'user' and relkind = 'r') as user_exists",
     );
     assert.equal(authUser.rows[0].user_exists, true);
+
+    const authTables = await db.query(
+      `select tablename, rowsecurity
+       from pg_tables
+       where schemaname = 'public'
+         and tablename in ('user', 'session', 'account', 'verification')`,
+    );
+    assert.equal(authTables.rows.length, 4);
+    for (const row of authTables.rows) {
+      assert.equal(row.rowsecurity, true, `RLS is not enabled on Better Auth table ${row.tablename}`);
+    }
 
     const phoneColumns = await db.query(
       "select column_name from information_schema.columns where table_name = 'user'",
