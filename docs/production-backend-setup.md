@@ -37,13 +37,16 @@ App-owned SQL is intentionally separate from the opt-in Better Auth schema:
 4. `migrations/auth/0002_phone_number_fields.sql` — app-owned extension for
    the Better Auth Phone Number plugin. It adds the unique phone-number field
    and verified flag without editing the generated migration.
+5. `migrations/auth/0003_rate_limit.sql` — persistent Better Auth rate-limit
+   counters, with RLS enabled and no browser-facing policies.
 
 Production and PGLite migrators explicitly include both auth and Fieldly
 folders. Files are sorted by basename, so the production order is
 `0001_auth.sql`, `0001_fieldly_core.sql`,
-`0002_lock_down_browser_data_access.sql`, then
-`0002_phone_number_fields.sql`. The Fieldly schema test separately checks
-that its own tables can be applied without Supabase Auth tables.
+`0002_lock_down_browser_data_access.sql`,
+`0002_phone_number_fields.sql`, then `0003_rate_limit.sql`. The Fieldly
+schema test separately checks that its own tables can be applied without
+Supabase Auth tables.
 
 ## Local checks
 
@@ -162,6 +165,9 @@ that code is never accepted when `VITE_AUTH_ENABLED=true`.
   verification attempts per code. Better Auth rate limiting also restricts
   phone OTP issuance to 3 requests/minute and verification to 5 requests/minute
   per client IP.
+- Rate-limit counters are stored in the Supabase/PostgreSQL `rateLimit` table,
+  not process memory. They survive Render restarts and are shared by app
+  instances that use the same database.
 - After verification, the browser calls the authenticated server function to
   create the user's Fieldly profile/role. The browser cannot supply the
   account's owner ID.
@@ -179,12 +185,11 @@ that code is never accepted when `VITE_AUTH_ENABLED=true`.
    `VITE_PHONE_OTP_ENABLED=true` for the frontend build and
    `VITE_AUTH_ENABLED=true` for Better Auth.
 
-Better Auth's rate limiter currently uses its default in-memory store. This
-is adequate for the first single-instance staging test, but before scaling
-Render to multiple instances we must move rate-limit storage to a shared
-persistent store and add delivery-failure monitoring/alerts. The SMS callback
-is intentionally fire-and-forget per Better Auth's timing guidance; a failed
-MSG91 send is logged without the OTP or full phone number.
+Better Auth rate-limit counters now use database storage (the new
+`migrations/auth/0003_rate_limit.sql` migration). The SMS callback is
+intentionally fire-and-forget per Better Auth's timing guidance; a failed
+MSG91 send is logged without the OTP or full phone number. Add delivery-failure
+monitoring/alerts before broad public launch.
 
 **Important:** The user now receives a real Better Auth session when the
 configured OTP flow succeeds, but the rest of the marketplace store still
