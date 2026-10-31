@@ -71,6 +71,7 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
     await db.waitReady;
     const orderedFiles = [
       "migrations/auth/0001_auth.sql",
+      "migrations/auth/0002_phone_number_fields.sql",
       ...migrationFiles,
     ];
     for (const file of orderedFiles) {
