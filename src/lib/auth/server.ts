@@ -30,7 +30,7 @@
  * a verified id via `@/lib/auth/middleware`.
  */
 import { betterAuth } from "better-auth";
-import { bearer, genericOAuth } from "better-auth/plugins";
+import { bearer, genericOAuth, phoneNumber } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
@@ -40,6 +40,7 @@ import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
 import { GROK_PROVIDERS } from "./providers";
 import { pgliteDialect } from "./pglite-dialect";
+import { sendOtpWithMsg91 } from "./msg91.server";
 import {
   GROK_ISSUER_DEFAULT,
   PREVIEW_ALLOWED_HOSTS,
@@ -96,9 +97,55 @@ export const authConfigured =
   );
 
 if (isProduction && !authDisabled && !authConfigured) {
-  console.error(
-    "[auth] Production sign-in is disabled until app-specific GROK_AUTH_CLIENT_ID, " +
-      "GROK_AUTH_CLIENT_SECRET and BETTER_AUTH_SECRET are configured.",
+  console.warn(
+    "[auth] OAuth sign-in is unavailable until app-specific GROK_AUTH_CLIENT_ID " +
+      "and GROK_AUTH_CLIENT_SECRET are configured. Phone OTP can be enabled separately.",
+  );
+}
+
+const msg91AuthKey = env("MSG91_AUTH_KEY");
+const msg91TemplateId = env("MSG91_FLOW_TEMPLATE_ID");
+const msg91OtpVariable = env("MSG91_OTP_VARIABLE") ?? "VAR1";
+export const phoneOtpConfigured = Boolean(
+  !authDisabled && configuredBetterAuthSecret && msg91AuthKey && msg91TemplateId,
+);
+
+const phoneNumberAuthPlugin = phoneOtpConfigured
+  ? phoneNumber({
+      otpLength: 6,
+      expiresIn: 300,
+      allowedAttempts: 3,
+      requireVerification: true,
+      phoneNumberValidator: (phone) => /^\\+91[6-9]\\d{9}$/.test(phone),
+      signUpOnVerification: {
+        getTempEmail: (phone) =>
+          `customer+${phone.replace(/\\D/g, "")}@phone.fieldly.invalid`,
+        getTempName: () => "MakeService customer",
+      },
+      // Better Auth owns OTP generation and verification. MSG91 only delivers
+      // that code through our pre-approved DLT transactional template.
+      // The send operation is intentionally fire-and-forget per Better Auth's
+      // timing guidance; failures are logged without exposing phone or OTP.
+      sendOTP: ({ phoneNumber: recipient, code }) => {
+        void sendOtpWithMsg91({
+          settings: {
+            authKey: msg91AuthKey!,
+            templateId: msg91TemplateId!,
+            otpVariable: msg91OtpVariable,
+          },
+          phoneNumber: recipient,
+          code,
+        }).catch(() => {
+          console.error("[auth] MSG91 OTP delivery failed; request a new code.");
+        });
+      },
+    })
+  : null;
+
+if (isProduction && !authDisabled && !phoneOtpConfigured) {
+  console.warn(
+    "[auth] Phone OTP is unavailable until BETTER_AUTH_SECRET, MSG91_AUTH_KEY " +
+      "and MSG91_FLOW_TEMPLATE_ID are configured.",
   );
 }
 
@@ -255,6 +302,8 @@ export const auth = betterAuth({
 
   plugins: [
     gateIdentitySessions(),
+
+    ...(phoneNumberAuthPlugin ? [phoneNumberAuthPlugin] : []),
 
     // One genericOAuth provider per upstream (when auth is on), all federating
     // to the broker with the SAME client and differing only by the `idp` hint.
