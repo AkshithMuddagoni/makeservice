@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import { authMiddleware } from "../auth/middleware";
 
 /**
@@ -14,8 +15,11 @@ export const getCurrentFieldlyAccount = createServerFn({ method: "GET" })
   });
 
 export const ensureCurrentFieldlyAccount = createServerFn({ method: "POST" })
+  .validator(z.object({
+    displayName: z.string().trim().min(1).max(100).nullable(),
+  }).strict())
   .middleware([authMiddleware])
-  .handler(async ({ context }) => {
+  .handler(async ({ context, data }) => {
     const { ensureFieldlyAccountForUser } = await import("./repository.server");
-    return ensureFieldlyAccountForUser(context.userId);
+    return ensureFieldlyAccountForUser(context.userId, data.displayName);
   });
