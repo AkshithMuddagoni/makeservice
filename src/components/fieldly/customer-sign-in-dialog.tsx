@@ -47,8 +47,8 @@ export function CustomerSignInDialog({ open, onClose, onSuccess }: CustomerSignI
     event.preventDefault();
     setError("");
 
-    const normalizedPhone = phone.replace(/\\s+/g, "");
-    if (!/^[6-9]\\d{9}$/.test(normalizedPhone)) {
+    const normalizedPhone = phone.replace(/\s+/g, "");
+    if (!/^[6-9]\d{9}$/.test(normalizedPhone)) {
       setError("Enter a valid 10-digit Indian mobile number.");
       return;
     }
