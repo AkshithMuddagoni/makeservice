@@ -106,7 +106,9 @@ export function CustomerSignInDialog({ open, onClose, onSuccess }: CustomerSignI
         // Ensure the server has established the Better Auth session before
         // creating the corresponding Fieldly profile.
         await authClient.getSession();
-        await ensureCurrentFieldlyAccount();
+        await ensureCurrentFieldlyAccount({
+          data: { displayName: name.trim() || null },
+        });
       }
 
       signInCustomer(normalizedPhone, name.trim() || "Customer");
