@@ -9,7 +9,8 @@ import { auth } from "@/lib/auth/server";
  * Request/Response bridge; authorization and validation belong in Better
  * Auth plugins and authenticated server functions.
  */
-export const Route = createFileRoute("/api/auth/$" as any)({
+// @ts-expect-error TanStack generates this catch-all route entry when dev/build starts.
+export const Route = createFileRoute("/api/auth/$")({
   server: {
     handlers: {
       GET: async ({ request }: { request: Request }) => auth.handler(request),
