@@ -32,7 +32,10 @@ function assertProductionIdentity(userId: string): void {
  * Create the Fieldly profile and default customer role for a verified user.
  * Better Auth remains the identity source; this stores only app-specific data.
  */
-export async function ensureFieldlyAccountForUser(userId: string): Promise<FieldlyAccount> {
+export async function ensureFieldlyAccountForUser(
+  userId: string,
+  displayName: string | null = null,
+): Promise<FieldlyAccount> {
   assertProductionIdentity(userId);
   const sql = await getSql();
 
@@ -45,17 +48,22 @@ export async function ensureFieldlyAccountForUser(userId: string): Promise<Field
     throw new Error("The authenticated identity was not found in the account database.");
   }
 
+  const chosenName = displayName?.trim() || identity.name || "Customer";
+  if (displayName?.trim()) {
+    await sql.query(
+      'update "user" set "name" = $1, "updatedAt" = now() where "id" = $2',
+      [chosenName, userId],
+    );
+  }
+
   const profiles = await sql.query<FieldlyProfile>(
     `insert into fieldly_profiles (user_id, display_name)
      values ($1, $2)
      on conflict (user_id) do update
-       set display_name = case
-         when fieldly_profiles.display_name = '' then excluded.display_name
-         else fieldly_profiles.display_name
-       end,
+       set display_name = coalesce($3, fieldly_profiles.display_name),
        updated_at = now()
      returning user_id, display_name, locale, created_at, updated_at`,
-    [userId, identity.name ?? ""],
+    [userId, chosenName, displayName?.trim() || null],
   );
   const profile = profiles[0];
   if (!profile) throw new Error("Could not create the Fieldly profile.");
