@@ -95,6 +95,37 @@ or in an untracked local `.env`. Never prefix it with `VITE_`, expose it in
 browser code or commit it. Never paste the connection string or password into
 chat, GitHub issues, source files or screenshots.
 
+#### Run the first staging migration from VS Code
+
+After the new Supabase staging project is ready, open the MakeService repository
+in VS Code and run this in the integrated PowerShell terminal:
+
+```powershell
+git fetch origin
+git switch -c feat/production-backend-foundation --track origin/feat/production-backend-foundation
+npm install
+
+# Paste the staging project's Session pooler URI here, only in this terminal.
+$env:DATABASE_URL = "postgresql://..."
+
+npm run db:migrate
+
+# Clear the credential from this PowerShell session immediately afterwards.
+Remove-Item Env:DATABASE_URL
+```
+
+If the local branch already exists, use `git switch
+feat/production-backend-foundation` instead of creating it again. Do not run
+this command against the current `makeservice` production project.
+
+A successful run should report five applied migrations:
+`0001_auth.sql`, `0001_fieldly_core.sql`,
+`0002_lock_down_browser_data_access.sql`,
+`0002_phone_number_fields.sql`, and `0003_rate_limit.sql`.
+If the runner reports any SQL or connection error, stop and share only the
+error text with credentials and hostnames removed. Do not retry against
+production.
+
 After applying the migrations, verify in the Supabase SQL Editor:
 
 ```sql
