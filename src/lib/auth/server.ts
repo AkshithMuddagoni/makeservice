@@ -40,7 +40,11 @@ import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
 import { GROK_PROVIDERS } from "./providers";
 import { pgliteDialect } from "./pglite-dialect";
-import { sendOtpWithMsg91 } from "./msg91.server";
+import {
+  sendOtpWithMsg91,
+  temporaryEmailForIndiaPhone,
+  isValidIndiaE164Phone,
+} from "./msg91.server";
 import {
   GROK_ISSUER_DEFAULT,
   PREVIEW_ALLOWED_HOSTS,
@@ -118,10 +122,9 @@ const phoneNumberAuthPlugin = phoneOtpConfigured
       expiresIn: 300,
       allowedAttempts: 3,
       requireVerification: true,
-      phoneNumberValidator: (phone) => /^\\+91[6-9]\\d{9}$/.test(phone),
+      phoneNumberValidator: isValidIndiaE164Phone,
       signUpOnVerification: {
-        getTempEmail: (phone) =>
-          `customer+${phone.replace(/\\D/g, "")}@phone.fieldly.invalid`,
+        getTempEmail: temporaryEmailForIndiaPhone,
         getTempName: () => "MakeService customer",
       },
       // Better Auth owns OTP generation and verification. MSG91 only delivers
