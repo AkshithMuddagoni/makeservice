@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { normalizeIndiaMobile, sendOtpWithMsg91 } from "./msg91.server.ts";
+import {
+  isValidIndiaE164Phone,
+  normalizeIndiaMobile,
+  sendOtpWithMsg91,
+  temporaryEmailForIndiaPhone,
+} from "./msg91.server.ts";
 
 const settings = {
   authKey: "test-auth-key",
@@ -13,6 +18,26 @@ function response(status: number, body: unknown) {
     headers: { "content-type": "application/json" },
   });
 }
+
+test("validates India E.164 phone numbers for Better Auth", () => {
+  assert.equal(isValidIndiaE164Phone("+919876543210"), true);
+  assert.equal(isValidIndiaE164Phone("+916123456789"), true);
+  assert.equal(isValidIndiaE164Phone("9876543210"), false);
+  assert.equal(isValidIndiaE164Phone("+911234567890"), false);
+  assert.equal(isValidIndiaE164Phone("+14155552671"), false);
+  assert.equal(isValidIndiaE164Phone("+91987654321"), false);
+});
+
+test("generates a stable placeholder email for verified Indian phone sign-up", () => {
+  assert.equal(
+    temporaryEmailForIndiaPhone("+919876543210"),
+    "customer+919876543210@phone.fieldly.invalid",
+  );
+  assert.throws(
+    () => temporaryEmailForIndiaPhone("9876543210"),
+    /Indian E.164/,
+  );
+});
 
 test("normalizes Indian national and E.164 mobile values for MSG91", () => {
   assert.equal(normalizeIndiaMobile("9876543210"), "919876543210");
