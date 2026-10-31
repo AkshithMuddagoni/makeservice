@@ -10,7 +10,12 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { isMigrationFile, migrationName, pendingMigrations } from "./migration-plan.mjs";
+import {
+  isMigrationFile,
+  legacyMigrationNames,
+  migrationName,
+  pendingMigrations,
+} from "./migration-plan.mjs";
 import { projectRoot } from "./with-app-env.mjs";
 
 const AUTH_MIGRATION = "0001_auth.sql";
@@ -36,6 +41,28 @@ test("a file already applied from another directory does not re-apply", () => {
   // The auth-on path copies migrations/auth/0001_auth.sql into the globbed
   // directory; a database that already has it must not run it twice.
   assert.deepEqual(pendingMigrations(["/migrations/0001_auth.sql"], ["0001_auth.sql"]), []);
+});
+
+test("Windows and POSIX paths normalize to the same migration basename", () => {
+  assert.equal(
+    migrationName(String.raw`C:\\Users\\hp\\Downloads\\Fieldly-Website-Source\\migrations\\auth\\0001_auth.sql`),
+    "0001_auth.sql",
+  );
+  assert.equal(
+    migrationName("/opt/render/project/src/migrations/fieldly/0001_fieldly_core.sql"),
+    "0001_fieldly_core.sql",
+  );
+});
+
+test("legacy absolute-path ledger entries normalize without becoming pending", () => {
+  const legacy = String.raw`C:\\Users\\hp\\Downloads\\Fieldly-Website-Source\\migrations\\auth\\0001_auth.sql`;
+  assert.deepEqual(legacyMigrationNames([legacy, "0002_phone_number_fields.sql"]), [
+    { legacy, canonical: "0001_auth.sql" },
+  ]);
+  assert.deepEqual(
+    pendingMigrations([legacy], ["0001_auth.sql"]),
+    [],
+  );
 });
 
 test("pending migrations are returned in name order", () => {
