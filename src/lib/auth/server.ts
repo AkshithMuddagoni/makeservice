@@ -116,10 +116,10 @@ const phoneNumberAuthPlugin = phoneOtpConfigured
       expiresIn: 300,
       allowedAttempts: 3,
       requireVerification: true,
-      phoneNumberValidator: (phone) => /^\\+91[6-9]\\d{9}$/.test(phone),
+      phoneNumberValidator: (phone) => /^\+91[6-9]\d{9}$/.test(phone),
       signUpOnVerification: {
         getTempEmail: (phone) =>
-          `customer+${phone.replace(/\\D/g, "")}@phone.fieldly.invalid`,
+          `customer+${phone.replace(/\D/g, "")}@phone.fieldly.invalid`,
         getTempName: () => "MakeService customer",
       },
       // Better Auth owns OTP generation and verification. MSG91 only delivers
