@@ -273,6 +273,18 @@ export const auth = betterAuth({
     },
   },
 
+  // Apply conservative per-IP limits to SMS issuance and OTP verification.
+  // Better Auth's Phone Number plugin separately caps wrong guesses per code.
+  rateLimit: {
+    enabled: isProduction,
+    window: 60,
+    max: 20,
+    customRules: {
+      "/phone-number/send-otp": { window: 60, max: 3 },
+      "/phone-number/verify": { window: 60, max: 5 },
+    },
+  },
+
   // Cache the session in the short-lived signed `session_data` cookie so reads
   // (incl. the client's `/get-session`) skip the DB — this shrinks the "loading"
   // window and reduces auth flicker. See the `auth` skill for the full
