@@ -114,12 +114,14 @@ the original `applied_at` timestamps and does not execute those SQL files
 again. This is important because Render runs Linux while local development may
 run Windows.
 
-Since an earlier Windows run may have recorded absolute paths, pull the latest
-feature branch and run `npm run db:migrate` once more. Expected output is a
-line similar to `[migrate] normalized 6 legacy migration ledger entries.`
-followed by `[migrate] up to date.` It should **not** print any `applied`
-lines. If it does print an `applied` line, stop and inspect the ledger before
-continuing; do not deploy.
+The earlier Windows run has already been normalized to six canonical
+ledger entries. The feature branch now adds one new migration:
+`0005_provider_onboarding.sql`. After pulling the latest branch, run
+`npm run db:migrate`. Expected: it applies only
+`migrations/fieldly/0005_provider_onboarding.sql`, then reports that the
+migration run is done. It must not re-apply any of the six previous SQL files.
+If any older migration is printed as newly applied, stop and inspect the
+ledger before continuing; do not deploy.
 
 #### Run migrations from VS Code
 
@@ -144,11 +146,12 @@ If the local branch already exists, use `git switch
 feat/production-backend-foundation` instead of creating it again. Only use the current `makeservice` project after reviewing the full public
 table inventory and confirming it is dedicated to MakeService.
 
-A successful run should report six applied migrations:
-`0001_auth.sql`, `0001_fieldly_core.sql`,
-`0002_lock_down_browser_data_access.sql`,
-`0002_phone_number_fields.sql`, `0003_rate_limit.sql`, and
-`0004_lock_down_auth_data_access.sql`.
+Your database should finish with seven migration ledger records:
+`0001_auth.sql`, `0002_phone_number_fields.sql`,
+`0003_rate_limit.sql`, `0004_lock_down_auth_data_access.sql`,
+`0001_fieldly_core.sql`, `0002_lock_down_browser_data_access.sql`, and
+`0005_provider_onboarding.sql`. The earlier six remain applied; the new
+provider onboarding migration is the only new SQL for this milestone.
 If the runner reports any SQL or connection error, stop and share only the
 error text with credentials and hostnames removed. Do not retry against
 production.
