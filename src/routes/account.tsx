@@ -41,7 +41,10 @@ function AccountPage() {
       <CustomerSignInDialog
         open
         onClose={() => void navigate({ to: "/" })}
-        onSuccess={() => toast.success("Signed in.")}
+        onSuccess={() => {
+          toast.success("Signed in.");
+          void navigate({ to: "/" });
+        }}
       />
     );
   }
