@@ -17,7 +17,12 @@ import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import pg from "pg";
-import { isMigrationFile, pendingMigrations } from "./migration-plan.mjs";
+import {
+  isMigrationFile,
+  legacyMigrationNames,
+  migrationName,
+  pendingMigrations,
+} from "./migration-plan.mjs";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -71,9 +76,42 @@ async function main() {
     await client.query(
       "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
     );
-    const applied = (await client.query("SELECT name FROM _migrations")).rows.map(
+    const storedNames = (await client.query("SELECT name FROM _migrations")).rows.map(
       (r) => r.name,
     );
+
+    // Early Windows runs stored native absolute paths in _migrations because
+    // path.basename semantics were not portable in migration-plan.mjs. Convert
+    // them to canonical basenames without rerunning their SQL or losing the
+    // original applied_at timestamp. This is safe to run on every deploy.
+    const legacyEntries = legacyMigrationNames(storedNames);
+    if (legacyEntries.length > 0) {
+      await client.query("BEGIN");
+      try {
+        for (const { legacy, canonical } of legacyEntries) {
+          await client.query(
+            `INSERT INTO _migrations (name, applied_at)
+             SELECT $2, applied_at FROM _migrations WHERE name = $1
+             ON CONFLICT (name) DO UPDATE
+               SET applied_at = LEAST(_migrations.applied_at, EXCLUDED.applied_at)`,
+            [legacy, canonical],
+          );
+          await client.query("DELETE FROM _migrations WHERE name = $1", [legacy]);
+        }
+        await client.query("COMMIT");
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      }
+      console.log(
+        `[migrate] normalized ${legacyEntries.length} legacy migration ledger entr${legacyEntries.length === 1 ? "y" : "ies"}.`,
+      );
+    }
+
+    const applied = storedNames.map(migrationName);
+    for (const { canonical } of legacyEntries) {
+      if (!applied.includes(canonical)) applied.push(canonical);
+    }
 
     let count = 0;
     for (const { name, path } of pendingMigrations(migrationPaths, applied)) {
