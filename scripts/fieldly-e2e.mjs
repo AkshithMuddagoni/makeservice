@@ -12,6 +12,45 @@ function log(message) {
   console.log("[fieldly-e2e] " + message);
 }
 
+async function testBetterAuthUnauthenticatedSession() {
+  const response = await fetch(BASE_URL + "/api/auth/get-session", {
+    headers: { accept: "application/json" },
+  });
+  assert.equal(
+    response.status,
+    200,
+    "Better Auth GET /api/auth/get-session must be mounted and reachable",
+  );
+  const session = await response.json();
+  assert.equal(
+    session,
+    null,
+    "A signed-out browser should receive a null session without creating an account",
+  );
+
+  // A deliberately invalid token forces Better Auth through its configured
+  // session adapter lookup. In local runs that can be PostgreSQL/Supabase;
+  // in CI it is the isolated PGLite database. It must never create a session.
+  const lookupResponse = await fetch(BASE_URL + "/api/auth/get-session", {
+    headers: {
+      accept: "application/json",
+      cookie: "__Host-grok-auth.session_token=invalid-read-only-session-probe",
+    },
+  });
+  assert.equal(
+    lookupResponse.status,
+    200,
+    "Better Auth must handle a session lookup against its configured database",
+  );
+  const invalidSession = await lookupResponse.json();
+  assert.equal(
+    invalidSession,
+    null,
+    "An invalid session token must not resolve to a user",
+  );
+  log("Better Auth unauthenticated and invalid-session database probes passed");
+}
+
 async function waitForServer() {
   const startedAt = Date.now();
   let lastError = "";
@@ -521,6 +560,7 @@ async function main() {
 
   try {
     await waitForServer();
+    await testBetterAuthUnauthenticatedSession();
     browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
     await testHeroAutoCarousel();
     await testResponsiveViewportMatrix();

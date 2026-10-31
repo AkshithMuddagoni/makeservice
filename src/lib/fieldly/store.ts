@@ -122,6 +122,10 @@ function issueCode(booking: Booking): Booking {
   };
 }
 
+// In production, account identity lives in the HttpOnly Better Auth session
+// and PostgreSQL, never in this browser-persisted prototype store.
+const persistLocalIdentity = import.meta.env.VITE_AUTH_ENABLED === "false";
+
 const memoryStorage: Storage = {
   getItem: () => null,
   setItem: () => undefined,
@@ -822,7 +826,7 @@ export const useFieldly = create<State>()(
     }),
     {
       name: "fieldly-preview-v1",
-      version: 2,
+      version: 3,
       migrate: (persistedState, version) => {
         const state = persistedState as Partial<State>;
         const oldWarangalPresets = new Set([
@@ -839,7 +843,13 @@ export const useFieldly = create<State>()(
         const oldLocalPin =
           state.site && kmBetween(state.site, { lat: 17.978, lng: 79.575 }) < 35;
         if (version < 2 && ((selectedLabel && oldWarangalPresets.has(selectedLabel)) || oldLocalPin)) {
-          return { ...state, site: null } as State;
+          state.site = null;
+        }
+        if (!persistLocalIdentity) {
+          // Strip any legacy browser-persisted identity when this build turns
+          // on real auth; a server-verified session will repopulate UI state.
+          state.customer = null;
+          state.session = null;
         }
         return state as State;
       },
@@ -849,8 +859,8 @@ export const useFieldly = create<State>()(
         lang: s.lang,
         site: s.site,
         draft: s.draft,
-        customer: s.customer,
-        session: s.session,
+        customer: persistLocalIdentity ? s.customer : null,
+        session: persistLocalIdentity ? s.session : null,
         extras: s.extras,
         availability: s.availability,
         requests: s.requests,

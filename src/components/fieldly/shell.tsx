@@ -2,6 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { ChevronDown, MapPin, Menu, Sprout, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Toaster } from "sonner";
+import { authClient, authEnabled } from "@/lib/auth/client";
 import { t } from "@/lib/fieldly/i18n";
 import { useFieldly } from "@/lib/fieldly/store";
 import type { Lang } from "@/lib/fieldly/types";
@@ -14,6 +15,9 @@ export function Shell({ children }: { children: ReactNode }) {
   const site = useFieldly((s) => s.site);
   const setSite = useFieldly((s) => s.setSite);
   const session = useFieldly((s) => s.session);
+  const setCustomerIdentity = useFieldly((s) => s.signInCustomer);
+  const clearLocalIdentity = useFieldly((s) => s.signOut);
+  const { data: authSession, isPending: authSessionPending } = authClient.useSession();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [menu, setMenu] = useState(false);
   const [siteOpen, setSiteOpen] = useState(false);
@@ -23,6 +27,24 @@ export function Shell({ children }: { children: ReactNode }) {
       useFieldly.setState({ hydrated: true });
     });
   }, []);
+
+  useEffect(() => {
+    if (!authEnabled || authSessionPending) return;
+    if (authSession?.user) {
+      // Reconstruct display-only identity from the verified server session.
+      // The persisted Fieldly preview store deliberately contains no phone
+      // number or authenticated session in production builds.
+      setCustomerIdentity("", authSession.user.name || "Customer");
+    } else {
+      clearLocalIdentity();
+    }
+  }, [
+    authSession?.user?.id,
+    authSession?.user?.name,
+    authSessionPending,
+    clearLocalIdentity,
+    setCustomerIdentity,
+  ]);
 
   useEffect(() => {
     setMenu(false);
