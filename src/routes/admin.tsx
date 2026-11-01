@@ -7,7 +7,9 @@ import { authClient, authEnabled } from "@/lib/auth/client";
 import {
   applyAdminProviderReviewDecision,
   getAdminProviderApplicationDetail,
+  getAdminProviderDocumentDownloadUrl,
   getAdminProviderReviewQueue,
+  reviewAdminProviderDocument,
 } from "@/lib/fieldly/account.functions";
 import { SERVICE_ONBOARDING } from "@/lib/fieldly/provider-onboarding";
 import { cn } from "@/lib/utils";
@@ -68,6 +70,7 @@ function AdminWorkspace() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
+  const [documentBusyId, setDocumentBusyId] = useState<string | null>(null);
 
   const loadQueue = useCallback(async (quiet = false) => {
     if (!quiet) setQueueLoading(true);
@@ -140,6 +143,44 @@ function AdminWorkspace() {
       toast.error(cause instanceof Error ? cause.message : "Could not save the review decision.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function openProviderDocument(documentId: string) {
+    const tab = window.open("about:blank", "_blank");
+    try {
+      const result = await getAdminProviderDocumentDownloadUrl({ data: { documentId } });
+      if (tab) {
+        tab.opener = null;
+        tab.location.href = result.signedUrl;
+      } else {
+        window.location.assign(result.signedUrl);
+      }
+    } catch (cause) {
+      tab?.close();
+      toast.error(cause instanceof Error ? cause.message : "Could not create a secure document link.");
+    }
+  }
+
+  async function decideProviderDocument(documentId: string, decision: "verified" | "rejected") {
+    if (!detail || documentBusyId) return;
+    if (decision === "rejected" && note.trim().length < 8) {
+      toast.error("Add a review reason of at least 8 characters before rejecting this document.");
+      return;
+    }
+    setDocumentBusyId(documentId);
+    try {
+      await reviewAdminProviderDocument({
+        data: { documentId, decision, note: note.trim() },
+      });
+      toast.success(decision === "verified"
+        ? "Document verified and audit logged."
+        : "Document rejected and audit logged.");
+      await Promise.all([loadQueue(true), loadDetail(detail.id)]);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not save the document review.");
+    } finally {
+      setDocumentBusyId(null);
     }
   }
 
@@ -218,6 +259,9 @@ function AdminWorkspace() {
               onNoteChange={setNote}
               busy={busy}
               pendingDocs={pendingDocs}
+              documentBusyId={documentBusyId}
+              onOpenDocument={(documentId) => void openProviderDocument(documentId)}
+              onDocumentDecision={(documentId, decision) => void decideProviderDocument(documentId, decision)}
               onDecision={(decision) => void decide(decision)}
               onBack={() => { setSelectedId(null); setDetail(null); }}
             />
@@ -226,7 +270,7 @@ function AdminWorkspace() {
       </div>
 
       <p className="mt-6 rounded-2xl bg-paper p-4 text-xs leading-5 text-muted">
-        Security boundary: this page cannot grant administrator roles. Approval remains locked until every required checklist item has an actual verified document record. Uploaded file paths and storage keys are never sent to the browser; secure document viewing will be added with private Storage and short-lived signed URLs.
+        Security boundary: this page cannot grant administrator roles. Approval remains locked until every required checklist item has an actual verified document record. File paths and storage keys never reach the browser; document links are created only after a server-side administrator check and expire after five minutes.
       </p>
     </div>
   );
@@ -263,13 +307,17 @@ function QueueCard({ item, selected, onClick }: { item: QueueItem; selected: boo
 }
 
 function ReviewDetail({
-  detail, note, onNoteChange, busy, pendingDocs, onDecision, onBack,
+  detail, note, onNoteChange, busy, pendingDocs, documentBusyId,
+  onOpenDocument, onDocumentDecision, onDecision, onBack,
 }: {
   detail: ApplicationDetail;
   note: string;
   onNoteChange: (value: string) => void;
   busy: boolean;
   pendingDocs: number;
+  documentBusyId: string | null;
+  onOpenDocument: (documentId: string) => void;
+  onDocumentDecision: (documentId: string, decision: "verified" | "rejected") => void;
   onDecision: (decision: Decision) => void;
   onBack: () => void;
 }) {
@@ -358,16 +406,35 @@ function ReviewDetail({
                 <p className="mt-1 text-xs leading-5 text-muted">{requirement.description}</p>
                 <p className="mt-1 text-[11px] text-muted">{requirement.secureOnly ? "Secure KYC verification required" : "Document evidence required"}{requirement.jobSpecific ? " · Job-specific" : ""}</p>
                 {uploaded.map((file) => (
-                  <p key={file.id} className="mt-2 flex items-center gap-1 text-xs text-muted">
-                    <FileCheck2 className="size-3.5" />{statusLabel(file.documentType)} · {statusLabel(file.status)} · {Math.round(file.sizeBytes / 1024)} KB
-                  </p>
+                  <div key={file.id} className="mt-3 rounded-lg bg-paper p-3">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                      <FileCheck2 className="size-3.5" />
+                      <span className="font-semibold text-ink">{file.originalFilename}</span>
+                      <span>· {statusLabel(file.status)} · {Math.round(file.sizeBytes / 1024)} KB</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => onOpenDocument(file.id)}>
+                        Open secure download
+                      </Button>
+                      {file.status === "uploaded" && (
+                        <>
+                          <Button size="sm" disabled={documentBusyId !== null} onClick={() => onDocumentDecision(file.id, "verified")}>
+                            Verify document
+                          </Button>
+                          <Button size="sm" variant="danger" disabled={documentBusyId !== null} onClick={() => onDocumentDecision(file.id, "rejected")}>
+                            Reject
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
             );
           })}
           {!detail.documentRequirements.length && <p className="text-sm text-muted">No document checklist recorded.</p>}
         </div>
-        <p className="mt-3 rounded-xl bg-paper p-3 text-xs leading-5 text-muted">Document bytes and storage paths are not exposed by this review API. Private file viewing and checklist verification controls will be enabled only after the secure Storage workflow is implemented.</p>
+        <p className="mt-3 rounded-xl bg-paper p-3 text-xs leading-5 text-muted">Open links are five-minute, forced-download URLs. The file is malware-scanned before it enters this queue. Use the review note below when rejecting a document; approval remains blocked until all required evidence is verified.</p>
       </section>
 
       <section className="border-b border-line p-5">
