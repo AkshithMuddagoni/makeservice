@@ -65,6 +65,15 @@ async function createMarketplaceFixture() {
       "insert into public.provider_asset_services (asset_id, provider_service_id) values ($1::uuid,$2::uuid)",
       [asset.rows[0].id, service.rows[0].id],
     );
+    const operator = await db.query(
+      "insert into public.provider_operators (business_id, full_name, role_title, experience_years, verification_status) " +
+      "values ($1::uuid,'Test operator','Machine operator',5,'approved') returning id::text as id",
+      [id],
+    );
+    await db.query(
+      "insert into public.provider_operator_assets (business_id, operator_id, asset_id) values ($1::uuid,$2::uuid,$3::uuid)",
+      [id, operator.rows[0].id, asset.rows[0].id],
+    );
     await db.query(
       "insert into public.provider_presence (business_id, is_online, last_seen_at) values ($1::uuid,true,now())",
       [id],
