@@ -6,7 +6,7 @@ import { getProviderDocumentRequirements, SERVICE_ONBOARDING } from "./provider-
 import { getService } from "./catalog";
 import { PROVIDER_DISCOVERY_SQL } from "./marketplace-queries";
 import type { Sql } from "../db";
-import type { CreateJobRequestInput, DiscoverProvidersInput, SetProviderAssetAvailabilityInput, SetProviderServiceAvailabilityInput, SubmitProviderQuoteInput } from "./marketplace-validation";
+import type { CreateJobRequestInput, DiscoverProvidersInput, SetProviderAssetAvailabilityInput, SetProviderServiceAvailabilityInput, SubmitProviderQuoteInput, UpdateProviderBookingLocationInput } from "./marketplace-validation";
 
 export type FieldlyProfile = {
   user_id: string;
@@ -2514,4 +2514,98 @@ export async function getProviderBookingsForUser(userId: string): Promise<Provid
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
+}
+
+
+export type ProviderBookingLocationResult = {
+  bookingId: string;
+  recordedAt: string;
+  expiresAt: string;
+};
+
+/** Only the owning provider or assigned linked operator may write booking GPS. */
+export async function updateProviderBookingLocationForUser(
+  userId: string,
+  input: {
+    bookingId: string;
+    latitude: number;
+    longitude: number;
+    accuracyMeters: number;
+    headingDegrees: number | null;
+    speedMps: number | null;
+  },
+): Promise<ProviderBookingLocationResult> {
+  if (input.accuracyMeters > 200) throw new Error("GPS accuracy is too low. Move to a clear area and try again.");
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireProviderRole(tx, userId);
+    const rows = await tx.query<{
+      business_id: string;
+      owner_user_id: string;
+      assigned_operator_id: string | null;
+      operator_user_id: string | null;
+      status: LiveBookingStatus;
+    }>(
+      "select b.business_id::text as business_id,pb.owner_user_id,b.assigned_operator_id::text as assigned_operator_id, " +
+      "po.linked_user_id as operator_user_id,b.status::text as status " +
+      "from public.bookings b join public.provider_businesses pb on pb.id=b.business_id " +
+      "left join public.provider_operators po on po.id=b.assigned_operator_id " +
+      "where b.id=$1::uuid for update of b",
+      [input.bookingId],
+    );
+    const booking = rows[0];
+    if (!booking || (booking.owner_user_id !== userId && booking.operator_user_id !== userId)) {
+      throw new Error("Only the owning provider or assigned linked operator may share this booking's location.");
+    }
+    if (!["on_the_way", "arrived", "service_started"].includes(booking.status)) {
+      throw new Error("Live location can be shared only while travelling to or performing the service.");
+    }
+    const updated = await tx.query<{ recorded_at: string; expires_at: string }>(
+      "insert into public.booking_live_locations " +
+      "(booking_id,business_id,operator_id,latitude,longitude,accuracy_meters,heading_degrees,speed_mps,recorded_at,expires_at) " +
+      "values ($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7,$8,now(),now()+interval '2 minutes') " +
+      "on conflict (booking_id) do update set business_id=excluded.business_id,operator_id=excluded.operator_id, " +
+      "latitude=excluded.latitude,longitude=excluded.longitude,accuracy_meters=excluded.accuracy_meters, " +
+      "heading_degrees=excluded.heading_degrees,speed_mps=excluded.speed_mps,recorded_at=now(),expires_at=now()+interval '2 minutes' " +
+      "where public.booking_live_locations.recorded_at <= now()-interval '5 seconds' " +
+      "returning recorded_at::text as recorded_at,expires_at::text as expires_at",
+      [
+        input.bookingId,
+        booking.business_id,
+        booking.assigned_operator_id,
+        input.latitude,
+        input.longitude,
+        input.accuracyMeters,
+        input.headingDegrees,
+        input.speedMps,
+      ],
+    );
+    const location = updated[0];
+    if (!location) throw new Error("Location updates are arriving too quickly. Wait five seconds and try again.");
+    return { bookingId: input.bookingId, recordedAt: location.recorded_at, expiresAt: location.expires_at };
+  });
+}
+
+export async function stopProviderBookingLocationForUser(
+  userId: string,
+  bookingId: string,
+): Promise<{ bookingId: string; stopped: boolean }> {
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireProviderRole(tx, userId);
+    const access = await tx.query<{ business_id: string }>(
+      "select b.business_id::text as business_id from public.bookings b " +
+      "join public.provider_businesses pb on pb.id=b.business_id " +
+      "left join public.provider_operators po on po.id=b.assigned_operator_id " +
+      "where b.id=$1::uuid and (pb.owner_user_id=$2 or po.linked_user_id=$2) for update of b",
+      [bookingId, userId],
+    );
+    if (!access[0]) throw new Error("Only the owning provider or assigned linked operator may stop this location share.");
+    const rows = await tx.query<{ booking_id: string }>(
+      "update public.booking_live_locations set expires_at=now() " +
+      "where booking_id=$1::uuid and business_id=$2::uuid returning booking_id::text as booking_id",
+      [bookingId, access[0].business_id],
+    );
+    return { bookingId, stopped: rows.length > 0 };
+  });
 }
