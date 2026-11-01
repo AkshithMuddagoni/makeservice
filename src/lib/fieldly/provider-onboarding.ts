@@ -352,7 +352,18 @@ export function getProviderDocumentRequirements(input: {
     add({ key: "OPERATOR_DL", label: "Driving licence for road-driving operators", description: "Verify each driver’s current licence and the correct vehicle class. The driver record and complete licence details belong in the secure production operator onboarding flow.", requiredForApproval: true, secureOnly: true });
   }
   if (input.services.length > 0) {
-    add({ key: "OPERATOR_ROSTER", label: "Operator / driver roster", description: "In production, add each operator against the machine they operate: legal name, contact, role, experience, competence/training and driving licence where relevant. This is a Fieldly safety and accountability check; statutory requirements vary by equipment and worksite.", requiredForApproval: true, secureOnly: true });
+    add({
+      key: "OPERATOR_ROSTER",
+      label: "Operator / driver roster",
+      description: "Add each driver or machine operator in the provider desk and assign them to the machine(s) they operate. Each machine must have at least one named operator before the business application can be approved; operators are reviewed separately.",
+      requiredForApproval: true,
+    });
+    add({
+      key: "OPERATOR_COMPETENCE_CERTIFICATE",
+      label: "Operator competency / training evidence",
+      description: "Attach role-appropriate machine training, competency or experience evidence to the specific operator. Fieldly manually reviews this evidence before enabling that operator for service work.",
+      requiredForApproval: false,
+    });
   }
 
   add({
