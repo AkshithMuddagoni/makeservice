@@ -209,3 +209,12 @@ export const reviewAdminProviderDocumentInputSchema = z.object({
 export type CreateProviderDocumentUploadInput = z.infer<typeof createProviderDocumentUploadInputSchema>;
 export type ConfirmProviderDocumentUploadInput = z.infer<typeof confirmProviderDocumentUploadInputSchema>;
 export type ReviewAdminProviderDocumentInput = z.infer<typeof reviewAdminProviderDocumentInputSchema>;
+
+
+export const adminItemReviewInputSchema = z.object({
+  itemId: z.string().uuid(),
+  decision: z.enum(["under_review", "needs_information", "rejected", "approved"]),
+  note: z.string().trim().max(2000).default(""),
+}).strict();
+
+export type AdminItemReviewInput = z.infer<typeof adminItemReviewInputSchema>;
