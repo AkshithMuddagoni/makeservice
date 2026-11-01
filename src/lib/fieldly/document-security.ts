@@ -48,8 +48,12 @@ export function validateProviderDocumentMetadata(input: {
     throw new Error("Document size must be between 1 byte and 10 MiB.");
   }
   const fileName = sanitizeProviderDocumentFilename(input.fileName);
-  if (!/\.(pdf|jpe?g|png|webp)$/i.test(fileName)) {
-    throw new Error("The filename must use a PDF, JPG, PNG or WebP extension.");
+  const fileExtension = fileName.split(".").pop()?.toLowerCase() ?? "";
+  const extensionMatches = input.mimeType === "image/jpeg"
+    ? ["jpg", "jpeg"].includes(fileExtension)
+    : fileExtension === extension;
+  if (!extensionMatches) {
+    throw new Error("The file extension must match its declared content type.");
   }
   return {
     fileName,
