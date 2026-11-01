@@ -18,6 +18,12 @@ async function createMarketplaceFixture() {
     "migrations/fieldly/0006_lock_down_migration_ledger.sql",
     "migrations/fieldly/0007_index_foreign_keys.sql",
     "migrations/fieldly/0008_create_private_documents_bucket.sql",
+    "migrations/fieldly/0009_booking_start_code_issuance.sql",
+    "migrations/fieldly/0010_booking_start_code_issue_limit.sql",
+    "migrations/fieldly/0011_provider_document_upload_sessions.sql",
+    "migrations/fieldly/0012_provider_operator_roster.sql",
+    "migrations/fieldly/0013_index_provider_document_upload_session_foreign_keys.sql",
+    "migrations/fieldly/0014_index_provider_operator_asset_foreign_keys.sql",
   ];
   for (const path of migrations) {
     await db.exec(await readFile(join(root, path), "utf8"));
