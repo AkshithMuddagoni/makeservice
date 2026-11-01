@@ -119,6 +119,26 @@ function AdminWorkspace() {
     if (!detail) return 0;
     return detail.documentRequirements.filter((requirement) => {
       if (!requirement.requiredForApproval || requirement.status === "not_applicable") return false;
+      if (requirement.key === "OPERATOR_ROSTER") {
+        return !detail.assets.length || detail.assets.some((asset) =>
+          !detail.operators.some((operator) => operator.assetIds.includes(asset.id)),
+        );
+      }
+      if (requirement.key === "OPERATOR_DL") {
+        return detail.operators.some((operator) => {
+          const assignedAssets = detail.assets.filter((asset) => operator.assetIds.includes(asset.id));
+          const needsLicence = assignedAssets.some((asset) =>
+            ["public_road", "commercial_transport"].includes(asset.roadUse.toLowerCase()),
+          ) || /driver/i.test(operator.roleTitle);
+          if (!needsLicence) return false;
+          return !detail.uploadedDocuments.some((document) =>
+            document.operatorId === operator.id &&
+            document.documentType === "OPERATOR_DL" &&
+            document.status === "verified" &&
+            (!document.expiresOn || document.expiresOn >= new Date().toISOString().slice(0, 10)),
+          );
+        });
+      }
       const verifiedFile = detail.uploadedDocuments.some(
         (document) => document.documentType === requirement.key && document.status === "verified",
       );
@@ -511,12 +531,19 @@ function ReviewDetail({
         <div className="mt-3 grid gap-2">
           {detail.documentRequirements.map((requirement) => {
             const uploaded = detail.uploadedDocuments.filter((file) => file.documentType === requirement.key);
-            const verified = uploaded.some((file) => file.status === "verified") && requirement.status === "verified";
+            const rosterComplete = requirement.key === "OPERATOR_ROSTER" && detail.assets.length > 0 &&
+              detail.assets.every((asset) => detail.operators.some((operator) => operator.assetIds.includes(asset.id)));
+            const licenceComplete = requirement.key === "OPERATOR_DL" && !detail.operators.some((operator) => {
+              const assignedAssets = detail.assets.filter((asset) => operator.assetIds.includes(asset.id));
+              const needsLicence = assignedAssets.some((asset) => ["public_road", "commercial_transport"].includes(asset.roadUse.toLowerCase())) || /driver/i.test(operator.roleTitle);
+              return needsLicence && !uploaded.some((file) => file.operatorId === operator.id && file.status === "verified" && (!file.expiresOn || file.expiresOn >= new Date().toISOString().slice(0, 10)));
+            });
+            const verified = (uploaded.some((file) => file.status === "verified") && requirement.status === "verified") || rosterComplete || licenceComplete;
             return (
               <div key={requirement.key} className="rounded-xl border border-line p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-semibold">{requirement.label}{requirement.requiredForApproval ? " *" : ""}</span>
-                  <span className={cn("rounded-full px-2 py-1 text-[10px] font-bold", statusTone(requirement.status))}>{verified ? "Verified" : statusLabel(requirement.status)}</span>
+                  <span className={cn("rounded-full px-2 py-1 text-[10px] font-bold", statusTone(requirement.status))}>{rosterComplete ? "Roster complete" : verified ? "Verified" : statusLabel(requirement.status)}</span>
                 </div>
                 <p className="mt-1 text-xs leading-5 text-muted">{requirement.description}</p>
                 <p className="mt-1 text-[11px] text-muted">{requirement.secureOnly ? "Secure KYC verification required" : "Document evidence required"}{requirement.jobSpecific ? " · Job-specific" : ""}</p>
