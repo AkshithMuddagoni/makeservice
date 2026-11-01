@@ -2,6 +2,7 @@ services:
   - type: web
     name: fieldly-marketplace
     runtime: node
+    # Preview configuration only. Select an owner-approved paid plan before production.
     plan: free
     buildCommand: npm install && npm run build
     startCommand: npm run start
