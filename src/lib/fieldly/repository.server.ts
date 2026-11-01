@@ -2454,3 +2454,64 @@ export async function updateBookingByParticipant(
     return { bookingId: input.bookingId, status: updated[0].status };
   });
 }
+
+
+export type ProviderBookingSummary = {
+  bookingId: string;
+  businessId: string;
+  publicReference: string;
+  serviceId: string;
+  status: LiveBookingStatus;
+  amountPaise: number;
+  currency: string;
+  scheduledFor: string | null;
+  siteLabel: string;
+  area: string;
+  city: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** List bookings for provider-owned businesses without exposing customer PII. */
+export async function getProviderBookingsForUser(userId: string): Promise<ProviderBookingSummary[]> {
+  const sql = await getSql();
+  await requireProviderRole(sql, userId);
+  const rows = await sql.query<{
+    booking_id: string;
+    business_id: string;
+    public_reference: string;
+    service_id: string;
+    status: LiveBookingStatus;
+    amount_paise: string | number;
+    currency: string;
+    scheduled_for: string | null;
+    site_label: string;
+    area: string | null;
+    city: string;
+    created_at: string;
+    updated_at: string;
+  }>(
+    "select b.id::text as booking_id,b.business_id::text as business_id,b.public_reference,b.service_id, " +
+    "b.status::text as status,b.amount_paise::text as amount_paise,b.currency,b.scheduled_for::text as scheduled_for, " +
+    "b.site_snapshot->>'label' as site_label,b.site_snapshot->>'area' as area,b.site_snapshot->>'city' as city, " +
+    "b.created_at::text as created_at,b.updated_at::text as updated_at " +
+    "from public.bookings b join public.provider_businesses pb on pb.id=b.business_id " +
+    "where pb.owner_user_id=$1 order by b.created_at desc limit 100",
+    [userId],
+  );
+  return rows.map((row) => ({
+    bookingId: row.booking_id,
+    businessId: row.business_id,
+    publicReference: row.public_reference,
+    serviceId: row.service_id,
+    status: row.status,
+    amountPaise: Number(row.amount_paise),
+    currency: row.currency,
+    scheduledFor: row.scheduled_for,
+    siteLabel: row.site_label ?? "Work site",
+    area: row.area ?? "",
+    city: row.city ?? "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
