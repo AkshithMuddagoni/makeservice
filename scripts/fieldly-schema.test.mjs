@@ -162,6 +162,17 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
     );
     assert.equal(requirementsTable?.rowsecurity, true);
 
+    const bookingCodeColumns = await db.query(
+      "select column_name from information_schema.columns where table_schema='public' and table_name='bookings'",
+    );
+    const bookingCodeColumnNames = new Set(bookingCodeColumns.rows.map((row) => row.column_name));
+    assert.ok(bookingCodeColumnNames.has("start_code_issued_at"));
+    assert.ok(bookingCodeColumnNames.has("start_code_issue_count"));
+    const bookingCodeLimit = await db.query(
+      "select conname from pg_constraint where conrelid='public.bookings'::regclass and conname='bookings_start_code_issue_count_check'",
+    );
+    assert.equal(bookingCodeLimit.rows.length, 1);
+
     const expectedIndexes = [
       "booking_events_actor_user_id_idx",
       "booking_live_locations_business_id_idx",
