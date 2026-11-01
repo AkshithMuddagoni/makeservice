@@ -150,11 +150,15 @@ If the local branch already exists, use `git switch
 feat/production-backend-foundation` instead of creating it again. Only use the current `makeservice` project after reviewing the full public
 table inventory and confirming it is dedicated to MakeService.
 
-Your database should finish with twelve migration ledger records:
+Your database should finish with thirteen migration ledger records:
 `0001_auth.sql`, `0002_phone_number_fields.sql`,
 `0003_rate_limit.sql`, `0004_lock_down_auth_data_access.sql`,
-`0001_fieldly_core.sql`, `0002_lock_down_browser_data_access.sql`, and
-`0005_provider_onboarding.sql`, `0006_lock_down_migration_ledger.sql`, `0007_index_foreign_keys.sql`, and `0008_create_private_documents_bucket.sql` and `0011_provider_document_upload_sessions.sql`. On the current makeservice project, migrations 0006, 0007 and 0008 are already applied; migration 0011 is the new upload-session table migration.
+`0001_fieldly_core.sql`, `0002_lock_down_browser_data_access.sql`,
+`0005_provider_onboarding.sql`, `0006_lock_down_migration_ledger.sql`,
+`0007_index_foreign_keys.sql`, `0008_create_private_documents_bucket.sql`,
+`0009_booking_start_code_issuance.sql`, `0010_booking_start_code_issue_limit.sql`,
+and `0011_provider_document_upload_sessions.sql`.
+On the current makeservice project, migrations 0006, 0007 and 0008 are already applied; migration 0011 is the new upload-session table migration.
 If the runner reports any SQL or connection error, stop and share only the
 error text with credentials and hostnames removed. Do not retry against
 production.
@@ -323,12 +327,16 @@ IDs. The dashboard does not return storage paths, full identity values or bank
 details, and it does not allow the owner to approve themselves or mark a
 listing available.
 
-The browser file picker is not a document upload: production file selection is
-blocked until private Supabase Storage uploads and server-signed URLs are
-implemented. PAN, Aadhaar, bank details and actual KYC files are not stored by
-this flow. Admin review/approval, private uploads, approved-provider discovery,
-provider availability, requests, bookings, GPS, chat and payment workflows
-still require their own server-side integration.
+The provider onboarding form now has a post-submission private document upload
+step. The server issues a one-time Storage upload URL, binds it to the owner and
+checklist requirement, then checks the actual file signature, exact byte size
+and a ClamAV scan before recording document metadata. Uploads remain disabled
+until the Render feature flag, server-side Supabase Storage key and private
+ClamAV service are configured. Secure identity/PAN verification through a
+specialist KYC provider is still outstanding; never collect full Aadhaar, PAN
+or bank numbers in the normal browser form. Provider discovery, requests,
+quotes, booking lifecycle, GPS and booking chat have server functions; real
+notifications, payments and payouts remain launch blockers.
 
 **Phone OTP is currently not enabled on your public site.** You deferred MSG91
 and DLT setup, so this production path will reject provider submissions until
@@ -425,17 +433,17 @@ table records every successful provider review decision.
 
 The admin review queue supports `submitted`, `under_review`, and
 `needs_information` applications. Reviewers can start/resume review, request
-information, or reject with a reason. Approval is rejected server-side unless
-every required checklist row is marked `verified` and an actual matching
-`provider_documents` row is also `verified`. Since private file uploads and
-document review are not implemented yet, approval is intentionally blocked
-for current submissions. This console does not return storage paths or raw
-document filenames to the browser. Secure file inspection and checklist
-verification must be completed with private Storage and short-lived,
-ownership-checked signed URLs before approvals can be enabled operationally.
+information, or reject with a reason. Admins can open an uploaded document
+through a five-minute, forced-download URL, then verify or reject it with an
+audit-logged decision. Approval remains blocked unless every required
+checklist row is `verified` and a matching `provider_documents` row is also
+`verified`. Required secure-only identity/PAN steps cannot yet pass because
+the specialist KYC integration is not configured. Storage paths never reach
+the browser; download URLs are issued only after the server checks the admin role.
 
-No database migration is required for this admin milestone: the role, audit
-table, foreign keys and RLS already exist in the eight migrations in the deployment sequence.
+Migration 0011 adds the server-only upload-session table. The role, audit table,
+foreign keys, RLS, private bucket and upload-session schema are in the current
+thirteen-migration deployment sequence.
 ## Private provider-document bucket
 
 Migration 0008 provisions `fieldly-private` as a non-public bucket with a 10 MiB file-size limit and an allowlist of PDF, JPEG, PNG and WebP. Migration 0011 adds server-only upload sessions that bind a signed upload to the provider owner and its specific document requirement. No browser Storage policies are created. Uploads are feature-gated by `PROVIDER_DOCUMENT_UPLOADS_ENABLED=true` and require a healthy private ClamAV scanner configured with `CLAMAV_HOST` (and optional `CLAMAV_PORT`). The server creates a one-time signed upload URL, then verifies the owner-bound upload session, size, file magic and ClamAV result before creating the document record. Administrator viewing uses a five-minute forced-download URL; only an administrator session can request it. Failed, mismatched or infected files are rejected and deletion is attempted. The scanner must be on a private network and health-monitored. A separate retention/deletion job, scan-evasion testing and external security audit are still required.
