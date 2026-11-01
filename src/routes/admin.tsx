@@ -359,7 +359,7 @@ function ReviewDetail({
                 <p className="mt-1 text-[11px] text-muted">{requirement.secureOnly ? "Secure KYC verification required" : "Document evidence required"}{requirement.jobSpecific ? " · Job-specific" : ""}</p>
                 {uploaded.map((file) => (
                   <p key={file.id} className="mt-2 flex items-center gap-1 text-xs text-muted">
-                    <FileCheck2 className="size-3.5" />{file.originalFilename} · {statusLabel(file.status)} · {Math.round(file.sizeBytes / 1024)} KB
+                    <FileCheck2 className="size-3.5" />{statusLabel(file.documentType)} · {statusLabel(file.status)} · {Math.round(file.sizeBytes / 1024)} KB
                   </p>
                 ))}
               </div>
