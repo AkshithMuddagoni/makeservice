@@ -9,10 +9,12 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const independentFieldlyMigrations = [
   "migrations/fieldly/0001_fieldly_core.sql",
   "migrations/fieldly/0002_lock_down_browser_data_access.sql",
+  "migrations/fieldly/0006_lock_down_migration_ledger.sql",
 ];
 const migrationFiles = [
   ...independentFieldlyMigrations,
   "migrations/fieldly/0005_provider_onboarding.sql",
+  "migrations/fieldly/0006_lock_down_migration_ledger.sql",
 ];
 
 test("Fieldly PostgreSQL migrations apply cleanly without Supabase Auth tables", async () => {
