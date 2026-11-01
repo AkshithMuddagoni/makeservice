@@ -108,3 +108,8 @@ React 19, TanStack Start/Router, Vite, TypeScript, Tailwind CSS 4, Lucide, MapLi
 - Select and configure a supported Indian marketplace payment/split gateway; implement signed webhooks, idempotency, refunds, reconciliation, commission, vendor KYC, settlements and payouts. No real payment is collected by current booking flows.
 - Complete security and secret-rotation review, backup/restore drills, monitoring/alerts, domain/TLS/Render plan/rollback configuration, and real-device/mobile/accessibility/load testing.
 - Run a fresh full CI validation on the latest feature head before considering PR #21 for review or merge.
+
+## Current production marketplace scope
+
+The authenticated production marketplace path includes server-authoritative provider discovery, customer requests, owner-scoped request/quote reads, provider presence/heartbeat, assigned request inbox, structured quotes and atomic quote acceptance that creates a confirmed booking. Booking operations include provider status transitions, HMAC-protected customer service-start codes (five-minute expiry, five issues per booking, ten verification attempts), audited cancellation/dispute actions, short-lived provider GPS sharing with customer live-map refresh, provider booking history, and participant-only text chat. Chat is limited to 2,000 characters and 12 messages/minute per sender per booking. Provider service/machine activation is owner-checked and admin-approval-gated. The original local-storage marketplace remains preview-only; authenticated production operations use the server-backed flows.
+
