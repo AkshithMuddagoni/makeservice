@@ -9,7 +9,9 @@ import {
   getAdminProviderApplicationDetail,
   getAdminProviderDocumentDownloadUrl,
   getAdminProviderReviewQueue,
+  reviewAdminProviderAsset,
   reviewAdminProviderDocument,
+  reviewAdminProviderService,
 } from "@/lib/fieldly/account.functions";
 import { SERVICE_ONBOARDING } from "@/lib/fieldly/provider-onboarding";
 import { cn } from "@/lib/utils";
@@ -71,6 +73,7 @@ function AdminWorkspace() {
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [documentBusyId, setDocumentBusyId] = useState<string | null>(null);
+  const [itemBusyId, setItemBusyId] = useState<string | null>(null);
 
   const loadQueue = useCallback(async (quiet = false) => {
     if (!quiet) setQueueLoading(true);
@@ -184,6 +187,30 @@ function AdminWorkspace() {
     }
   }
 
+  async function decideProviderItem(
+    itemId: string,
+    itemType: "service" | "asset",
+    decision: Decision,
+  ) {
+    if (!detail || itemBusyId) return;
+    if ((decision === "needs_information" || decision === "rejected") && note.trim().length < 8) {
+      toast.error("Add a reason of at least 8 characters.");
+      return;
+    }
+    setItemBusyId(itemType + ":" + itemId);
+    try {
+      const data = { itemId, decision, note: note.trim() };
+      if (itemType === "service") await reviewAdminProviderService({ data });
+      else await reviewAdminProviderAsset({ data });
+      toast.success((itemType === "service" ? "Service" : "Machine") + " review decision saved and audit logged.");
+      await Promise.all([loadQueue(true), loadDetail(detail.id)]);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not save the item review decision.");
+    } finally {
+      setItemBusyId(null);
+    }
+  }
+
   const submitted = queue.filter((item) => item.verificationStatus === "submitted").length;
   const reviewing = queue.filter((item) => item.verificationStatus === "under_review").length;
   const information = queue.filter((item) => item.verificationStatus === "needs_information").length;
@@ -260,8 +287,10 @@ function AdminWorkspace() {
               busy={busy}
               pendingDocs={pendingDocs}
               documentBusyId={documentBusyId}
+              itemBusyId={itemBusyId}
               onOpenDocument={(documentId) => void openProviderDocument(documentId)}
               onDocumentDecision={(documentId, decision) => void decideProviderDocument(documentId, decision)}
+              onItemDecision={(itemId, itemType, decision) => void decideProviderItem(itemId, itemType, decision)}
               onDecision={(decision) => void decide(decision)}
               onBack={() => { setSelectedId(null); setDetail(null); }}
             />
@@ -307,8 +336,8 @@ function QueueCard({ item, selected, onClick }: { item: QueueItem; selected: boo
 }
 
 function ReviewDetail({
-  detail, note, onNoteChange, busy, pendingDocs, documentBusyId,
-  onOpenDocument, onDocumentDecision, onDecision, onBack,
+  detail, note, onNoteChange, busy, pendingDocs, documentBusyId, itemBusyId,
+  onOpenDocument, onDocumentDecision, onItemDecision, onDecision, onBack,
 }: {
   detail: ApplicationDetail;
   note: string;
@@ -316,8 +345,10 @@ function ReviewDetail({
   busy: boolean;
   pendingDocs: number;
   documentBusyId: string | null;
+  itemBusyId: string | null;
   onOpenDocument: (documentId: string) => void;
   onDocumentDecision: (documentId: string, decision: "verified" | "rejected") => void;
+  onItemDecision: (itemId: string, itemType: "service" | "asset", decision: Decision) => void;
   onDecision: (decision: Decision) => void;
   onBack: () => void;
 }) {
@@ -366,6 +397,17 @@ function ReviewDetail({
               </div>
               <p className="mt-2 text-xs leading-5 text-muted">{service.selectedTasks.join(" · ")}</p>
               {!!Object.keys(service.specifications).length && <p className="mt-2 text-xs text-muted">{Object.entries(service.specifications).map(([key, value]) => key + ": " + value).join(" · ")}</p>}
+              {service.reviewerNote && <p className="mt-2 text-xs text-muted">Reviewer note: {service.reviewerNote}</p>}
+              <p className="mt-1 text-[11px] text-muted">{service.isListed ? "Listed" : "Not listed"} · {service.isAvailable ? "Available" : "Paused"}{service.reviewedAt ? " · Reviewed " + new Date(service.reviewedAt).toLocaleString() : ""}</p>
+              {["draft", "submitted", "under_review", "needs_information"].includes(service.verificationStatus) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" variant="secondary" disabled={itemBusyId !== null || !["draft", "submitted", "needs_information"].includes(service.verificationStatus)} onClick={() => onItemDecision(service.id, "service", "under_review")}>Start / resume review</Button>
+                  <Button size="sm" variant="secondary" disabled={itemBusyId !== null || !["submitted", "under_review"].includes(service.verificationStatus) || note.trim().length < 8} onClick={() => onItemDecision(service.id, "service", "needs_information")}>Request information</Button>
+                  <Button size="sm" variant="danger" disabled={itemBusyId !== null || note.trim().length < 8} onClick={() => onItemDecision(service.id, "service", "rejected")}>Reject service</Button>
+                  <Button size="sm" disabled={itemBusyId !== null || !["submitted", "under_review"].includes(service.verificationStatus) || detail.verificationStatus !== "approved"} onClick={() => onItemDecision(service.id, "service", "approved")}>Approve service</Button>
+                </div>
+              )}
+              {itemBusyId === "service:" + service.id && <p className="mt-2 text-xs text-muted">Saving service review…</p>}
             </div>
           ))}
         </div>
