@@ -148,3 +148,13 @@ export const createCurrentJobRequest = createServerFn({ method: "POST" })
     const { createJobRequestForCustomer } = await import("./repository.server");
     return createJobRequestForCustomer(context.userId, data);
   });
+
+
+/** Get a saved customer request using only the authenticated account identity. */
+export const getCurrentJobRequestDetail = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ requestId: z.string().uuid() }).strict())
+  .handler(async ({ context, data }) => {
+    const { getCustomerJobRequestForUser } = await import("./repository.server");
+    return getCustomerJobRequestForUser(context.userId, data.requestId);
+  });
