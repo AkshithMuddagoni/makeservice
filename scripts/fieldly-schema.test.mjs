@@ -16,6 +16,7 @@ const migrationFiles = [
   "migrations/fieldly/0006_lock_down_migration_ledger.sql",
   "migrations/fieldly/0007_index_foreign_keys.sql",
   "migrations/fieldly/0008_create_private_documents_bucket.sql",
+  "migrations/fieldly/0009_booking_start_code_issuance.sql",
 ];
 
 test("Fieldly PostgreSQL migrations apply cleanly without Supabase Auth tables", async () => {
