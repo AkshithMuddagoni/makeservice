@@ -525,7 +525,7 @@ function ProductionProviderOperations({ applications, onRefresh }: { application
                       </div>
                       <Button
                         size="sm"
-                        variant={service.isAvailable ? "secondary" : "outline"}
+                        variant={service.isAvailable ? "secondary" : "secondary"}
                         disabled={!canActivate || savingAvailabilityId !== null}
                         onClick={() => void toggleServiceAvailability(service)}
                       >
@@ -554,7 +554,7 @@ function ProductionProviderOperations({ applications, onRefresh }: { application
                       </div>
                       <Button
                         size="sm"
-                        variant={asset.isAvailable ? "secondary" : "outline"}
+                        variant={asset.isAvailable ? "secondary" : "secondary"}
                         disabled={!canActivate || savingAvailabilityId !== null}
                         onClick={() => void toggleAssetAvailability(asset)}
                       >
@@ -574,7 +574,7 @@ function ProductionProviderOperations({ applications, onRefresh }: { application
               <h3 className="font-display text-xl font-bold">Assigned requests</h3>
               <p className="text-xs text-muted">Customer contact details stay private until a booking is confirmed.</p>
             </div>
-            <Button variant="outline" size="sm" disabled={refreshing || !online} onClick={() => void updatePresence(true, true)}>
+            <Button variant="secondary" size="sm" disabled={refreshing || !online} onClick={() => void updatePresence(true, true)}>
               <Activity className="mr-2 size-4" />{refreshing ? "Refreshing…" : "Refresh inbox"}
             </Button>
           </div>
