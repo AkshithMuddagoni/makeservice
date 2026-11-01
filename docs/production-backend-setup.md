@@ -38,6 +38,7 @@ The canonical migration sequence is:
 7. `migrations/fieldly/0005_provider_onboarding.sql` — provider business details, document-requirement checklist, and foreign keys from application ownership/reviewer fields to Better Auth users.
 8. `migrations/fieldly/0006_lock_down_migration_ledger.sql` — enable RLS on the custom migration ledger and revoke all browser-role access.
 9. `migrations/fieldly/0007_index_foreign_keys.sql` — add supporting indexes for foreign keys and remove a confirmed duplicate provider-owner index.
+10. `migrations/fieldly/0008_create_private_documents_bucket.sql` — provision a non-public 10 MiB provider-document bucket with PDF/JPEG/PNG/WebP allowlisting and no browser policies.
 
 The production and PGLite migrators discover the auth folder first and Fieldly
 folder second. Migration ledger entries use basenames, so keep every migration
@@ -146,11 +147,11 @@ If the local branch already exists, use `git switch
 feat/production-backend-foundation` instead of creating it again. Only use the current `makeservice` project after reviewing the full public
 table inventory and confirming it is dedicated to MakeService.
 
-Your database should finish with nine migration ledger records:
+Your database should finish with ten migration ledger records:
 `0001_auth.sql`, `0002_phone_number_fields.sql`,
 `0003_rate_limit.sql`, `0004_lock_down_auth_data_access.sql`,
 `0001_fieldly_core.sql`, `0002_lock_down_browser_data_access.sql`, and
-`0005_provider_onboarding.sql`, `0006_lock_down_migration_ledger.sql`, and `0007_index_foreign_keys.sql`. On the current makeservice project, the first seven were already applied; the ledger-hardening migration has been applied and recorded, so only the index migration remains pending.
+`0005_provider_onboarding.sql`, `0006_lock_down_migration_ledger.sql`, `0007_index_foreign_keys.sql`, and `0008_create_private_documents_bucket.sql`. On the current makeservice project, the first seven were already applied; migrations 0006 and 0007 have been applied and recorded, so only the private-bucket migration remains pending.
 If the runner reports any SQL or connection error, stop and share only the
 error text with credentials and hostnames removed. Do not retry against
 production.
@@ -426,6 +427,10 @@ ownership-checked signed URLs before approvals can be enabled operationally.
 
 No database migration is required for this admin milestone: the role, audit
 table, foreign keys and RLS already exist in the eight migrations in the deployment sequence.
+## Private provider-document bucket
+
+Migration 0008 provisions `fieldly-private` as a non-public bucket with a 10 MiB file-size limit and an allowlist of PDF, JPEG, PNG and WebP. No browser Storage policies are created. The bucket is infrastructure only: **there is no upload endpoint, signed URL endpoint, admin file viewer, malware scanner or document-retention job yet**. Do not ask providers to submit KYC files until those authenticated server workflows exist.
+
 ## Sensitive data rules
 
 - Do not store full PAN, Aadhaar, bank account numbers, IFSC, card data or raw
