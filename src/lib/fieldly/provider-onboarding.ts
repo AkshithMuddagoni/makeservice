@@ -349,7 +349,7 @@ export function getProviderDocumentRequirements(input: {
   }
 
   if (input.assets.some((asset) => asset.roadUse === "PUBLIC_ROAD" || asset.roadUse === "COMMERCIAL_TRANSPORT")) {
-    add({ key: "OPERATOR_DL", label: "Driving licence for road-driving operators", description: "Verify each driver’s current licence and the correct vehicle class. The driver record and complete licence details belong in the secure production operator onboarding flow.", requiredForApproval: true, secureOnly: true });
+    add({ key: "OPERATOR_DL", label: "Driving licence for road-driving operators", description: "Upload the driver’s current licence to their individual operator record. Review validity, vehicle class and name against the assigned machine. Only provider owners and authorised administrators can request access to this private file.", requiredForApproval: true });
   }
   if (input.services.length > 0) {
     add({
