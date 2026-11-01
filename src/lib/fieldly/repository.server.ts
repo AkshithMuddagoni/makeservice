@@ -3421,6 +3421,9 @@ export async function createProviderDocumentUploadForUser(
       [input.businessId, input.documentType],
     );
     const requirement = requirements[0];
+    if (input.documentType === "OPERATOR_ROSTER") {
+      throw new Error("The operator roster is entered as individual operator records in the provider desk, not uploaded as a file.");
+    }
     if (!requirement) {
       throw new Error("This document is not part of the business verification checklist.");
     }
