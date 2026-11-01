@@ -187,18 +187,14 @@ export const createProviderDocumentUploadInputSchema = z.object({
   "Attach a document to only one service, machine or operator at a time.",
 );
 
-export const confirmProviderDocumentUploadInputSchema =
-  createProviderDocumentUploadInputSchema.extend({
-    documentId: z.string().uuid(),
-    issuedOn: isoDateSchema,
-    expiresOn: isoDateSchema,
-  }).strict().refine(
-    (value) => [value.providerServiceId, value.assetId, value.operatorId].filter(Boolean).length <= 1,
-    "Attach a document to only one service, machine or operator at a time.",
-  ).refine(
-    (value) => !value.issuedOn || !value.expiresOn || value.expiresOn >= value.issuedOn,
-    "Expiry date cannot be earlier than issue date.",
-  );
+export const confirmProviderDocumentUploadInputSchema = z.object({
+  uploadId: z.string().uuid(),
+  issuedOn: isoDateSchema,
+  expiresOn: isoDateSchema,
+}).strict().refine(
+  (value) => !value.issuedOn || !value.expiresOn || value.expiresOn >= value.issuedOn,
+  "Expiry date cannot be earlier than issue date.",
+);
 
 export const getAdminProviderDocumentInputSchema = z.object({
   documentId: z.string().uuid(),
