@@ -2278,6 +2278,12 @@ export async function updateProviderBookingStatusForUser(
       "where id=$1::uuid returning status::text as status",
       [input.bookingId, input.status],
     );
+    if (input.status === "service_completed") {
+      await tx.query(
+        "update public.booking_live_locations set expires_at=now() where booking_id=$1::uuid",
+        [input.bookingId],
+      );
+    }
     await tx.query(
       "insert into public.booking_events (booking_id,actor_user_id,from_status,to_status,event_type,note) " +
       "values ($1::uuid,$2,$3::fieldly_booking_status,$4::fieldly_booking_status,$5,$6)",
@@ -2438,6 +2444,10 @@ export async function updateBookingByParticipant(
       "dispute_reason=case when $2='disputed' then $3 else dispute_reason end,updated_at=now() " +
       "where id=$1::uuid returning status::text as status",
       [input.bookingId, input.action, reason],
+    );
+    await tx.query(
+      "update public.booking_live_locations set expires_at=now() where booking_id=$1::uuid",
+      [input.bookingId],
     );
     await tx.query(
       "insert into public.booking_events (booking_id,actor_user_id,from_status,to_status,event_type,note) " +
