@@ -93,3 +93,37 @@ export const getCurrentProviderDashboard = createServerFn({ method: "GET" })
     const { getProviderDashboardForUser } = await import("./repository.server");
     return getProviderDashboardForUser(context.userId);
   });
+
+
+/** Admin-only functions. Repository handlers independently check the admin role. */
+export const getAdminProviderReviewQueue = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const { getAdminProviderReviewQueue: getQueue } = await import("./repository.server");
+    return getQueue(context.userId);
+  });
+
+export const getAdminProviderApplicationDetail = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ businessId: z.string().uuid() }).strict())
+  .handler(async ({ context, data }) => {
+    const { getAdminProviderApplicationDetail: getDetail } = await import("./repository.server");
+    return getDetail(context.userId, data.businessId);
+  });
+
+export const applyAdminProviderReviewDecision = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    businessId: z.string().uuid(),
+    decision: z.enum(["under_review", "needs_information", "rejected", "approved"]),
+    note: z.string().max(2000).default(""),
+  }).strict())
+  .handler(async ({ context, data }) => {
+    const { applyAdminProviderReviewDecision: applyDecision } = await import("./repository.server");
+    return applyDecision({
+      adminUserId: context.userId,
+      businessId: data.businessId,
+      decision: data.decision,
+      note: data.note,
+    });
+  });
