@@ -229,9 +229,14 @@ function BookingPage() {
   useEffect(() => {
     const canShare = liveBooking && ["on_the_way", "arrived", "service_started"].includes(liveBooking.status);
     if (!canShare && watchIdRef.current !== null) {
-      void stopLiveLocationSharing();
+      if (typeof navigator !== "undefined" && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+      watchIdRef.current = null;
+      setSharingLiveLocation(false);
+      void stopCurrentProviderBookingLocation({ data: { bookingId } }).catch(() => undefined);
     }
-  }, [liveBooking?.status]);
+  }, [liveBooking?.status, bookingId]);
 
   async function issueLiveStartCode() {
     setLiveBusy(true);
