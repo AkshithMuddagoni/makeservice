@@ -1,3 +1,6 @@
+import { isValidIndiaE164Phone, isValidIndiaMobileNumber } from "../india-validation.ts";
+export { isValidIndiaE164Phone } from "../india-validation.ts";
+
 /**
  * Server-only MSG91 delivery for Better Auth's generated phone OTP.
  *
