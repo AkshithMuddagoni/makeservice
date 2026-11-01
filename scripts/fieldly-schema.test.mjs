@@ -151,6 +151,19 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
       assert.equal(row.rowsecurity, true, `RLS is not enabled on ${row.tablename}`);
     }
 
+    const operatorAssignmentConstraints = await db.query(
+      `select conname
+       from pg_constraint
+       where conrelid = 'public.provider_operator_assets'::regclass`,
+    );
+    const operatorConstraintNames = new Set(operatorAssignmentConstraints.rows.map((row) => row.conname));
+    assert.ok(operatorConstraintNames.has("provider_operator_assets_operator_business_fk"));
+    assert.ok(operatorConstraintNames.has("provider_operator_assets_asset_business_fk"));
+    const operatorAssignmentRls = await db.query(
+      "select rowsecurity from pg_tables where schemaname = 'public' and tablename = 'provider_operator_assets'",
+    );
+    assert.equal(operatorAssignmentRls.rows[0]?.rowsecurity, true);
+
     const providerFks = await db.query(
       `select conname
        from pg_constraint
