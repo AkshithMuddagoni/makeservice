@@ -184,6 +184,9 @@ function RequestPage() {
               <p className="mt-3 rounded-xl bg-paper p-3 text-sm leading-5">
                 Your quote acceptance and booking are saved. Payment has not been collected or recorded. Do not pay outside the MakeService payment flow.
               </p>
+              <Button asChild className="mt-3">
+                <Link to="/bookings/$bookingId" params={{ bookingId: liveRequest.booking.id }}>Open booking details</Link>
+              </Button>
             </>
           ) : (
             <>
