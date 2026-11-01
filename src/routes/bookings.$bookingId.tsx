@@ -375,7 +375,7 @@ function BookingPage() {
             <p className="mt-1 text-sm text-muted">{serviceName} · {liveBooking.provider.name} · {liveBooking.site.label}</p>
             <p className="mt-1 font-mono text-xs text-muted">{liveBooking.publicReference}</p>
           </div>
-          <Button variant="outline" disabled={liveBusy} onClick={() => setLiveRefreshKey((key) => key + 1)}>Refresh status</Button>
+          <Button variant="secondary" disabled={liveBusy} onClick={() => setLiveRefreshKey((key) => key + 1)}>Refresh status</Button>
         </div>
 
         <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_0.9fr]">
@@ -551,7 +551,7 @@ function BookingPage() {
                     {sharingLiveLocation ? "This device is sharing location" : liveBooking.liveLocation ? "A recent GPS point is available" : "No active GPS point"}
                   </span>
                   {sharingLiveLocation ? (
-                    <Button variant="outline" disabled={liveBusy} onClick={() => void stopLiveLocationSharing()}>Stop sharing</Button>
+                    <Button variant="secondary" disabled={liveBusy} onClick={() => void stopLiveLocationSharing()}>Stop sharing</Button>
                   ) : (
                     <Button disabled={liveBusy} onClick={startLiveLocationSharing}>Start sharing location</Button>
                   )}
@@ -601,7 +601,7 @@ function BookingPage() {
             )}
 
             {liveError && <p role="alert" className="rounded-xl bg-danger-soft p-3 text-sm text-danger">{liveError}</p>}
-            <Button variant="outline" onClick={() => setLiveRefreshKey((key) => key + 1)}>Refresh booking</Button>
+            <Button variant="secondary" onClick={() => setLiveRefreshKey((key) => key + 1)}>Refresh booking</Button>
             <Button variant="ghost" asChild><Link to="/">Back to home</Link></Button>
           </aside>
         </div>
