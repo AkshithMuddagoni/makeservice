@@ -152,11 +152,3 @@ export const sendBookingMessageInputSchema = z.object({
 }).strict();
 
 export type SendBookingMessageInput = z.infer<typeof sendBookingMessageInputSchema>;
-
-
-export const sendBookingMessageInputSchema = z.object({
-  bookingId: z.string().uuid(),
-  messageText: z.string().trim().min(1).max(2000),
-}).strict();
-
-export type SendBookingMessageInput = z.infer<typeof sendBookingMessageInputSchema>;
