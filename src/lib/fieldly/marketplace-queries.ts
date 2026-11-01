@@ -48,6 +48,15 @@ with candidates as (
     where pas.provider_service_id = ps.id
       and pa.verification_status = 'approved'
       and pa.is_available = true
+      and exists (
+        select 1
+        from public.provider_operator_assets poa
+        join public.provider_operators po
+          on po.id = poa.operator_id and po.business_id = poa.business_id
+        where poa.business_id = pa.business_id
+          and poa.asset_id = pa.id
+          and po.verification_status = 'approved'
+      )
   ) assets on true
   left join lateral (
     select round(avg(r.rating)::numeric, 1) as rating, count(*)::integer as review_count
@@ -69,6 +78,15 @@ with candidates as (
       where pas.provider_service_id = ps.id
         and pa.verification_status = 'approved'
         and pa.is_available = true
+        and exists (
+          select 1
+          from public.provider_operator_assets poa
+          join public.provider_operators po
+            on po.id = poa.operator_id and po.business_id = poa.business_id
+          where poa.business_id = pa.business_id
+            and poa.asset_id = pa.id
+            and po.verification_status = 'approved'
+        )
     )
 )
 select business_id, provider_service_id, name, area, city, district, state,
