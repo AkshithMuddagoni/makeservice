@@ -5,6 +5,7 @@ import {
   discoverProvidersInputSchema,
   setProviderPresenceInputSchema,
   submitProviderQuoteInputSchema,
+  acceptProviderQuoteInputSchema,
 } from "./marketplace-validation.ts";
 
 const site = {
@@ -117,4 +118,16 @@ test("provider quote rejects invalid price, missing terms and out-of-range ETA",
     ...quoteInput,
     extraCharges: [{ label: "X", amountRupees: -1 }],
   }));
+});
+
+ 
+test("customer quote acceptance requires a UUID and explicit terms consent", () => {
+  const quoteId = "a7d8e90f-84d2-4b3a-9c4a-b3d0c3d1e0f2";
+  assert.deepEqual(
+    acceptProviderQuoteInputSchema.parse({ quoteId, termsAccepted: true }),
+    { quoteId, termsAccepted: true },
+  );
+  assert.throws(() => acceptProviderQuoteInputSchema.parse({ quoteId, termsAccepted: false }));
+  assert.throws(() => acceptProviderQuoteInputSchema.parse({ quoteId: "not-a-uuid", termsAccepted: true }));
+  assert.throws(() => acceptProviderQuoteInputSchema.parse({ quoteId, termsAccepted: true, customerUserId: "spoofed" }));
 });
