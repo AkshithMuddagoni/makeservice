@@ -123,11 +123,12 @@ function BookingPage() {
 
   useEffect(() => {
     return () => {
+      const hadActiveWatch = watchIdRef.current !== null;
       if (watchIdRef.current !== null && typeof navigator !== "undefined" && navigator.geolocation) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
       watchIdRef.current = null;
-      if (authEnabled) {
+      if (authEnabled && hadActiveWatch) {
         void stopCurrentProviderBookingLocation({ data: { bookingId } }).catch(() => undefined);
       }
     };
