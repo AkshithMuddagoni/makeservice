@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidIndiaE164Phone } from "../india-validation";
 import { isValidIndiaPincode } from "../india-validation.ts";
 
 const serviceIdSchema = z.string().regex(/^[a-z0-9_-]{1,60}$/);
@@ -224,7 +225,7 @@ export const saveProviderOperatorInputSchema = z.object({
   businessId: z.string().uuid(),
   operatorId: z.string().uuid().optional(),
   fullName: z.string().trim().min(2).max(120),
-  phoneE164: z.string().regex(/^\\+91[6-9]\\d{9}$/).nullable().optional(),
+  phoneE164: z.string().refine(isValidIndiaE164Phone, "Enter a valid Indian E.164 mobile number.").nullable().optional(),
   roleTitle: z.string().trim().min(2).max(80),
   experienceYears: z.number().min(0).max(80),
   assetIds: z.array(z.string().uuid()).min(1).max(30),
