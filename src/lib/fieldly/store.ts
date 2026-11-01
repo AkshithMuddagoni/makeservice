@@ -864,7 +864,7 @@ export const useFieldly = create<State>()(
     }),
     {
       name: "fieldly-preview-v1",
-      version: 3,
+      version: 4,
       migrate: (persistedState, version) => {
         const state = persistedState as Partial<State>;
         const oldWarangalPresets = new Set([
