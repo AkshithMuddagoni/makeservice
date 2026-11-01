@@ -2,7 +2,12 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import { authClient, authEnabled } from "@/lib/auth/client";
 import { isValidIndiaE164Phone, isValidIndiaMobileNumber } from "@/lib/india-validation";
-import { confirmCurrentProviderDocumentUpload, createCurrentProviderDocumentUpload, submitCurrentProviderApplication } from "@/lib/fieldly/account.functions";
+import {
+  confirmCurrentProviderDocumentUpload,
+  createCurrentProviderDocumentUpload,
+  getCurrentProviderDashboard,
+  submitCurrentProviderApplication,
+} from "@/lib/fieldly/account.functions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { controlClass } from "@/components/fieldly/bits";
@@ -35,6 +40,28 @@ export const Route = createFileRoute("/join")({ component: JoinPage });
 
 const phoneSchema = z.string().refine(isValidIndiaMobileNumber, "Enter a valid Indian mobile number.");
 const initialService = "jcb";
+
+const ASSET_SCOPED_DOCUMENT_KEYS = [
+  "ASSET_OWNERSHIP_PROOF",
+  "ASSET_OWNER_NOC",
+  "VEHICLE_CLASSIFICATION_REVIEW",
+  "VEHICLE_RC",
+  "THIRD_PARTY_INSURANCE",
+  "PUC_CERTIFICATE",
+  "FITNESS_CERTIFICATE",
+  "TRANSPORT_PERMIT",
+  "ROAD_TAX_RECEIPT",
+  "WALTA_FORM16",
+] as const;
+
+const SERVICE_SCOPED_DOCUMENTS: Record<string, string> = {
+  WALTA_ACKNOWLEDGEMENT: "borewell",
+  CRANE_LOAD_CHART: "crane",
+  CRANE_INSPECTION: "crane",
+  WATER_SOURCE_EVIDENCE: "tanker",
+  POTABLE_WATER_QUALITY: "tanker",
+  POTABLE_WATER_FBO_LICENSE: "tanker",
+};
 
 type AssetDraft = {
   localId?: string;
@@ -137,6 +164,9 @@ function JoinPage() {
     existingProvider?.onboarding?.documents.filter((doc) => doc.selectedInPreview).map((doc) => doc.key) ?? [],
   );
   const [createdProviderId, setCreatedProviderId] = useState<string | null>(null);
+  const [submittedProductionApplication, setSubmittedProductionApplication] =
+    useState<Awaited<ReturnType<typeof getCurrentProviderDashboard>>[number] | null>(null);
+  const [assetDocumentTargets, setAssetDocumentTargets] = useState<Record<string, string>>({});
   const [isProductionSubmitted, setIsProductionSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingDocumentKey, setUploadingDocumentKey] = useState<string | null>(null);
@@ -322,6 +352,27 @@ function JoinPage() {
       return;
     }
 
+    let providerServiceId: string | undefined;
+    const serviceIdForDocument = SERVICE_SCOPED_DOCUMENTS[key];
+    if (serviceIdForDocument) {
+      const service = submittedProductionApplication?.services.find((item) => item.serviceId === serviceIdForDocument);
+      if (!service) {
+        toast.error("This evidence must be attached to the matching registered service. Refresh your application details and try again.");
+        return;
+      }
+      providerServiceId = service.id;
+    }
+
+    let assetId: string | undefined;
+    if ((ASSET_SCOPED_DOCUMENT_KEYS as readonly string[]).includes(key)) {
+      const assets = submittedProductionApplication?.assets ?? [];
+      assetId = assetDocumentTargets[key] || (assets.length === 1 ? assets[0].id : undefined);
+      if (!assetId || !assets.some((asset) => asset.id === assetId)) {
+        toast.error("Choose the exact machine this document belongs to before uploading.");
+        return;
+      }
+    }
+
     setUploadingDocumentKey(key);
     try {
       const upload = await createCurrentProviderDocumentUpload({
@@ -331,6 +382,8 @@ function JoinPage() {
           fileName: file.name,
           mimeType,
           sizeBytes: file.size,
+          ...(providerServiceId ? { providerServiceId } : {}),
+          ...(assetId ? { assetId } : {}),
         },
       });
       const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -503,6 +556,8 @@ function JoinPage() {
         });
         setIsProductionSubmitted(true);
         setCreatedProviderId(result.businessId);
+        const applications = await getCurrentProviderDashboard().catch(() => []);
+        setSubmittedProductionApplication(applications.find((item) => item.id === result.businessId) ?? null);
         setStep(5);
         toast.success(result.alreadyExists
           ? "This business already has an application on your account."
@@ -1021,16 +1076,32 @@ function JoinPage() {
                     {doc.secureOnly ? (
                       <span className="rounded-full bg-paper px-3 py-2 text-xs font-semibold">Secure KYC step</span>
                     ) : (
-                      <label className="cursor-pointer rounded-xl border border-line px-3 py-2 text-xs font-semibold">
-                        {uploadingDocumentKey === doc.key ? "Uploading…" : uploadedDocumentKeys.includes(doc.key) ? "Upload replacement" : "Upload file"}
-                        <input
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png,.webp"
-                          disabled={uploadingDocumentKey !== null}
-                          className="sr-only"
-                          onChange={(event) => onDocumentSelect(doc.key, event)}
-                        />
-                      </label>
+                      <div className="grid gap-2 justify-items-start">
+                        {(ASSET_SCOPED_DOCUMENT_KEYS as readonly string[]).includes(doc.key) && (submittedProductionApplication?.assets.length ?? 0) > 1 && (
+                          <select
+                            className="max-w-full rounded-lg border border-line bg-card px-2 py-2 text-xs"
+                            value={assetDocumentTargets[doc.key] ?? ""}
+                            onChange={(event) => setAssetDocumentTargets((current) => ({ ...current, [doc.key]: event.target.value }))}
+                            disabled={uploadingDocumentKey !== null}
+                            aria-label={"Select machine for " + doc.label}
+                          >
+                            <option value="">Choose machine for this document</option>
+                            {submittedProductionApplication?.assets.map((asset) => (
+                              <option key={asset.id} value={asset.id}>{asset.make} {asset.model} · {asset.assetType}</option>
+                            ))}
+                          </select>
+                        )}
+                        <label className="cursor-pointer rounded-xl border border-line px-3 py-2 text-xs font-semibold">
+                          {uploadingDocumentKey === doc.key ? "Uploading…" : uploadedDocumentKeys.includes(doc.key) ? "Upload replacement" : "Upload file"}
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.webp"
+                            disabled={uploadingDocumentKey !== null}
+                            className="sr-only"
+                            onChange={(event) => onDocumentSelect(doc.key, event)}
+                          />
+                        </label>
+                      </div>
                     )}
                   </div>
                 ))}
