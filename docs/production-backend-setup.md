@@ -267,12 +267,13 @@ separate controlled SMS test.
 
 ## Render environment variables
 
-The checked-in `render.yaml` currently selects Render's Free compute
-plan for preview only. Render says Free services are not for production;
-they spin down after 15 minutes without traffic, so the first user after idle
-can see a cold-start delay. Choose an owner-approved paid compute plan before
-production deployment. The plan is deliberately not upgraded in this branch
-because that changes billing.
+The checked-in `render.yaml` now selects the minimum paid **Starter**
+web-service instance (0.5 CPU / 512 MB RAM). The live `makeservice` service
+must still be changed from Free to Starter in its Dashboard:
+Settings → General → Instance Type → Update → Starter → Save Changes.
+Render automatically deploys the service to apply the instance-type change.
+Do this only after the required production environment variables below are in
+place; the current live service is intentionally still tracking `main`.
 
 The Blueprint declares the baseline variables for new Blueprint-created
 services:
