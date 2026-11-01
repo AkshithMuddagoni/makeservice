@@ -11,6 +11,7 @@ import {
   getAdminProviderReviewQueue,
   reviewAdminProviderAsset,
   reviewAdminProviderDocument,
+  reviewAdminProviderOperator,
   reviewAdminProviderService,
 } from "@/lib/fieldly/account.functions";
 import { SERVICE_ONBOARDING } from "@/lib/fieldly/provider-onboarding";
@@ -189,7 +190,7 @@ function AdminWorkspace() {
 
   async function decideProviderItem(
     itemId: string,
-    itemType: "service" | "asset",
+    itemType: "service" | "asset" | "operator",
     decision: Decision,
   ) {
     if (!detail || itemBusyId) return;
@@ -201,7 +202,8 @@ function AdminWorkspace() {
     try {
       const data = { itemId, decision, note: note.trim() };
       if (itemType === "service") await reviewAdminProviderService({ data });
-      else await reviewAdminProviderAsset({ data });
+      else if (itemType === "asset") await reviewAdminProviderAsset({ data });
+      else await reviewAdminProviderOperator({ data });
       toast.success((itemType === "service" ? "Service" : "Machine") + " review decision saved and audit logged.");
       await Promise.all([loadQueue(true), loadDetail(detail.id)]);
     } catch (cause) {
@@ -348,7 +350,7 @@ function ReviewDetail({
   itemBusyId: string | null;
   onOpenDocument: (documentId: string) => void;
   onDocumentDecision: (documentId: string, decision: "verified" | "rejected") => void;
-  onItemDecision: (itemId: string, itemType: "service" | "asset", decision: Decision) => void;
+  onItemDecision: (itemId: string, itemType: "service" | "asset" | "operator", decision: Decision) => void;
   onDecision: (decision: Decision) => void;
   onBack: () => void;
 }) {
@@ -439,6 +441,66 @@ function ReviewDetail({
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="border-b border-line p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-display text-lg font-bold">Operators & drivers ({detail.operators.length})</h3>
+          <span className="text-xs text-muted">Each operator is reviewed separately</span>
+        </div>
+        {detail.operators.length ? (
+          <div className="mt-3 grid gap-3">
+            {detail.operators.map((operator) => {
+              const assignedAssets = detail.assets.filter((asset) => operator.assetIds.includes(asset.id));
+              const operatorFiles = detail.uploadedDocuments.filter((file) => file.operatorId === operator.id);
+              return (
+                <div key={operator.id} className="rounded-xl border border-line p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold">{operator.fullName}</p>
+                      <p className="mt-1 text-xs text-muted">{operator.roleTitle} · {operator.experienceYears} years' experience{operator.phoneLast4 ? " · phone ending " + operator.phoneLast4 : ""}</p>
+                    </div>
+                    <span className={cn("rounded-full px-2 py-1 text-[10px] font-bold", statusTone(operator.verificationStatus))}>{statusLabel(operator.verificationStatus)}</span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted">
+                    Assigned machines: {assignedAssets.map((asset) => asset.make + " " + asset.model).join(", ") || "No machine assigned"}
+                  </p>
+                  {operator.reviewerNote && <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">Reviewer note: {operator.reviewerNote}</p>}
+                  {operatorFiles.length > 0 && (
+                    <div className="mt-3 grid gap-2">
+                      {operatorFiles.map((file) => (
+                        <div key={file.id} className="rounded-lg bg-paper p-3">
+                          <p className="text-xs font-semibold">{file.documentType.replaceAll("_", " ")} · {file.originalFilename}</p>
+                          <p className="mt-1 text-[11px] text-muted">{statusLabel(file.status)} · {Math.round(file.sizeBytes / 1024)} KB</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Button size="sm" variant="secondary" onClick={() => onOpenDocument(file.id)}>Open secure download</Button>
+                            {file.status === "uploaded" && (
+                              <>
+                                <Button size="sm" disabled={documentBusyId !== null} onClick={() => onDocumentDecision(file.id, "verified")}>Verify document</Button>
+                                <Button size="sm" variant="danger" disabled={documentBusyId !== null} onClick={() => onDocumentDecision(file.id, "rejected")}>Reject document</Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {["draft", "submitted", "under_review", "needs_information"].includes(operator.verificationStatus) && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button size="sm" variant="secondary" disabled={itemBusyId !== null || !["draft", "submitted", "needs_information"].includes(operator.verificationStatus)} onClick={() => onItemDecision(operator.id, "operator", "under_review")}>Start / resume review</Button>
+                      <Button size="sm" variant="secondary" disabled={itemBusyId !== null || !["submitted", "under_review"].includes(operator.verificationStatus) || note.trim().length < 8} onClick={() => onItemDecision(operator.id, "operator", "needs_information")}>Request information</Button>
+                      <Button size="sm" variant="danger" disabled={itemBusyId !== null || note.trim().length < 8} onClick={() => onItemDecision(operator.id, "operator", "rejected")}>Reject operator</Button>
+                      <Button size="sm" disabled={itemBusyId !== null || !["submitted", "under_review"].includes(operator.verificationStatus) || detail.verificationStatus !== "approved"} onClick={() => onItemDecision(operator.id, "operator", "approved")}>Approve operator</Button>
+                    </div>
+                  )}
+                  {itemBusyId === "operator:" + operator.id && <p className="mt-2 text-xs text-muted">Saving operator review…</p>}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-3 rounded-xl bg-paper p-3 text-sm text-muted">No operator records have been submitted. Ask the provider to assign at least one named operator to each machine in the provider desk.</p>
+        )}
       </section>
 
       <section className="border-b border-line p-5">
