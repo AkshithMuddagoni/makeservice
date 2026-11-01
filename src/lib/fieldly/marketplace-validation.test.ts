@@ -15,6 +15,7 @@ import {
   updateBookingParticipantInputSchema,
   updateProviderBookingLocationInputSchema,
   stopProviderBookingLocationInputSchema,
+  sendBookingMessageInputSchema,
 } from "./marketplace-validation.ts";
 
 const site = {
@@ -213,4 +214,16 @@ test("provider GPS input validates coordinates, accuracy, heading and speed", ()
   assert.throws(() => updateProviderBookingLocationInputSchema.parse({ ...payload, headingDegrees: 361 }));
   assert.throws(() => updateProviderBookingLocationInputSchema.parse({ ...payload, speedMps: -1 }));
   assert.throws(() => updateProviderBookingLocationInputSchema.parse({ ...payload, userId: "spoofed" }));
+});
+
+
+test("booking chat accepts plain text only and caps message size", () => {
+  const bookingId = "f9b0c52f-a6f4-4d5e-8f6c-e6d8f6a5f516";
+  assert.deepEqual(
+    sendBookingMessageInputSchema.parse({ bookingId, messageText: "I will reach the site in 30 minutes." }),
+    { bookingId, messageText: "I will reach the site in 30 minutes." },
+  );
+  assert.throws(() => sendBookingMessageInputSchema.parse({ bookingId, messageText: "   " }));
+  assert.throws(() => sendBookingMessageInputSchema.parse({ bookingId, messageText: "x".repeat(2001) }));
+  assert.throws(() => sendBookingMessageInputSchema.parse({ bookingId, messageText: "Hello", senderUserId: "spoofed" }));
 });
