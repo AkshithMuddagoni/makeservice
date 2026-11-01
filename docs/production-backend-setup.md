@@ -5,6 +5,8 @@ current customer/provider UI has been switched from its browser preview store.
 
 ## Architecture decision
 
+Production server startup now fails closed when `NODE_ENV=production` and `DATABASE_URL` is missing or blank. PGlite is reserved for local development and preview; a public production service must use persistent PostgreSQL.
+
 - Better Auth remains the existing identity system; Supabase Auth is not added.
 - Supabase PostgreSQL is the intended production database.
 - Render accesses PostgreSQL only from server code through
