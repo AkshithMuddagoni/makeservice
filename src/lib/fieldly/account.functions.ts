@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "../auth/middleware";
 import { isValidIndiaPincode } from "../india-validation";
-import { createJobRequestInputSchema, discoverProvidersInputSchema } from "./marketplace-validation";
+import { createJobRequestInputSchema, discoverProvidersInputSchema, setProviderPresenceInputSchema, submitProviderQuoteInputSchema } from "./marketplace-validation";
 
 /**
  * These functions are safe to call from React. Database access is dynamically
@@ -157,4 +157,31 @@ export const getCurrentJobRequestDetail = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const { getCustomerJobRequestForUser } = await import("./repository.server");
     return getCustomerJobRequestForUser(context.userId, data.requestId);
+  });
+
+
+/** Toggle availability for a business owned by the verified provider session. */
+export const setCurrentProviderPresence = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(setProviderPresenceInputSchema)
+  .handler(async ({ context, data }) => {
+    const { setProviderPresenceForUser } = await import("./repository.server");
+    return setProviderPresenceForUser(context.userId, data);
+  });
+
+/** List only open requests targeted to the authenticated provider's businesses. */
+export const getCurrentProviderOpenRequests = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const { getProviderOpenRequestsForUser } = await import("./repository.server");
+    return getProviderOpenRequestsForUser(context.userId);
+  });
+
+/** Submit or update a pending quote for a request assigned to the provider's own business. */
+export const submitCurrentProviderQuote = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(submitProviderQuoteInputSchema)
+  .handler(async ({ context, data }) => {
+    const { submitProviderQuoteForUser } = await import("./repository.server");
+    return submitProviderQuoteForUser(context.userId, data);
   });
