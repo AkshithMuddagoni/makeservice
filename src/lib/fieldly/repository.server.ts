@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { generateBookingStartCode, hashBookingStartCode, verifyBookingStartCodeHash } from "./booking-security.server";
 import { DEV_USER_ID } from "../auth/verify.server";
 import { getSql } from "../db";
 import { getProviderDocumentRequirements, SERVICE_ONBOARDING } from "./provider-onboarding";
@@ -2004,5 +2005,452 @@ export async function setProviderAssetAvailabilityForUser(
     if (!row) throw new Error("Machine availability could not be saved.");
     if (!input.isAvailable) await pausePresenceIfNoEligibleService(tx, input.businessId);
     return { assetId: row.id, isAvailable: row.is_available };
+  });
+}
+
+
+export type LiveBookingStatus =
+  | "confirmed"
+  | "on_the_way"
+  | "arrived"
+  | "service_started"
+  | "service_completed"
+  | "paid"
+  | "disputed"
+  | "cancelled";
+
+export type LiveBookingDetail = {
+  id: string;
+  publicReference: string;
+  status: LiveBookingStatus;
+  amountPaise: number;
+  currency: string;
+  serviceId: string;
+  scheduledFor: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  cancellationReason: string | null;
+  disputeReason: string | null;
+  site: {
+    label: string;
+    address: string;
+    area: string;
+    city: string;
+    district: string | null;
+    state: string;
+    pincode: string | null;
+    landmark: string | null;
+    latitude: number;
+    longitude: number;
+  };
+  requirements: Record<string, string>;
+  terms: {
+    note?: string;
+    inclusions: string[];
+    exclusions: string[];
+    extraCharges: Array<{ label: string; amountPaise: number }>;
+    cancellationTerms?: string;
+    etaMinutes?: number | null;
+  };
+  provider: {
+    businessId: string;
+    name: string;
+    baseLatitude: number | null;
+    baseLongitude: number | null;
+  };
+  permissions: {
+    isCustomer: boolean;
+    isProvider: boolean;
+  };
+  startCode: {
+    hasActiveCode: boolean;
+    expiresAt: string | null;
+    attempts: number;
+    issueCount: number;
+    maxIssues: number;
+    maxAttempts: number;
+  };
+  liveLocation: {
+    latitude: number;
+    longitude: number;
+    accuracyMeters: number | null;
+    headingDegrees: number | null;
+    speedMps: number | null;
+    recordedAt: string;
+    expiresAt: string;
+  } | null;
+  events: Array<{
+    id: string;
+    fromStatus: string | null;
+    toStatus: string;
+    eventType: string;
+    note: string | null;
+    createdAt: string;
+  }>;
+};
+
+type BookingRow = {
+  id: string;
+  public_reference: string;
+  status: LiveBookingStatus;
+  amount_paise: string | number;
+  currency: string;
+  service_id: string;
+  scheduled_for: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+  cancellation_reason: string | null;
+  dispute_reason: string | null;
+  customer_user_id: string;
+  site_snapshot: Record<string, unknown>;
+  requirements_snapshot: Record<string, string>;
+  terms_snapshot: Record<string, unknown>;
+  start_code_hash: string | null;
+  start_code_expires_at: string | null;
+  start_code_attempts: number;
+  start_code_issue_count: number;
+  business_id: string;
+  provider_name: string;
+  provider_latitude: number | null;
+  provider_longitude: number | null;
+};
+
+function participantSiteSnapshot(value: Record<string, unknown>): LiveBookingDetail["site"] {
+  return {
+    label: String(value.label ?? "Work site"),
+    address: String(value.address ?? value.label ?? ""),
+    area: String(value.area ?? ""),
+    city: String(value.city ?? ""),
+    district: value.district ? String(value.district) : null,
+    state: String(value.state ?? ""),
+    pincode: value.pincode ? String(value.pincode) : null,
+    landmark: value.landmark ? String(value.landmark) : null,
+    latitude: Number(value.latitude),
+    longitude: Number(value.longitude),
+  };
+}
+
+/** Read a booking only for its customer or its assigned provider business owner. */
+export async function getBookingDetailForUser(
+  userId: string,
+  bookingId: string,
+): Promise<LiveBookingDetail | null> {
+  assertProductionIdentity(userId);
+  const sql = await getSql();
+  const rows = await sql.query<BookingRow>(
+    "select b.id::text as id,b.public_reference,b.status::text as status,b.amount_paise::text as amount_paise, " +
+    "b.currency,b.service_id,b.scheduled_for::text as scheduled_for,b.created_at::text as created_at, " +
+    "b.updated_at::text as updated_at,b.completed_at::text as completed_at,b.cancellation_reason,b.dispute_reason, " +
+    "b.customer_user_id,b.site_snapshot,b.requirements_snapshot,b.terms_snapshot,b.start_code_hash, " +
+    "b.start_code_expires_at::text as start_code_expires_at,b.start_code_attempts,b.start_code_issue_count, " +
+    "pb.id::text as business_id,pb.trading_name as provider_name,pb.latitude as provider_latitude,pb.longitude as provider_longitude " +
+    "from public.bookings b join public.provider_businesses pb on pb.id=b.business_id " +
+    "where b.id=$1::uuid and (b.customer_user_id=$2 or pb.owner_user_id=$2) limit 1",
+    [bookingId, userId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+
+  const isCustomer = row.customer_user_id === userId;
+  const isProvider = !isCustomer && await (async () => {
+    await requireProviderRole(sql, userId);
+    return true;
+  })();
+  if (isCustomer) await requireCustomerRole(sql, userId);
+  const [events, locations] = await Promise.all([
+    sql.query<{
+      id: string; from_status: string | null; to_status: string;
+      event_type: string; note: string | null; created_at: string;
+    }>(
+      "select id::text as id,from_status::text as from_status,to_status::text as to_status, " +
+      "event_type,note,created_at::text as created_at from public.booking_events " +
+      "where booking_id=$1::uuid order by created_at asc limit 100",
+      [bookingId],
+    ),
+    sql.query<{
+      latitude: number; longitude: number; accuracy_meters: string | number | null;
+      heading_degrees: string | number | null; speed_mps: string | number | null;
+      recorded_at: string; expires_at: string;
+    }>(
+      "select latitude,longitude,accuracy_meters::text as accuracy_meters,heading_degrees::text as heading_degrees, " +
+      "speed_mps::text as speed_mps,recorded_at::text as recorded_at,expires_at::text as expires_at " +
+      "from public.booking_live_locations where booking_id=$1::uuid and expires_at>now() " +
+      "and recorded_at>now()-interval '2 minutes' limit 1",
+      [bookingId],
+    ),
+  ]);
+  const terms = row.terms_snapshot ?? {};
+  const expiresAt = row.start_code_expires_at;
+  const activeCode = Boolean(
+    isCustomer && row.status === "arrived" && row.start_code_hash && expiresAt &&
+    new Date(expiresAt).getTime() > Date.now(),
+  );
+  const location = locations[0];
+  return {
+    id: row.id,
+    publicReference: row.public_reference,
+    status: row.status,
+    amountPaise: Number(row.amount_paise),
+    currency: row.currency,
+    serviceId: row.service_id,
+    scheduledFor: row.scheduled_for,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    completedAt: row.completed_at,
+    cancellationReason: row.cancellation_reason,
+    disputeReason: row.dispute_reason,
+    site: participantSiteSnapshot(row.site_snapshot ?? {}),
+    requirements: row.requirements_snapshot ?? {},
+    terms: {
+      note: typeof terms.note === "string" ? terms.note : undefined,
+      inclusions: Array.isArray(terms.inclusions) ? terms.inclusions as string[] : [],
+      exclusions: Array.isArray(terms.exclusions) ? terms.exclusions as string[] : [],
+      extraCharges: Array.isArray(terms.extraCharges)
+        ? terms.extraCharges as Array<{ label: string; amountPaise: number }>
+        : [],
+      cancellationTerms: typeof terms.cancellationTerms === "string" ? terms.cancellationTerms : undefined,
+      etaMinutes: typeof terms.etaMinutes === "number" ? terms.etaMinutes : null,
+    },
+    provider: {
+      businessId: row.business_id,
+      name: row.provider_name,
+      baseLatitude: row.provider_latitude === null ? null : Number(row.provider_latitude),
+      baseLongitude: row.provider_longitude === null ? null : Number(row.provider_longitude),
+    },
+    permissions: { isCustomer, isProvider },
+    startCode: {
+      hasActiveCode: activeCode,
+      expiresAt: activeCode ? expiresAt : null,
+      attempts: isProvider ? Number(row.start_code_attempts) : 0,
+      issueCount: isCustomer ? Number(row.start_code_issue_count) : 0,
+      maxIssues: 5,
+      maxAttempts: 10,
+    },
+    liveLocation: location ? {
+      latitude: Number(location.latitude),
+      longitude: Number(location.longitude),
+      accuracyMeters: location.accuracy_meters === null ? null : Number(location.accuracy_meters),
+      headingDegrees: location.heading_degrees === null ? null : Number(location.heading_degrees),
+      speedMps: location.speed_mps === null ? null : Number(location.speed_mps),
+      recordedAt: location.recorded_at,
+      expiresAt: location.expires_at,
+    } : null,
+    events: events.map((event) => ({
+      id: event.id,
+      fromStatus: event.from_status,
+      toStatus: event.to_status,
+      eventType: event.event_type,
+      note: event.note,
+      createdAt: event.created_at,
+    })),
+  };
+}
+
+export async function updateProviderBookingStatusForUser(
+  userId: string,
+  input: { bookingId: string; status: "on_the_way" | "arrived" | "service_completed"; note?: string },
+): Promise<{ bookingId: string; status: LiveBookingStatus }> {
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireProviderRole(tx, userId);
+    const rows = await tx.query<{ status: LiveBookingStatus }>(
+      "select b.status::text as status from public.bookings b " +
+      "join public.provider_businesses pb on pb.id=b.business_id " +
+      "where b.id=$1::uuid and pb.owner_user_id=$2 for update of b",
+      [input.bookingId, userId],
+    );
+    const booking = rows[0];
+    if (!booking) throw new Error("This booking is not assigned to a business owned by your account.");
+    const allowed: Record<string, string[]> = {
+      confirmed: ["on_the_way"],
+      on_the_way: ["arrived"],
+      service_started: ["service_completed"],
+    };
+    if (!allowed[booking.status]?.includes(input.status)) {
+      throw new Error("This booking cannot move from " + booking.status + " to " + input.status + ".");
+    }
+    const note = input.note?.trim() || null;
+    const updated = await tx.query<{ status: LiveBookingStatus }>(
+      "update public.bookings set status=$2::fieldly_booking_status, " +
+      "completed_at=case when $2='service_completed' then now() else completed_at end,updated_at=now() " +
+      "where id=$1::uuid returning status::text as status",
+      [input.bookingId, input.status],
+    );
+    await tx.query(
+      "insert into public.booking_events (booking_id,actor_user_id,from_status,to_status,event_type,note) " +
+      "values ($1::uuid,$2,$3::fieldly_booking_status,$4::fieldly_booking_status,$5,$6)",
+      [input.bookingId, userId, booking.status, input.status, "provider_" + input.status, note],
+    );
+    return { bookingId: input.bookingId, status: updated[0].status };
+  });
+}
+
+export type IssuedBookingStartCode = { bookingId: string; code: string; expiresAt: string };
+
+export async function issueBookingStartCodeForCustomer(
+  userId: string,
+  bookingId: string,
+): Promise<IssuedBookingStartCode> {
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireCustomerRole(tx, userId);
+    const rows = await tx.query<{
+      status: LiveBookingStatus;
+      start_code_issued_at: string | null;
+      start_code_issue_count: number;
+      start_code_consumed_at: string | null;
+    }>(
+      "select status::text as status,start_code_issued_at::text as start_code_issued_at, " +
+      "start_code_issue_count,start_code_consumed_at::text as start_code_consumed_at " +
+      "from public.bookings where id=$1::uuid and customer_user_id=$2 for update",
+      [bookingId, userId],
+    );
+    const booking = rows[0];
+    if (!booking) throw new Error("This booking does not belong to your customer account.");
+    if (booking.status !== "arrived" || booking.start_code_consumed_at) {
+      throw new Error("The service-start code is available only after the provider marks arrival.");
+    }
+    if (Number(booking.start_code_issue_count) >= 5) {
+      throw new Error("You have used all five code issue attempts. Contact support before work starts.");
+    }
+    if (booking.start_code_issued_at && Date.now() - new Date(booking.start_code_issued_at).getTime() < 60_000) {
+      throw new Error("Please wait 60 seconds before requesting a new start code.");
+    }
+    const code = generateBookingStartCode();
+    const hash = hashBookingStartCode(bookingId, code);
+    const rowsUpdated = await tx.query<{ expires_at: string }>(
+      "update public.bookings set start_code_hash=$2,start_code_expires_at=now()+interval '5 minutes', " +
+      "start_code_issued_at=now(),start_code_issue_count=start_code_issue_count+1,start_code_attempts=0,updated_at=now() " +
+      "where id=$1::uuid returning start_code_expires_at::text as expires_at",
+      [bookingId, hash],
+    );
+    if (!rowsUpdated[0]) throw new Error("The service-start code could not be issued.");
+    await tx.query(
+      "insert into public.booking_events (booking_id,actor_user_id,from_status,to_status,event_type,note,metadata) " +
+      "values ($1::uuid,$2,'arrived','arrived','start_code_issued','Customer generated a one-time service-start code',$3::jsonb)",
+      [bookingId, userId, JSON.stringify({ issueNumber: Number(booking.start_code_issue_count) + 1 })],
+    );
+    return { bookingId, code, expiresAt: rowsUpdated[0].expires_at };
+  });
+}
+
+export type VerifyBookingStartCodeResult = {
+  bookingId: string;
+  started: boolean;
+  attemptsRemaining: number;
+};
+
+export async function verifyBookingStartCodeForProvider(
+  userId: string,
+  input: { bookingId: string; code: string },
+): Promise<VerifyBookingStartCodeResult> {
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireProviderRole(tx, userId);
+    const rows = await tx.query<{
+      status: LiveBookingStatus;
+      start_code_hash: string | null;
+      start_code_expires_at: string | null;
+      start_code_attempts: number;
+    }>(
+      "select b.status::text as status,b.start_code_hash,b.start_code_expires_at::text as start_code_expires_at,b.start_code_attempts " +
+      "from public.bookings b join public.provider_businesses pb on pb.id=b.business_id " +
+      "where b.id=$1::uuid and pb.owner_user_id=$2 for update of b",
+      [input.bookingId, userId],
+    );
+    const booking = rows[0];
+    if (!booking) throw new Error("This booking is not assigned to a business owned by your account.");
+    if (booking.status !== "arrived") throw new Error("The customer code can be checked only after arrival.");
+    if (!booking.start_code_hash || !booking.start_code_expires_at) {
+      throw new Error("Ask the customer to issue a fresh service-start code.");
+    }
+    if (Date.now() > new Date(booking.start_code_expires_at).getTime()) {
+      throw new Error("The service-start code has expired. Ask the customer to issue a new one.");
+    }
+    const attempts = Number(booking.start_code_attempts);
+    if (attempts >= 10) throw new Error("Ten attempts have been used. Ask the customer to issue a new code.");
+    const correct = verifyBookingStartCodeHash(input.bookingId, input.code, booking.start_code_hash);
+    if (!correct) {
+      const nextAttempts = attempts + 1;
+      await tx.query(
+        "update public.bookings set start_code_attempts=$2,updated_at=now() where id=$1::uuid",
+        [input.bookingId, nextAttempts],
+      );
+      await tx.query(
+        "insert into public.booking_events (booking_id,actor_user_id,from_status,to_status,event_type,note,metadata) " +
+        "values ($1::uuid,$2,'arrived','arrived','start_code_failed','Provider submitted an incorrect service-start code',$3::jsonb)",
+        [input.bookingId, userId, JSON.stringify({ attempts: nextAttempts })],
+      );
+      return { bookingId: input.bookingId, started: false, attemptsRemaining: Math.max(0, 10 - nextAttempts) };
+    }
+
+    await tx.query(
+      "update public.bookings set status='service_started',start_code_hash=null,start_code_expires_at=null, " +
+      "start_code_attempts=0,start_code_consumed_at=now(),updated_at=now() where id=$1::uuid",
+      [input.bookingId],
+    );
+    await tx.query(
+      "insert into public.booking_events (booking_id,actor_user_id,from_status,to_status,event_type,note) " +
+      "values ($1::uuid,$2,'arrived','service_started','start_code_verified','Customer service-start code verified')",
+      [input.bookingId, userId],
+    );
+    return { bookingId: input.bookingId, started: true, attemptsRemaining: 10 };
+  });
+}
+
+export async function updateBookingByParticipant(
+  userId: string,
+  input: { bookingId: string; action: "cancelled" | "disputed"; reason: string },
+): Promise<{ bookingId: string; status: "cancelled" | "disputed" }> {
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    assertProductionIdentity(userId);
+    const rows = await tx.query<{
+      status: LiveBookingStatus;
+      customer_user_id: string;
+      business_owner_user_id: string;
+    }>(
+      "select b.status::text as status,b.customer_user_id,pb.owner_user_id as business_owner_user_id " +
+      "from public.bookings b join public.provider_businesses pb on pb.id=b.business_id " +
+      "where b.id=$1::uuid and (b.customer_user_id=$2 or pb.owner_user_id=$2) for update of b",
+      [input.bookingId, userId],
+    );
+    const booking = rows[0];
+    if (!booking) throw new Error("This booking is not available to your account.");
+    const isCustomer = booking.customer_user_id === userId;
+    const isProvider = booking.business_owner_user_id === userId;
+    if (isCustomer) await requireCustomerRole(tx, userId);
+    if (isProvider) await requireProviderRole(tx, userId);
+
+    const reason = input.reason.trim();
+    if (reason.length < 5) throw new Error("Enter a reason with at least five characters.");
+    if (input.action === "cancelled" && !["confirmed", "on_the_way"].includes(booking.status)) {
+      throw new Error("A booking can be cancelled only before provider arrival. Raise a dispute if there is an issue after arrival.");
+    }
+    if (input.action === "disputed" && !["arrived", "service_started", "service_completed"].includes(booking.status)) {
+      throw new Error("A dispute can be raised after provider arrival or service commencement.");
+    }
+    const updated = await tx.query<{ status: "cancelled" | "disputed" }>(
+      "update public.bookings set status=$2::fieldly_booking_status, " +
+      "cancellation_reason=case when $2='cancelled' then $3 else cancellation_reason end, " +
+      "dispute_reason=case when $2='disputed' then $3 else dispute_reason end,updated_at=now() " +
+      "where id=$1::uuid returning status::text as status",
+      [input.bookingId, input.action, reason],
+    );
+    await tx.query(
+      "insert into public.booking_events (booking_id,actor_user_id,from_status,to_status,event_type,note) " +
+      "values ($1::uuid,$2,$3::fieldly_booking_status,$4::fieldly_booking_status,$5,$6)",
+      [input.bookingId, userId, booking.status, input.action, input.action, reason],
+    );
+    if (input.action === "cancelled") {
+      await tx.query(
+        "update public.job_requests set status='cancelled',updated_at=now() " +
+        "where id=(select request_id from public.bookings where id=$1::uuid)",
+        [input.bookingId],
+      );
+    }
+    return { bookingId: input.bookingId, status: updated[0].status };
   });
 }
