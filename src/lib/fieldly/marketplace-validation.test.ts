@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   createJobRequestInputSchema,
   discoverProvidersInputSchema,
+  setProviderPresenceInputSchema,
+  submitProviderQuoteInputSchema,
 } from "./marketplace-validation.ts";
 
 const site = {
@@ -65,4 +67,54 @@ test("customer request accepts an offset-aware scheduled timestamp", () => {
     scheduledFor: "2026-11-04T10:30:00+05:30",
   });
   assert.equal(parsed.scheduledFor, "2026-11-04T10:30:00+05:30");
+});
+
+ 
+const quoteInput = {
+  requestId: "b5d6f81f-62b3-43c0-9735-5a82f02ed9bb",
+  businessId: "c6e7a92f-73c4-44d1-9846-6b93f03e0acc",
+  amountRupees: 18500,
+  note: "Includes rig setup, drilling labour and the agreed depth range.",
+  inclusions: ["Rig and operator", "Standard drilling labour"],
+  exclusions: ["Electrical connection", "Site permission charges"],
+  extraCharges: [{ label: "Additional casing pipe", amountRupees: 1500 }],
+  cancellationTerms: "Reschedule with 24 hours notice. Dispatch charges apply after vehicle movement.",
+  etaMinutes: 90,
+};
+
+test("provider presence accepts only business UUID and explicit boolean state", () => {
+  assert.deepEqual(
+    setProviderPresenceInputSchema.parse({
+      businessId: quoteInput.businessId,
+      isOnline: true,
+    }),
+    { businessId: quoteInput.businessId, isOnline: true },
+  );
+  assert.throws(() => setProviderPresenceInputSchema.parse({
+    businessId: quoteInput.businessId,
+    isOnline: "true",
+  }));
+  assert.throws(() => setProviderPresenceInputSchema.parse({
+    businessId: quoteInput.businessId,
+    isOnline: true,
+    ownerUserId: "customer-1",
+  }));
+});
+
+test("provider quote accepts a complete INR quote and contract fields", () => {
+  const parsed = submitProviderQuoteInputSchema.parse(quoteInput);
+  assert.equal(parsed.amountRupees, 18500);
+  assert.equal(parsed.extraCharges[0]?.amountRupees, 1500);
+});
+
+test("provider quote rejects invalid price, missing terms and out-of-range ETA", () => {
+  assert.throws(() => submitProviderQuoteInputSchema.parse({ ...quoteInput, amountRupees: 0 }));
+  assert.throws(() => submitProviderQuoteInputSchema.parse({ ...quoteInput, amountRupees: 100.5 }));
+  assert.throws(() => submitProviderQuoteInputSchema.parse({ ...quoteInput, cancellationTerms: "no" }));
+  assert.throws(() => submitProviderQuoteInputSchema.parse({ ...quoteInput, etaMinutes: 10081 }));
+  assert.throws(() => submitProviderQuoteInputSchema.parse({ ...quoteInput, isAdmin: true }));
+  assert.throws(() => submitProviderQuoteInputSchema.parse({
+    ...quoteInput,
+    extraCharges: [{ label: "X", amountRupees: -1 }],
+  }));
 });
