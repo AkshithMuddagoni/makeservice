@@ -76,11 +76,11 @@ identities. Use the ordered migrations above only.
 
 ## Render
 
-The repository includes `render.yaml` as a starting point for a Render Node web service. It specifies Node.js 22, `npm install && npm run build`, and `npm run start`.
+The repository includes `render.yaml` for a Render Node web service (Node.js 22, `npm install && npm run build`, `npm run start`). The Blueprint declares `DATABASE_URL` as a secret prompt, asks Render to generate `BETTER_AUTH_SECRET`, sets `BETTER_AUTH_URL` to the current public origin, and keeps auth/OTP/document-upload feature flags off by default.
 
-Production secrets must be configured only in Render's Environment settings. The production app must have a real Better Auth identity configuration, a strong `BETTER_AUTH_SECRET`, and a Supabase PostgreSQL `DATABASE_URL`. Do not put database URLs, passwords, OAuth secrets, payment secrets or private keys in frontend variables or GitHub.
+For an **existing** Render service, do not assume Blueprint `sync: false` will prompt for a new value: Render only prompts for these variables during initial Blueprint creation. Add `DATABASE_URL` manually in the existing service's Dashboard > Environment before deploying this backend. Configure production secrets only in Render Environment settings; never put database URLs, passwords, OAuth secrets, payment credentials or private keys in frontend variables or GitHub.
 
-If production authentication has not been provisioned, do not connect a real database to the public application and do not accept live bookings. The server is intended to fail closed rather than use a shared demo identity against real data.
+Do not switch `VITE_AUTH_ENABLED`, `VITE_PHONE_OTP_ENABLED` or `PROVIDER_DOCUMENT_UPLOADS_ENABLED` on until the corresponding MSG91/DLT, KYC and private-scanner gates have passed. The server deliberately fails closed in production if `DATABASE_URL` is missing; do not deploy the backend branch to the public service before the database and auth environment are provisioned.
 
 ## Authentication and data security
 
