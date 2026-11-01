@@ -1065,8 +1065,23 @@ export async function getAdminProviderReviewQueue(adminUserId: string): Promise<
            and d.status = 'verified'
          where r.business_id = b.id
            and r.required_for_approval
-           and r.status <> 'not_applicable'
-           and (r.status <> 'verified' or d.id is null)
+           and (
+             (r.requirement_key = 'OPERATOR_ROSTER' and (
+               not exists (select 1 from public.provider_assets pa where pa.business_id = r.business_id)
+               or not exists (select 1 from public.provider_operators po where po.business_id = r.business_id)
+               or exists (
+                 select 1 from public.provider_assets pa
+                 where pa.business_id = r.business_id
+                   and not exists (
+                     select 1 from public.provider_operator_assets poa
+                     where poa.business_id = r.business_id and poa.asset_id = pa.id
+                   )
+               )
+             ))
+             or (r.requirement_key <> 'OPERATOR_ROSTER'
+                 and r.status <> 'not_applicable'
+                 and (r.status <> 'verified' or d.id is null))
+           )
        ) as "pendingRequiredDocumentCount"
      from public.provider_businesses b
      where b.is_suspended = false
@@ -1509,12 +1524,20 @@ export async function applyAdminProviderServiceReviewDecision(
       documentKeys: requiredServiceDocumentKeys(item.service_id, item.selected_tasks ?? []),
     });
     const assets = await tx.query<{ count: number }>(
-      `select count(*)::int as count
+      `select count(distinct pa.id)::int as count
        from public.provider_asset_services pas
        join public.provider_assets pa on pa.id = pas.asset_id
        where pas.provider_service_id = $1::uuid
          and pa.business_id = $2::uuid
-         and pa.verification_status = 'approved'`,
+         and pa.verification_status = 'approved'
+         and exists (
+           select 1 from public.provider_operator_assets poa
+           join public.provider_operators po
+             on po.id = poa.operator_id and po.business_id = poa.business_id
+           where poa.business_id = pa.business_id
+             and poa.asset_id = pa.id
+             and po.verification_status = 'approved'
+         )`,
       [item.id, item.business_id],
     );
     const approvedLinkedAssets = Number(assets[0]?.count ?? 0);
@@ -1601,6 +1624,16 @@ export async function applyAdminProviderAssetReviewDecision(
         linkedServiceIds: linkedServices.map((row) => row.service_id),
       }),
     });
+    if (input.decision === "approved") {
+      const assigned = await tx.query<{ count: number }>(
+        `select count(*)::int as count from public.provider_operator_assets
+         where business_id = $1::uuid and asset_id = $2::uuid`,
+        [item.business_id, item.id],
+      );
+      if (Number(assigned[0]?.count ?? 0) < 1) {
+        throw new Error("Assign at least one named operator to this machine before approving it.");
+      }
+    }
     assertAdminItemReviewAllowed({
       currentStatus: item.verification_status,
       decision: input.decision,
@@ -1667,8 +1700,23 @@ export async function applyAdminProviderReviewDecision(input: {
         and d.status = 'verified'
        where r.business_id = $1
          and r.required_for_approval = true
-         and r.status <> 'not_applicable'
-         and (r.status <> 'verified' or d.id is null)`,
+         and (
+           (r.requirement_key = 'OPERATOR_ROSTER' and (
+             not exists (select 1 from public.provider_assets pa where pa.business_id = r.business_id)
+             or not exists (select 1 from public.provider_operators po where po.business_id = r.business_id)
+             or exists (
+               select 1 from public.provider_assets pa
+               where pa.business_id = r.business_id
+                 and not exists (
+                   select 1 from public.provider_operator_assets poa
+                   where poa.business_id = r.business_id and poa.asset_id = pa.id
+                 )
+             )
+           ))
+           or (r.requirement_key <> 'OPERATOR_ROSTER'
+               and r.status <> 'not_applicable'
+               and (r.status <> 'verified' or d.id is null))
+         )`,
       [input.businessId],
     );
     const pendingRequiredDocuments = Number(pendingRows[0]?.count ?? 0);
@@ -3610,10 +3658,15 @@ export async function reviewAdminProviderDocumentForUser(
       id: string;
       business_id: string;
       document_type: string;
+      provider_service_id: string | null;
+      asset_id: string | null;
+      operator_id: string | null;
       status: string;
     }>(
       `select id::text as id, business_id::text as business_id,
-              document_type, status::text as status
+              document_type, provider_service_id::text as provider_service_id,
+              asset_id::text as asset_id, operator_id::text as operator_id,
+              status::text as status
        from public.provider_documents
        where id = $1::uuid
        for update`,
@@ -3633,13 +3686,15 @@ export async function reviewAdminProviderDocumentForUser(
        where id = $1::uuid`,
       [input.documentId, input.decision, input.note.trim(), adminUserId],
     );
-    await tx.query(
-      `update public.provider_document_requirements
-       set status = $3, updated_at = now()
-       where business_id = $1::uuid and requirement_key = $2
-         and status <> 'not_applicable'`,
-      [document.business_id, document.document_type, input.decision],
-    );
+    if (!document.provider_service_id && !document.asset_id && !document.operator_id) {
+      await tx.query(
+        `update public.provider_document_requirements
+         set status = $3, updated_at = now()
+         where business_id = $1::uuid and requirement_key = $2
+           and status <> 'not_applicable'`,
+        [document.business_id, document.document_type, input.decision],
+      );
+    }
     await tx.query(
       `insert into public.fieldly_admin_audit
          (admin_user_id, action, target_type, target_id, reason, metadata)
