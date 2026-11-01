@@ -465,6 +465,15 @@ function ReviewDetail({
                       <span className="font-semibold text-ink">{file.originalFilename}</span>
                       <span>· {statusLabel(file.status)} · {Math.round(file.sizeBytes / 1024)} KB</span>
                     </div>
+                    <p className="mt-1 text-[11px] text-muted">
+                      {file.providerServiceId
+                        ? "Service: " + (SERVICE_ONBOARDING[detail.services.find((item) => item.id === file.providerServiceId)?.serviceId ?? ""]?.label ?? "Registered service")
+                        : file.assetId
+                          ? "Machine: " + (() => { const asset = detail.assets.find((item) => item.id === file.assetId); return asset ? asset.make + " " + asset.model : "Registered machine"; })()
+                          : file.operatorId
+                            ? "Operator-specific document"
+                            : "Business-level document"}
+                    </p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Button size="sm" variant="secondary" onClick={() => onOpenDocument(file.id)}>
                         Open secure download
