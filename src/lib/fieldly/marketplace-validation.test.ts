@@ -13,6 +13,8 @@ import {
   issueBookingStartCodeInputSchema,
   verifyBookingStartCodeInputSchema,
   updateBookingParticipantInputSchema,
+  updateProviderBookingLocationInputSchema,
+  stopProviderBookingLocationInputSchema,
 } from "./marketplace-validation.ts";
 
 const site = {
@@ -190,4 +192,25 @@ test("booking cancellation/dispute actions require a reason and reject extra ide
   assert.equal(updateBookingParticipantInputSchema.parse({ bookingId, reason: "Provider could not access site." }).reason, "Provider could not access site.");
   assert.throws(() => updateBookingParticipantInputSchema.parse({ bookingId, reason: "bad" }));
   assert.throws(() => updateBookingParticipantInputSchema.parse({ bookingId, reason: "valid reason", userId: "spoofed" }));
+});
+
+
+test("provider GPS input validates coordinates, accuracy, heading and speed", () => {
+  const bookingId = "f9b0c52f-a6f4-4d5e-8f6c-e6d8f6a5f516";
+  const payload = {
+    bookingId,
+    latitude: 17.385,
+    longitude: 78.4867,
+    accuracyMeters: 12.5,
+    headingDegrees: 180,
+    speedMps: 8.2,
+  };
+  assert.deepEqual(updateProviderBookingLocationInputSchema.parse(payload), payload);
+  assert.deepEqual(stopProviderBookingLocationInputSchema.parse({ bookingId }), { bookingId });
+  assert.throws(() => updateProviderBookingLocationInputSchema.parse({ ...payload, latitude: 91 }));
+  assert.throws(() => updateProviderBookingLocationInputSchema.parse({ ...payload, longitude: -181 }));
+  assert.throws(() => updateProviderBookingLocationInputSchema.parse({ ...payload, accuracyMeters: 201 }));
+  assert.throws(() => updateProviderBookingLocationInputSchema.parse({ ...payload, headingDegrees: 361 }));
+  assert.throws(() => updateProviderBookingLocationInputSchema.parse({ ...payload, speedMps: -1 }));
+  assert.throws(() => updateProviderBookingLocationInputSchema.parse({ ...payload, userId: "spoofed" }));
 });
