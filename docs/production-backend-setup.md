@@ -1,7 +1,11 @@
 # MakeService backend foundation — setup guide
 
-This guide describes the new database foundation. It does **not** mean the
-current customer/provider UI has been switched from its browser preview store.
+This guide describes the backend implementation on the draft integration branch
+`feat/production-backend-rebased-20261101` and the verified Supabase schema.
+The branch is proposed in [PR #28](https://github.com/AkshithMuddagoni/makeservice/pull/28);
+it is **not yet merged into main or deployed to Render**. The main-branch public
+site remains on its preview experience until the PR is reviewed, merged and the
+production environment is provisioned.
 
 ## Architecture decision
 
@@ -18,8 +22,12 @@ Production server startup now fails closed when `NODE_ENV=production` and `DATAB
   Data API roles `anon` and `authenticated` are denied table/sequence/function
   privileges. Customer/provider operations must go through authenticated
   server functions with resource-level ownership checks.
-- Private files will use a private Supabase Storage bucket and short-lived
-  signed upload/download URLs in a later milestone.
+- Provider-document upload and administrator-only signed downloads are
+  implemented on the branch using a private Supabase Storage bucket, but remain
+  feature-gated off until ClamAV, retention/deletion controls and end-to-end
+  security tests are complete.
+- Payment tables are a ledger foundation only. There is no gateway checkout,
+  webhook processing or provider settlement integration yet.
 
 `supabase/schema.sql` is retired. Do not apply the old starter schema: its
 `auth.uid()` policies assume Supabase Auth UUIDs and do not authorize Better
@@ -27,28 +35,37 @@ Auth users.
 
 ## Migration layout
 
-The canonical migration sequence is:
+The migrator discovers the auth and Fieldly folders, then applies the uniquely
+named SQL files in basename order:
 
-1. `migrations/auth/0001_auth.sql` — generated Better Auth identity/session schema, kept byte-for-byte.
-2. `migrations/auth/0002_phone_number_fields.sql` — verified phone-number fields.
-3. `migrations/auth/0003_rate_limit.sql` — PostgreSQL-backed Better Auth rate limits.
-4. `migrations/auth/0004_lock_down_auth_data_access.sql` — Better Auth table-only RLS and browser-role lockdown.
-5. `migrations/fieldly/0001_fieldly_core.sql` — Fieldly profiles, roles, provider businesses/services/assets/operators/documents, requests, quotes, bookings, messages, GPS, payment ledger, payout metadata and reviews.
-6. `migrations/fieldly/0002_lock_down_browser_data_access.sql` — Fieldly table-only RLS and browser-role lockdown.
-7. `migrations/fieldly/0005_provider_onboarding.sql` — provider business details, document-requirement checklist, and foreign keys from application ownership/reviewer fields to Better Auth users.
-8. `migrations/fieldly/0006_lock_down_migration_ledger.sql` — enable RLS on the custom migration ledger and revoke all browser-role access.
-9. `migrations/fieldly/0007_index_foreign_keys.sql` — add supporting indexes for foreign keys and remove a confirmed duplicate provider-owner index.
-10. `migrations/fieldly/0008_create_private_documents_bucket.sql` — provision a non-public 10 MiB provider-document bucket with PDF/JPEG/PNG/WebP allowlisting and no browser policies.
-11. `migrations/fieldly/0011_provider_document_upload_sessions.sql` — bind one-time upload sessions to the verified provider, business and document scope; final document rows are created only after server-side inspection.
-12. `migrations/fieldly/0012_provider_operator_roster.sql` — add private operator-to-machine assignments and administrator review metadata.
-11. `migrations/fieldly/0009_booking_start_code_issuance.sql` — record the last service-start code issuance time to enforce a regeneration cooldown without storing plaintext codes.
-12. `migrations/fieldly/0010_booking_start_code_issue_limit.sql` — cap customer start-code issuance at five attempts per booking.
+1. `migrations/auth/0001_auth.sql` — generated Better Auth identity/session schema.
+2. `migrations/fieldly/0001_fieldly_core.sql` — marketplace profiles, provider, request, quote, booking, message, GPS and payment-ledger tables.
+3. `migrations/fieldly/0002_lock_down_browser_data_access.sql` — Fieldly RLS and browser-role lockdown.
+4. `migrations/auth/0002_phone_number_fields.sql` — verified phone fields.
+5. `migrations/auth/0003_rate_limit.sql` — persistent Better Auth rate limits.
+6. `migrations/auth/0004_lock_down_auth_data_access.sql` — Better Auth browser-role lockdown.
+7. `migrations/fieldly/0005_provider_onboarding.sql` — business details, evidence checklist and ownership foreign keys.
+8. `migrations/fieldly/0006_lock_down_migration_ledger.sql` — migration-ledger lockdown.
+9. `migrations/fieldly/0007_index_foreign_keys.sql` — operational foreign-key indexes.
+10. `migrations/fieldly/0008_create_private_documents_bucket.sql` — private, non-public document bucket.
+11. `migrations/fieldly/0009_booking_start_code_issuance.sql` — service-start-code cooldown metadata.
+12. `migrations/fieldly/0010_booking_start_code_issue_limit.sql` — cap service-start-code issuance.
+13. `migrations/fieldly/0011_provider_document_upload_sessions.sql` — owner-bound one-time upload sessions.
+14. `migrations/fieldly/0012_provider_operator_roster.sql` — operator-to-machine assignments with composite ownership foreign keys.
+15. `migrations/fieldly/0013_index_provider_document_upload_session_foreign_keys.sql` — upload-session foreign-key indexes.
+16. `migrations/fieldly/0014_index_provider_operator_asset_foreign_keys.sql` — composite operator/asset foreign-key indexes.
 
-The production and PGLite migrators discover the auth folder first and Fieldly
-folder second. Migration ledger entries use basenames, so keep every migration
-basename unique across both folders. The complete migration test applies this
-same ordered sequence and separately checks the Fieldly core migrations can run
-without Better Auth tables.
+The live `makeservice` Supabase database has been verified through migration
+0014. Migrations 0012–0014 were applied and recorded in `public._migrations`.
+The upload-session and operator/asset foreign-key warnings have been resolved.
+All 29 public tables currently have RLS enabled; the `anon` and
+`authenticated` roles have no application-table grants. Do not add broad
+browser-facing policies: application access is intended to go through
+authenticated server functions with explicit ownership and role checks.
+
+`supabase/schema.sql` is retired. Do not apply it; its historical
+`auth.uid()` policies assume Supabase Auth UUIDs, whereas this application
+uses Better Auth TEXT identities.
 
 ## Local checks
 
@@ -115,54 +132,46 @@ or in an untracked local `.env`. Never prefix it with `VITE_`, expose it in
 browser code or commit it. Never paste the connection string or password into
 chat, GitHub issues, source files or screenshots.
 
-#### Run migrations and normalize an earlier Windows ledger
+#### Current migration state
 
-The migration runner now normalizes Windows absolute paths from earlier runs
-to canonical migration basenames before checking what is pending. It preserves
-the original `applied_at` timestamps and does not execute those SQL files
-again. This is important because Render runs Linux while local development may
-run Windows.
+The live `makeservice` project has already been advanced through migration
+0014 and its ledger entries have been verified. Do not re-run migration SQL
+manually or paste credentials into chat. After checking out the integration
+branch, run `npm run db:migrate` only when using the intended database
+connection; the expected result for the already-updated live project is
+**no pending migrations**.
 
-The earlier Windows run has already been normalized to six canonical
-ledger entries. The branch now includes provider onboarding (`0005`) and migration-ledger hardening (`0006`). This `makeservice` database already has the first seven canonical entries. After pulling the latest branch, run `npm run db:migrate`. Expected: it applies only `migrations/fieldly/0006_lock_down_migration_ledger.sql` (unless the same change has already been applied manually), then reports that the migration run is done. It must not re-apply any of the earlier seven SQL files.
-If any older migration is printed as newly applied, stop and inspect the
-ledger before continuing; do not deploy.
-
-#### Run migrations from VS Code
-
-After the chosen Supabase project is ready, open the MakeService repository
-in VS Code and run this in the integrated PowerShell terminal:
+#### Check out and validate the integration branch
 
 ```powershell
 git fetch origin
-git switch -c feat/production-backend-foundation --track origin/feat/production-backend-foundation
+git switch --track origin/feat/production-backend-rebased-20261101
 npm install
-
-# Paste the staging project's Session pooler URI here, only in this terminal.
-$env:DATABASE_URL = "postgresql://..."
-
-npm run db:migrate
-
-# Clear the credential from this PowerShell session immediately afterwards.
-Remove-Item Env:DATABASE_URL
+npm run typecheck
+npm test
+npm run build
 ```
 
-If the local branch already exists, use `git switch
-feat/production-backend-foundation` instead of creating it again. Only use the current `makeservice` project after reviewing the full public
-table inventory and confirming it is dedicated to MakeService.
+If the branch already exists locally, use
+`git switch feat/production-backend-rebased-20261101` instead of creating it
+again. Keep `DATABASE_URL` in an untracked local PowerShell session or secret
+manager only. Never paste it into chat, source files or screenshots.
 
-Your database should finish with fourteen migration ledger records:
-`0001_auth.sql`, `0002_phone_number_fields.sql`,
+The expected migration ledger contains sixteen canonical files:
+`0001_auth.sql`, `0001_fieldly_core.sql`,
+`0002_lock_down_browser_data_access.sql`, `0002_phone_number_fields.sql`,
 `0003_rate_limit.sql`, `0004_lock_down_auth_data_access.sql`,
-`0001_fieldly_core.sql`, `0002_lock_down_browser_data_access.sql`,
 `0005_provider_onboarding.sql`, `0006_lock_down_migration_ledger.sql`,
 `0007_index_foreign_keys.sql`, `0008_create_private_documents_bucket.sql`,
 `0009_booking_start_code_issuance.sql`, `0010_booking_start_code_issue_limit.sql`,
-`0011_provider_document_upload_sessions.sql`, and `0012_provider_operator_roster.sql`.
-On the current makeservice project, migrations 0006, 0007 and 0008 are already applied; migration 0011 is the new upload-session table migration.
-If the runner reports any SQL or connection error, stop and share only the
-error text with credentials and hostnames removed. Do not retry against
-production.
+`0011_provider_document_upload_sessions.sql`, `0012_provider_operator_roster.sql`,
+`0013_index_provider_document_upload_session_foreign_keys.sql`, and
+`0014_index_provider_operator_asset_foreign_keys.sql`.
+
+If `npm run db:migrate` proposes to re-run an older file, stop and inspect
+`public._migrations`; do not proceed with deployment. If it reports a
+connection or SQL error, preserve the error but remove database hostnames and
+credentials before sharing it.
 
 After applying the migrations, verify in the Supabase SQL Editor:
 
@@ -196,7 +205,7 @@ session, or OTP.
 To run the same harmless session lookup against your Supabase PostgreSQL
 database from Windows PowerShell:
 
-1. Pull the latest `feat/production-backend-foundation` branch.
+1. Pull the latest `feat/production-backend-rebased-20261101` branch.
 2. In a VS Code PowerShell terminal, set the following environment variables.
    Use your existing Supabase Session pooler URI for `DATABASE_URL`; never
    put it in source code or paste it into chat.
@@ -387,10 +396,11 @@ intentionally fire-and-forget per Better Auth's timing guidance; a failed
 MSG91 send is logged without the OTP or full phone number. Add delivery-failure
 monitoring/alerts before broad public launch.
 
-**Important:** The user now receives a real Better Auth session when the
-configured OTP flow succeeds, but the rest of the marketplace store still
-uses browser-local demo data. This does not yet enable real provider discovery,
-booking, chat, GPS tracking or payments.
+**Important:** The branch now routes authenticated production discovery,
+requests, provider quotes, booking lifecycle, chat and GPS through server-side
+functions. These changes are still on draft PR #28 and are not live on the
+public main-branch deployment. Real checkout, notifications, secure KYC and
+provider payout/settlement are not implemented.
 
 ## Administrator role provisioning and provider review
 
