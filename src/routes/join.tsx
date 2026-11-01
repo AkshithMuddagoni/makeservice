@@ -332,12 +332,15 @@ function JoinPage() {
           sizeBytes: file.size,
         },
       });
+      const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      if (!publishableKey) {
+        throw new Error("Supabase publishable key is not configured in this build. Contact MakeService support.");
+      }
       const headers: Record<string, string> = {
         "Content-Type": file.type,
         "x-upsert": "false",
+        apikey: publishableKey,
       };
-      const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      if (publishableKey) headers.apikey = publishableKey;
 
       const response = await fetch(upload.signedUrl, {
         method: "PUT",
