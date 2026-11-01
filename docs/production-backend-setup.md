@@ -33,6 +33,60 @@ Production server startup now fails closed when `NODE_ENV=production` and `DATAB
 `auth.uid()` policies assume Supabase Auth UUIDs and do not authorize Better
 Auth users.
 
+## Better Auth 1.7 security update
+
+The integration branch upgrades Better Auth from the 1.6 line to **1.7.15**
+and pins the transitive `seroval` package to **1.6.11**. Better Auth 1.7.7
+or later fixes the PostgreSQL database-backed rate-limit race condition
+(GHSA-44jh-23m7-hpcf) and the OAuth-state/Magic-Link token-confusion issue
+(GHSA-965c-763c-88jm). MakeService does not register the Magic Link plugin,
+but the fixed version removes the vulnerable code path from the installed
+Better Auth package. Seroval 1.6.11 fixes the typed-array constructor
+serialization issue (GHSA-f86p-h4j2-7qgj); it also includes the prior RegExp
+serialization fix.
+
+The Generic OAuth API changed in Better Auth 1.7. The application has been
+updated accordingly:
+
+- Browser sign-in now calls `authClient.signIn.social({ provider })`; the
+  obsolete `genericOAuthClient()` plugin is removed.
+- The first-party preview popup uses `auth.api.signInSocial()` and asks for
+  the authorization URL without an automatic redirect.
+- Generic OAuth callbacks now use
+  `/api/auth/callback/:providerId`, not
+  `/api/auth/oauth2/callback/:providerId`.
+
+Before enabling app-specific Google/X OAuth on a deployed origin, update the
+shared auth-broker client's allowed redirect URIs to:
+
+- `https://makeservice.onrender.com/api/auth/callback/grok-google`
+- `https://makeservice.onrender.com/api/auth/callback/grok-x`
+
+Do not delete old broker redirect entries until the corresponding running
+application has been migrated. This callback change is a configuration task
+for the auth-broker owner; it is not performed by the Render Blueprint.
+
+The direct upgrade from 1.6.33 to 1.7.15 does not require a Better Auth
+account-table migration: the 1.7.3+ schema is unchanged from 1.6. Confirm the
+existing `public.account` table has no experimental `issuer` column before
+deploying; if it exists from a temporary 1.7.0–1.7.2 upgrade, stop and review
+the official Better Auth 1.7 migration guide first.
+
+Sources:
+- Better Auth 1.7 upgrade guide:
+  https://better-auth.com/docs/guides/1-7-upgrade-guide
+- PostgreSQL rate-limit advisory:
+  https://github.com/advisories/GHSA-44jh-23m7-hpcf
+- OAuth-state/Magic-Link advisory:
+  https://github.com/advisories/GHSA-965c-763c-88jm
+- Seroval typed-array advisory:
+  https://github.com/advisories/GHSA-f86p-h4j2-7qgj
+
+After npm updates the local lockfile, verify with `npm ls better-auth
+@better-auth/core @better-auth/kysely-adapter @better-auth/drizzle-adapter
+seroval`, `npm audit --omit=dev`, typecheck, unit tests, Playwright and a
+production build. Do not deploy until all checks pass.
+
 ## Migration layout
 
 The migrator discovers the auth and Fieldly folders, then applies the uniquely
