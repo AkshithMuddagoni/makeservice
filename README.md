@@ -4,24 +4,17 @@ Fieldly is a responsive marketplace for discovering equipment and site services 
 
 **Live preview:** https://makeservice.onrender.com/
 
-## Current status: prototype UI + production backend foundation in progress
+## Current status: backend integration PR open; production launch gated
 
-The existing customer/provider screens remain a prototype. The main Fieldly marketplace store in `src/lib/fieldly/store.ts` still persists sessions, provider changes, requests, quotes, bookings, messages, and reviews in browser `localStorage`. That is per-browser demo state, not a shared marketplace database.
+The customer-facing main branch still serves the preview experience. The production backend work has been integrated into [PR #28](https://github.com/AkshithMuddagoni/makeservice/pull/28), on branch `feat/production-backend-rebased-20261101`, based on the current `main`. The PR is a draft and is **not merged or deployed**.
 
-Local preview still uses the fixed code 482609. When production Better Auth and MSG91 settings are configured, the customer dialog uses server-verified phone OTP instead. Provider records, ratings, prices, reviews, and verification flags still include seeded demo data. Provider `/join` submissions now have an authenticated database path, but it requires a verified Indian Better Auth phone session; MSG91/DLT has not yet been configured. The provider desk/review approvals, discovery, bookings, chat, GPS, KYC file uploads and payments still contain preview/local-state paths. Do not accept real work or payments through those remaining prototype workflows.
+The PR branch connects authenticated Better Auth server sessions to PostgreSQL-backed account, provider onboarding, verified provider discovery, customer requests, provider quotes, booking lifecycle, participant chat, provider presence and short-lived GPS operations. Provider and operator review is server-authoritative and audit logged. In preview/local mode the original fixed OTP and browser-local state remain for visual testing; they are not production identity or shared data.
 
-A new branch, `feat/production-backend-foundation`, contains the first backend foundation:
-- Ordered Better Auth + Fieldly PostgreSQL migrations.
-- Better Auth TEXT user IDs (not Supabase Auth UUIDs).
-- Core marketplace schema for businesses, provider services, assets, documents, job requests, quotes, bookings, messages, location, payments and reviews.
-- Browser-role database lockdown and RLS enablement.
-- Authenticated server functions for creating/reading the current Fieldly account and storing customer display names.
-- Better Auth Phone Number plugin with optional MSG91 Flow/DLT delivery and PostgreSQL-backed rate limiting.
-- Authenticated provider registration writes business, service, machine, asset links and document checklist in one transaction, scoped to the verified Better Auth user.
-- Sign-out clears the Better Auth server session before clearing the legacy local UI identity.
-- Supabase/Render setup and payment gateway evaluation documents.
+The private `fieldly-private` Storage bucket is provisioned and private. The server-side upload flow includes owner-bound upload sessions, file type/signature checks, fail-closed ClamAV scanning and administrator-only short-lived downloads, but `PROVIDER_DOCUMENT_UPLOADS_ENABLED` remains **false** until a private scanner and retention/deletion controls are deployed and tested. Secure identity/PAN verification still requires a specialist KYC provider.
 
-The UI has **not** yet been switched to these server functions and the branch has not been deployed. Do not treat this milestone as production launch approval.
+The Supabase database is provisioned through migration 0014. All 29 public application tables have RLS enabled; browser `anon` and `authenticated` roles have no table grants. No public Storage access is configured. Do not add broad RLS policies or expose the service-role/secret key.
+
+**Not production-ready yet:** real phone OTP delivery (MSG91 + approved Indian DLT template), provider KYC, transactional notifications, payment checkout/webhooks/refunds/reconciliation/vendor payouts, production Render environment variables, backup/restore, monitoring, external security review and live-device/load acceptance tests are not complete. No real payment is collected. Do not accept live work or payments until these gates are closed.
 
 ## Requirements
 
@@ -51,32 +44,35 @@ A successful GitHub push or live Render URL is not, by itself, evidence that pro
 
 ## Backend migrations
 
-The ordered schema is in `migrations/auth/*.sql` and
-`migrations/fieldly/*.sql`:
+The migration runner applies the uniquely named SQL files in basename order from
+`migrations/auth/` and `migrations/fieldly/`:
 
-1. `migrations/auth/0001_auth.sql` — generated Better Auth identity/session schema (kept byte-for-byte).
-2. `migrations/fieldly/0001_fieldly_core.sql` — marketplace data model.
-3. `migrations/fieldly/0002_lock_down_browser_data_access.sql` — browser database access lockdown and RLS.
-4. `migrations/auth/0002_phone_number_fields.sql` — verified phone-number columns for Better Auth.
-5. `migrations/auth/0003_rate_limit.sql` — persistent Better Auth request counters with RLS enabled.
-6. `migrations/auth/0004_lock_down_auth_data_access.sql` — Better Auth table-only browser access lockdown.
-7. `migrations/fieldly/0005_provider_onboarding.sql` — provider details, ownership foreign keys and document-requirement checklist.
-8. `migrations/fieldly/0006_lock_down_migration_ledger.sql` — disable browser access to the custom migration ledger.
-9. `migrations/fieldly/0007_index_foreign_keys.sql` — add foreign-key indexes and remove a duplicate index.
-10. `migrations/fieldly/0008_create_private_documents_bucket.sql` — provision the private provider-document bucket.
-11. `migrations/fieldly/0011_provider_document_upload_sessions.sql` — bind short-lived signed upload sessions to provider-owned document requirements.
+1. `0001_auth.sql` — generated Better Auth identity/session schema.
+2. `0001_fieldly_core.sql` — marketplace data model.
+3. `0002_lock_down_browser_data_access.sql` — Fieldly RLS and browser-role lockdown.
+4. `0002_phone_number_fields.sql` — verified phone-number fields.
+5. `0003_rate_limit.sql` — database-backed Better Auth rate limits.
+6. `0004_lock_down_auth_data_access.sql` — Better Auth browser-role lockdown.
+7. `0005_provider_onboarding.sql` — provider business/service/asset/document requirements.
+8. `0006_lock_down_migration_ledger.sql` — migration-ledger lockdown.
+9. `0007_index_foreign_keys.sql` — indexes for operational foreign keys.
+10. `0008_create_private_documents_bucket.sql` — non-public document bucket.
+11. `0009_booking_start_code_issuance.sql` — service-start-code issuance cooldown.
+12. `0010_booking_start_code_issue_limit.sql` — service-start-code issuance cap.
+13. `0011_provider_document_upload_sessions.sql` — owner-bound private upload sessions.
+14. `0012_provider_operator_roster.sql` — business-scoped operator-to-machine assignments.
+15. `0013_index_provider_document_upload_session_foreign_keys.sql` — upload-session FK indexes.
+16. `0014_index_provider_operator_asset_foreign_keys.sql` — composite operator/asset FK indexes.
 
-Provider documents use private Supabase Storage, a server-only signing adapter, content-signature checks and a ClamAV scan. Migration 0012 adds business-scoped operator-to-machine assignments for driver/operator roster verification. Uploads remain disabled unless `PROVIDER_DOCUMENT_UPLOADS_ENABLED=true` and the private scanner is configured.
-11. `migrations/fieldly/0009_booking_start_code_issuance.sql` — enforce a safe cooldown for customer service-start code generation.
-12. `migrations/fieldly/0010_booking_start_code_issue_limit.sql` — cap customer start-code re-issuance.
+The live `makeservice` Supabase project has been verified through migration
+0014. Migrations 0012–0014 are additive; 0013 and 0014 add supporting indexes.
+After checking out the PR branch, `npm run db:migrate` should report no pending
+migrations against that database. If it proposes to re-run an earlier migration,
+stop and inspect `public._migrations` before continuing.
 
-Both production and PGLite migration discovery explicitly include these folders.
-The Fieldly SQL is also tested independently without auth tables so its
-PostgreSQL schema does not depend on Supabase Auth UUIDs.
-
-`supabase/schema.sql` is retired. It contains an explanatory notice only; do not apply it. Its earlier `auth.uid()` policies assumed Supabase Auth identities and are incompatible with this app's Better Auth identity model.
-
-For setup and migration verification, see [docs/production-backend-setup.md](docs/production-backend-setup.md).
+`supabase/schema.sql` is retired. Do not apply it: its old `auth.uid()`
+policies assume Supabase Auth UUIDs and are incompatible with Better Auth TEXT
+identities. Use the ordered migrations above only.
 
 ## Render
 
@@ -105,12 +101,15 @@ Cashfree Easy Split and Razorpay Route are both under evaluation. See [docs/paym
 React 19, TanStack Start/Router, Vite, TypeScript, Tailwind CSS 4, Lucide, MapLibre GL, Zustand, Node.js, Render and Supabase PostgreSQL.
 
 ## Remaining production launch blockers
-- Complete real MSG91 and Indian DLT registration/template approval, then test live OTP delivery.
-- Implement private provider-document upload, signed downloads, file validation/scanning, admin document review, retention and deletion workflows. The private bucket is provisioned, but uploads remain disabled.
-- Add transactional email/SMS/push notifications for request/quote/booking events.
-- Select and configure a supported Indian marketplace payment/split gateway; implement signed webhooks, idempotency, refunds, reconciliation, commission, vendor KYC, settlements and payouts. No real payment is collected by current booking flows.
-- Complete security and secret-rotation review, backup/restore drills, monitoring/alerts, domain/TLS/Render plan/rollback configuration, and real-device/mobile/accessibility/load testing.
-- Run a fresh full CI validation on the latest feature head before considering PR #21 for review or merge.
+
+- Configure Render with persistent PostgreSQL `DATABASE_URL`, a strong `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and production auth flags only after the approved sign-in method is ready. The checked-in `render.yaml` does not contain secrets or a database connection.
+- Complete MSG91 account setup and Indian DLT Principal Entity, sender ID and transactional template approval; then test OTP send, verify, expiry, throttling and delivery-failure alerts.
+- Integrate a specialist KYC provider for owner/PAN and other secure-only evidence. Do not collect full Aadhaar/PAN or bank details using the ordinary document picker.
+- Deploy a private, monitored ClamAV service; keep document uploads disabled until clean/infected/timeout/signature-mismatch, signed-download, deletion and retention tests pass.
+- Add transactional request/quote/booking notifications and delivery-failure monitoring.
+- Select and contract an approved Indian marketplace payment/split provider. Implement server-created checkout, verified signed webhooks, idempotent ledger changes, refunds, reconciliation, chargeback handling, provider KYC, commission and settlements. No real payment is currently collected.
+- Configure live alerting, backups and a successful restore drill, credential rotation, domain/TLS, rollback, external security review, accessibility, real-device and load tests.
+- Merge and deploy PR #28 only after the exact-head CI passes and the required Render environment is provisioned. Keep the public site fail-closed until then.
 
 ## Current production marketplace scope
 
