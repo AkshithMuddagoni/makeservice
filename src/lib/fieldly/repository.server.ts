@@ -527,6 +527,16 @@ export async function saveProviderOperatorForUser(
         [operatorId, input.businessId, input.fullName, input.phoneE164 ?? null, input.roleTitle, input.experienceYears],
       );
       await tx.query(
+        `update public.provider_documents
+         set status = 'expired',
+             reviewer_note = 'Operator profile or machine assignment changed; upload current operator evidence again.',
+             reviewed_by = null,
+             reviewed_at = now()
+         where business_id = $1::uuid and operator_id = $2::uuid
+           and status in ('uploaded', 'under_review', 'verified')`,
+        [input.businessId, operatorId],
+      );
+      await tx.query(
         "delete from public.provider_operator_assets where operator_id = $1::uuid and business_id = $2::uuid",
         [operatorId, input.businessId],
       );
