@@ -149,10 +149,30 @@ function ProductionDeskHome() {
   const userName = authSession?.user?.name || "Provider";
   const totalServices = applications.reduce((sum, app) => sum + app.services.length, 0);
   const totalAssets = applications.reduce((sum, app) => sum + app.assets.length, 0);
-  const pendingDocs = applications.reduce(
-    (sum, app) => sum + app.documentRequirements.filter((doc) => doc.requiredForApproval && !["verified", "not_applicable"].includes(doc.status)).length,
-    0,
-  );
+  const pendingDocs = applications.reduce((sum, app) => {
+    return sum + app.documentRequirements.filter((doc) => {
+      if (!doc.requiredForApproval || doc.status === "not_applicable") return false;
+      if (doc.key === "OPERATOR_ROSTER") {
+        return !app.assets.length || app.assets.some((asset) =>
+          !app.operators.some((operator) => operator.assetIds.includes(asset.id)),
+        );
+      }
+      if (doc.key === "OPERATOR_DL") {
+        return app.operators.some((operator) => {
+          const assignedAssets = app.assets.filter((asset) => operator.assetIds.includes(asset.id));
+          const requiresLicence = assignedAssets.some((asset) =>
+            ["public_road", "commercial_transport"].includes(asset.roadUse.toLowerCase()),
+          ) || /driver/i.test(operator.roleTitle);
+          return requiresLicence && !operator.documents.some((file) =>
+            file.documentType === "OPERATOR_DL" &&
+            file.status === "verified" &&
+            (!file.expiresOn || file.expiresOn >= new Date().toISOString().slice(0, 10)),
+          );
+        });
+      }
+      return !["verified", "not_applicable"].includes(doc.status);
+    }).length;
+  }, 0);
 
   if (loading) {
     return <div className="mx-auto max-w-5xl px-4 py-14 text-sm text-muted">Loading your provider applications from Supabase…</div>;
