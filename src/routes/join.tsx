@@ -964,7 +964,7 @@ function JoinPage() {
           <div className="rounded-xl border border-gold/30 bg-gold-soft p-3 text-xs leading-5 text-gold">
             Preview safety: this screen does not upload or retain documents. Sensitive identity, PAN, bank and KYC data must go directly through secure production verification. A Fieldly reviewer must check authenticity, expiry and that the document matches the selected machine.
           </div>
-          {documentRequirements.filter((doc) => !doc.jobSpecific).map((doc) => (
+          {documentRequirements.filter((doc) => !doc.jobSpecific && !["OPERATOR_ROSTER", "OPERATOR_DL", "OPERATOR_COMPETENCE_CERTIFICATE"].includes(doc.key)).map((doc) => (
             <div key={doc.key} className="flex flex-col gap-2 rounded-xl border border-line p-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <p className="text-sm font-semibold">{doc.label} {doc.requiredForApproval && <span className="text-danger">*</span>}</p>
@@ -1061,7 +1061,7 @@ function JoinPage() {
                 Files are uploaded to private storage, checked against their file signatures and malware-scanned before they enter the review queue. Upload links expire after two hours. A file remains unverified until an administrator reviews it.
               </p>
               <div className="mt-3 grid gap-2">
-                {documentRequirements.filter((doc) => !doc.jobSpecific).map((doc) => (
+                {documentRequirements.filter((doc) => !doc.jobSpecific && !["OPERATOR_ROSTER", "OPERATOR_DL", "OPERATOR_COMPETENCE_CERTIFICATE"].includes(doc.key)).map((doc) => (
                   <div key={doc.key} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line p-3">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold">{doc.label}{doc.requiredForApproval ? " *" : ""}</p>
