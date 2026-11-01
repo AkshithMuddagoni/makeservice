@@ -61,6 +61,7 @@ The ordered schema is in `migrations/auth/*.sql` and
 5. `migrations/auth/0003_rate_limit.sql` — persistent Better Auth request counters with RLS enabled.
 6. `migrations/auth/0004_lock_down_auth_data_access.sql` — Better Auth table-only browser access lockdown.
 7. `migrations/fieldly/0005_provider_onboarding.sql` — provider details, ownership foreign keys and document-requirement checklist.
+8. `migrations/fieldly/0006_lock_down_migration_ledger.sql` — disable browser access to the custom migration ledger.
 
 Both production and PGLite migration discovery explicitly include these folders.
 The Fieldly SQL is also tested independently without auth tables so its
