@@ -33,7 +33,7 @@ import { z } from "zod";
 
 export const Route = createFileRoute("/join")({ component: JoinPage });
 
-const phoneSchema = z.string().regex(/^[6-9]\d{9}$/);
+const phoneSchema = z.string().refine(isValidIndiaMobileNumber, "Enter a valid Indian mobile number.");
 const initialService = "jcb";
 
 type AssetDraft = {
