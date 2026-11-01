@@ -2936,7 +2936,8 @@ export async function confirmProviderDocumentUploadForUser(
   const expiresOn = input.expiresOn ?? null;
   const issuedOn = input.issuedOn ?? null;
 
-  return sql.transaction(async (tx) => {
+  try {
+    return await sql.transaction(async (tx) => {
     await requireProviderRole(tx, userId);
     const locked = await tx.query<{ status: string; expires_at: string }>(
       `select status, expires_at::text as expires_at
@@ -3018,7 +3019,23 @@ export async function confirmProviderDocumentUploadForUser(
       sizeBytes: expectedSize,
       expiresOn,
     };
-  });
+    });
+  } catch (error) {
+    // A failed transaction must not leave an orphaned sensitive file. First
+    // check whether the metadata committed (e.g. a network error after COMMIT).
+    const committed = await sql.query<{ id: string }>(
+      "select id::text as id from public.provider_documents where storage_path = $1 limit 1",
+      [session.storage_path],
+    ).catch(() => []);
+    if (!committed[0]) {
+      await sql.query(
+        "update public.provider_document_upload_sessions set status = 'failed' where id = $1::uuid and status = 'pending'",
+        [input.uploadId],
+      ).catch(() => []);
+      await deletePrivateDocument(session.storage_path).catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 export async function createAdminProviderDocumentDownloadUrl(
