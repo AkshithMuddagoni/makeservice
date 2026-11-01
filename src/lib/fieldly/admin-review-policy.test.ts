@@ -59,3 +59,72 @@ test("information requests and rejection require a reason", () => {
   );
   assert.doesNotThrow(() => assertAdminReviewReason("under_review", ""));
 });
+
+
+test("service and asset approvals require an approved parent business", () => {
+  assert.throws(
+    () => assertAdminItemReviewAllowed({
+      currentStatus: "under_review",
+      decision: "approved",
+      businessStatus: "under_review",
+      pendingRequiredDocuments: 0,
+    }),
+    /parent provider business/,
+  );
+});
+
+test("service approval requires an approved linked machine", () => {
+  assert.throws(
+    () => assertAdminItemReviewAllowed({
+      currentStatus: "submitted",
+      decision: "approved",
+      businessStatus: "approved",
+      pendingRequiredDocuments: 0,
+      approvedLinkedAssets: 0,
+      requiresApprovedAsset: true,
+    }),
+    /linked machine/,
+  );
+});
+
+test("item approval requires all scoped required documents verified", () => {
+  assert.throws(
+    () => assertAdminItemReviewAllowed({
+      currentStatus: "submitted",
+      decision: "approved",
+      businessStatus: "approved",
+      pendingRequiredDocuments: 2,
+    }),
+    /item documents/,
+  );
+  assert.doesNotThrow(() =>
+    assertAdminItemReviewAllowed({
+      currentStatus: "under_review",
+      decision: "approved",
+      businessStatus: "approved",
+      pendingRequiredDocuments: 0,
+      approvedLinkedAssets: 1,
+      requiresApprovedAsset: true,
+    }),
+  );
+});
+
+test("item review terminal states cannot be reopened", () => {
+  assert.throws(
+    () => assertAdminItemReviewAllowed({
+      currentStatus: "approved",
+      decision: "rejected",
+      businessStatus: "approved",
+      pendingRequiredDocuments: 0,
+    }),
+    /Cannot move/,
+  );
+  assert.doesNotThrow(() =>
+    assertAdminItemReviewAllowed({
+      currentStatus: "submitted",
+      decision: "needs_information",
+      businessStatus: "submitted",
+      pendingRequiredDocuments: 4,
+    }),
+  );
+});
