@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { toast } from "sonner";
 import { StatusPill, requirementLines } from "@/components/fieldly/bits";
 import { authClient, authEnabled } from "@/lib/auth/client";
-import { getCurrentProviderDashboard, getCurrentProviderOpenRequests, setCurrentProviderAssetAvailability, setCurrentProviderPresence, setCurrentProviderServiceAvailability, submitCurrentProviderQuote } from "@/lib/fieldly/account.functions";
+import { getCurrentProviderBookings, getCurrentProviderDashboard, getCurrentProviderOpenRequests, setCurrentProviderAssetAvailability, setCurrentProviderPresence, setCurrentProviderServiceAvailability, submitCurrentProviderQuote } from "@/lib/fieldly/account.functions";
 import { SERVICE_ONBOARDING } from "@/lib/fieldly/provider-onboarding";
 import { Button } from "@/components/ui/button";
 import { getService, isAvailableForService, isEligible, isServiceOperational } from "@/lib/fieldly/catalog";
@@ -289,6 +289,7 @@ function ProductionDeskHome() {
 }
 
 type LiveProviderRequest = Awaited<ReturnType<typeof getCurrentProviderOpenRequests>>[number];
+type LiveProviderBooking = Awaited<ReturnType<typeof getCurrentProviderBookings>>[number];
 
 function ProductionProviderOperations({ applications, onRefresh }: { applications: ProductionApplication[]; onRefresh: () => Promise<void> }) {
   const approvedBusinesses = applications.filter((application) => application.verificationStatus === "approved");
@@ -297,6 +298,7 @@ function ProductionProviderOperations({ applications, onRefresh }: { application
     () => Object.fromEntries(approvedBusinesses.map((item) => [item.id, item.isOnline])),
   );
   const [requests, setRequests] = useState<LiveProviderRequest[]>([]);
+  const [bookings, setBookings] = useState<LiveProviderBooking[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [savingPresence, setSavingPresence] = useState(false);
@@ -320,10 +322,14 @@ function ProductionProviderOperations({ applications, onRefresh }: { application
     else setLoadingRequests(true);
     setError("");
     try {
-      const rows = await getCurrentProviderOpenRequests();
+      const [rows, bookingRows] = await Promise.all([
+        getCurrentProviderOpenRequests(),
+        getCurrentProviderBookings(),
+      ]);
       setRequests(rows);
+      setBookings(bookingRows);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load assigned customer requests.");
+      setError(cause instanceof Error ? cause.message : "Unable to load provider requests and bookings.");
     } finally {
       setLoadingRequests(false);
       setRefreshing(false);
@@ -590,6 +596,41 @@ function ProductionProviderOperations({ applications, onRefresh }: { application
               ))}
             </div>
           )}
+
+          <div className="mt-6 border-t border-line pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="font-display text-xl font-bold">Confirmed & previous bookings</h3>
+                <p className="text-xs text-muted">Booking records for all businesses owned by this provider account.</p>
+              </div>
+              <span className="text-xs text-muted">{bookings.length} booking(s)</span>
+            </div>
+            {bookings.filter((booking) => booking.businessId === selectedBusinessId).length === 0 ? (
+              <p className="mt-3 rounded-xl bg-paper p-4 text-sm text-muted">
+                No bookings have been confirmed for this business yet. Accepted customer quotations appear here.
+              </p>
+            ) : (
+              <div className="mt-3 grid gap-2">
+                {bookings.filter((booking) => booking.businessId === selectedBusinessId).map((booking) => (
+                  <Link
+                    key={booking.bookingId}
+                    to="/bookings/$bookingId"
+                    params={{ bookingId: booking.bookingId }}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white p-3 hover:border-field"
+                  >
+                    <div>
+                      <p className="font-semibold">{booking.publicReference} · {getService(booking.serviceId)?.name ?? booking.serviceId}</p>
+                      <p className="mt-1 text-xs text-muted">{booking.siteLabel}, {booking.area}, {booking.city}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold">{inr(booking.amountPaise / 100)}</p>
+                      <p className="text-xs font-semibold text-field">{booking.status.replaceAll("_", " ")}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         </>
       )}
     </section>
