@@ -1526,6 +1526,7 @@ export async function setProviderPresenceForUser(
     const businesses = await tx.query<{ id: string }>(
       "select id::text as id from public.provider_businesses " +
       "where id = $1::uuid and owner_user_id = $2 and verification_status = 'approved' and is_suspended = false " +
+      "and latitude is not null and longitude is not null " +
       "for update",
       [input.businessId, userId],
     );
