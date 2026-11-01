@@ -328,8 +328,8 @@ function BookingPage() {
     }
 
     const serviceName = getService(liveBooking.serviceId)?.name ?? liveBooking.serviceId;
-    const mapMarkers: MapMarker[] = [
-      { id: "site", lat: liveBooking.site.latitude, lng: liveBooking.site.longitude, label: "Work site", kind: "site" },
+    const mapMarkers = [
+      { id: "site", lat: liveBooking.site.latitude, lng: liveBooking.site.longitude, label: "Work site", kind: "site" as const },
       ...(liveBooking.liveLocation
         ? [{ id: "live-provider", lat: liveBooking.liveLocation.latitude, lng: liveBooking.liveLocation.longitude, label: "Provider live location", kind: "vehicle" as const }]
         : liveBooking.provider.baseLatitude !== null && liveBooking.provider.baseLongitude !== null
