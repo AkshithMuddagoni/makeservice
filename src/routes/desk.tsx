@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { toast } from "sonner";
 import { StatusPill, requirementLines } from "@/components/fieldly/bits";
 import { authClient, authEnabled } from "@/lib/auth/client";
-import { getCurrentProviderDashboard } from "@/lib/fieldly/account.functions";
+import { getCurrentProviderDashboard, getCurrentProviderOpenRequests, setCurrentProviderPresence, submitCurrentProviderQuote } from "@/lib/fieldly/account.functions";
 import { SERVICE_ONBOARDING } from "@/lib/fieldly/provider-onboarding";
 import { Button } from "@/components/ui/button";
 import { getService, isAvailableForService, isEligible, isServiceOperational } from "@/lib/fieldly/catalog";
@@ -283,10 +283,311 @@ function ProductionDeskHome() {
         ))}
       </div>
 
-      <section className="mt-6 rounded-2xl bg-paper p-4 text-xs leading-5 text-muted">
-        New registrations remain unapproved and unavailable to customers until MakeService completes document verification and administrative approval. Online status, customer requests, quotations, bookings, payouts and GPS tracking will appear here after their server-side workflows are connected.
-      </section>
+      {applications.length > 0 && <ProductionProviderOperations applications={applications} />}
     </div>
+  );
+}
+
+type LiveProviderRequest = Awaited<ReturnType<typeof getCurrentProviderOpenRequests>>[number];
+
+function ProductionProviderOperations({ applications }: { applications: ProductionApplication[] }) {
+  const approvedBusinesses = applications.filter((application) => application.verificationStatus === "approved");
+  const [selectedBusinessId, setSelectedBusinessId] = useState(approvedBusinesses[0]?.id ?? "");
+  const [onlineByBusiness, setOnlineByBusiness] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(approvedBusinesses.map((item) => [item.id, item.isOnline])),
+  );
+  const [requests, setRequests] = useState<LiveProviderRequest[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [savingPresence, setSavingPresence] = useState(false);
+  const [error, setError] = useState("");
+  const online = Boolean(onlineByBusiness[selectedBusinessId]);
+  const selectedBusiness = approvedBusinesses.find((item) => item.id === selectedBusinessId);
+  const businessRequests = requests.filter((request) => request.businessId === selectedBusinessId);
+
+  useEffect(() => {
+    setOnlineByBusiness((current) => {
+      const next = { ...current };
+      for (const application of approvedBusinesses) {
+        if (!(application.id in next)) next[application.id] = application.isOnline;
+      }
+      return next;
+    });
+    if (!selectedBusinessId && approvedBusinesses[0]) setSelectedBusinessId(approvedBusinesses[0].id);
+  }, [applications, selectedBusinessId]);
+
+  const loadRequests = useCallback(async (showRefresh = false) => {
+    if (showRefresh) setRefreshing(true);
+    else setLoadingRequests(true);
+    setError("");
+    try {
+      const rows = await getCurrentProviderOpenRequests();
+      setRequests(rows);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to load assigned customer requests.");
+    } finally {
+      setLoadingRequests(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRequests();
+  }, [loadRequests, selectedBusinessId]);
+
+  const updatePresence = useCallback(async (next: boolean, silent = false) => {
+    if (!selectedBusinessId || savingPresence) return;
+    setSavingPresence(true);
+    if (!silent) setError("");
+    try {
+      await setCurrentProviderPresence({
+        data: { businessId: selectedBusinessId, isOnline: next },
+      });
+      setOnlineByBusiness((current) => ({ ...current, [selectedBusinessId]: next }));
+      if (next) await loadRequests(true);
+      else setRequests((current) => current.filter((item) => item.businessId !== selectedBusinessId));
+      if (!silent) toast.success(next ? "This business is now accepting eligible service requests." : "This business is offline for new requests.");
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Availability could not be updated.";
+      setError(message);
+      if (!silent) toast.error(message);
+    } finally {
+      setSavingPresence(false);
+    }
+  }, [selectedBusinessId, savingPresence, loadRequests]);
+
+  // Keep the online heartbeat fresh while this provider desk is open. If the
+  // browser closes, the heartbeat expires and discovery stops showing the unit.
+  useEffect(() => {
+    if (!online || !selectedBusinessId) return;
+    const interval = window.setInterval(() => {
+      void setCurrentProviderPresence({
+        data: { businessId: selectedBusinessId, isOnline: true },
+      }).catch(() => {
+        setOnlineByBusiness((current) => ({ ...current, [selectedBusinessId]: false }));
+        setError("Your online heartbeat could not be renewed. Go online again before accepting new requests.");
+      });
+    }, 4 * 60 * 1000);
+    return () => window.clearInterval(interval);
+  }, [online, selectedBusinessId]);
+
+  async function sendQuote(
+    request: LiveProviderRequest,
+    data: {
+      amountRupees: number;
+      note: string;
+      inclusions: string[];
+      exclusions: string[];
+      extraCharges: Array<{ label: string; amountRupees: number }>;
+      cancellationTerms: string;
+      etaMinutes: number | null;
+    },
+  ) {
+    try {
+      const result = await submitCurrentProviderQuote({
+        data: {
+          requestId: request.requestId,
+          businessId: request.businessId,
+          ...data,
+        },
+      });
+      toast.success("Quote saved and sent to the customer.");
+      setRequests((current) => current.filter((item) => item.requestId !== request.requestId));
+      return result;
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "The quote could not be saved.";
+      toast.error(message);
+      throw cause;
+    }
+  }
+
+  return (
+    <section className="mt-7 rounded-3xl border border-line bg-card p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-field">Live provider operations</p>
+          <h2 className="mt-1 font-display text-2xl font-bold">Availability & customer requests</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-5 text-muted">
+            Only businesses approved by MakeService can go online. New requests are delivered only to the selected business and approved service/equipment.
+          </p>
+        </div>
+        <span className={cn("rounded-full px-3 py-1.5 text-xs font-bold", online ? "bg-field-soft text-field" : "bg-paper text-muted")}>
+          {online ? "Online · receiving requests" : "Offline · no new requests"}
+        </span>
+      </div>
+
+      {!approvedBusinesses.length ? (
+        <div className="mt-4 rounded-2xl border border-line bg-paper p-4">
+          <p className="font-semibold">Your business is not approved yet.</p>
+          <p className="mt-1 text-sm leading-5 text-muted">
+            You can review your verification checklist above. Online mode and customer requests remain disabled until an administrator approves the business and its services and machinery.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <label className="grid gap-1.5 text-sm font-semibold">
+              Business
+              <select
+                value={selectedBusinessId}
+                onChange={(event) => setSelectedBusinessId(event.target.value)}
+                className="h-11 rounded-xl border border-line bg-white px-3 font-normal"
+              >
+                {approvedBusinesses.map((item) => (
+                  <option key={item.id} value={item.id}>{item.tradeName} · {item.city ?? item.district}</option>
+                ))}
+              </select>
+            </label>
+            <Button
+              disabled={!selectedBusinessId || savingPresence}
+              variant={online ? "secondary" : "primary"}
+              onClick={() => void updatePresence(!online)}
+            >
+              {savingPresence ? "Saving…" : online ? "Go offline" : "Go online"}
+            </Button>
+          </div>
+
+          {selectedBusiness && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
+              <span>{selectedBusiness.services.filter((service) => service.verificationStatus === "approved" && service.isListed && service.isAvailable).length} approved/listed available service(s)</span>
+              <span>·</span>
+              <span>{selectedBusiness.assets.filter((asset) => asset.verificationStatus === "approved" && asset.isAvailable).length} approved available machine(s)</span>
+              <span>·</span>
+              <span>Online signal expires after 10 minutes without a heartbeat</span>
+            </div>
+          )}
+
+          {error && <p role="alert" className="mt-3 rounded-xl bg-danger-soft p-3 text-sm text-danger">{error}</p>}
+
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
+            <div>
+              <h3 className="font-display text-xl font-bold">Assigned requests</h3>
+              <p className="text-xs text-muted">Customer contact details stay private until a booking is confirmed.</p>
+            </div>
+            <Button variant="outline" size="sm" disabled={refreshing || !online} onClick={() => void updatePresence(true, true).then(() => loadRequests(true))}>
+              <Activity className="mr-2 size-4" />{refreshing ? "Refreshing…" : "Refresh inbox"}
+            </Button>
+          </div>
+
+          {!online ? (
+            <p className="mt-3 rounded-xl bg-paper p-4 text-sm leading-5 text-muted">
+              Go online to refresh your heartbeat and receive requests assigned to this business.
+            </p>
+          ) : loadingRequests ? (
+            <p className="mt-3 rounded-xl bg-paper p-4 text-sm text-muted">Loading assigned customer requests…</p>
+          ) : !businessRequests.length ? (
+            <p className="mt-3 rounded-xl bg-paper p-4 text-sm leading-5 text-muted">
+              No open requests are assigned to this business right now. Keep the desk open while online; the heartbeat will renew automatically.
+            </p>
+          ) : (
+            <div className="mt-3 grid gap-3">
+              {businessRequests.map((request) => (
+                <ProviderQuoteComposer key={request.requestId} request={request} onSubmit={sendQuote} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function ProviderQuoteComposer({
+  request,
+  onSubmit,
+}: {
+  request: LiveProviderRequest;
+  onSubmit: (
+    request: LiveProviderRequest,
+    data: {
+      amountRupees: number; note: string; inclusions: string[]; exclusions: string[];
+      extraCharges: Array<{ label: string; amountRupees: number }>;
+      cancellationTerms: string; etaMinutes: number | null;
+    },
+  ) => Promise<unknown>;
+}) {
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [inclusions, setInclusions] = useState("");
+  const [exclusions, setExclusions] = useState("");
+  const [cancellationTerms, setCancellationTerms] = useState("Rescheduling must be agreed before dispatch. Cancellation charges apply only after provider dispatch.");
+  const [eta, setEta] = useState("");
+  const [busy, setBusy] = useState(false);
+  const service = getService(request.serviceId);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const amountRupees = Number(amount);
+    if (!Number.isSafeInteger(amountRupees) || amountRupees < 1) {
+      toast.error("Enter a whole-number quote amount in rupees.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await onSubmit(request, {
+        amountRupees,
+        note,
+        inclusions: inclusions.split("\n").map((line) => line.trim()).filter(Boolean),
+        exclusions: exclusions.split("\n").map((line) => line.trim()).filter(Boolean),
+        extraCharges: [],
+        cancellationTerms,
+        etaMinutes: eta.trim() ? Number(eta) : null,
+      });
+    } catch {
+      // onSubmit displays the server error.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <article className="rounded-2xl border border-line p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold">{service?.name ?? request.serviceId}</p>
+          <p className="mt-1 text-xs text-muted">{request.site.label}, {request.site.area}, {request.site.city}, {request.site.state}</p>
+          <p className="mt-1 text-xs text-muted">{formatKm(request.distanceKm)} from your registered business base · {request.whenLabel}</p>
+        </div>
+        <span className="rounded-full bg-field-soft px-2.5 py-1 text-xs font-semibold text-field">New request</span>
+      </div>
+      <div className="mt-3 grid gap-1 text-sm">
+        {Object.entries(request.requirements).map(([key, value]) => (
+          <p key={key}><span className="text-muted">{key.replaceAll("_", " ")}:</span> {value}</p>
+        ))}
+      </div>
+      {request.notes && <p className="mt-2 rounded-xl bg-paper p-3 text-sm">{request.notes}</p>}
+      <form onSubmit={(event) => void submit(event)} className="mt-4 grid gap-3 border-t border-line pt-4">
+        <label className="grid gap-1 text-sm font-semibold">
+          Total quote (₹)
+          <input required type="number" min="1" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 rounded-xl border border-line bg-white px-3 font-normal" />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold">
+          Quote details
+          <textarea required minLength={8} maxLength={2000} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Describe the work scope, price basis and important conditions." className="min-h-20 rounded-xl border border-line bg-white p-3 font-normal" />
+        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1 text-sm font-semibold">
+            Included work (one per line)
+            <textarea maxLength={1200} value={inclusions} onChange={(event) => setInclusions(event.target.value)} placeholder="Rig, operator, standard setup…" className="min-h-20 rounded-xl border border-line bg-white p-3 font-normal" />
+          </label>
+          <label className="grid gap-1 text-sm font-semibold">
+            Exclusions (one per line)
+            <textarea maxLength={1200} value={exclusions} onChange={(event) => setExclusions(event.target.value)} placeholder="Power supply, permits, extra materials…" className="min-h-20 rounded-xl border border-line bg-white p-3 font-normal" />
+          </label>
+        </div>
+        <label className="grid gap-1 text-sm font-semibold">
+          Estimated arrival (minutes, optional)
+          <input type="number" min="0" max="10080" step="1" value={eta} onChange={(event) => setEta(event.target.value)} className="h-11 rounded-xl border border-line bg-white px-3 font-normal" />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold">
+          Cancellation/rescheduling terms
+          <textarea required minLength={8} maxLength={1200} value={cancellationTerms} onChange={(event) => setCancellationTerms(event.target.value)} className="min-h-16 rounded-xl border border-line bg-white p-3 font-normal" />
+        </label>
+        <div className="flex justify-end">
+          <Button type="submit" disabled={busy}>{busy ? "Sending quote…" : "Send quote to customer"}</Button>
+        </div>
+      </form>
+    </article>
   );
 }
 
