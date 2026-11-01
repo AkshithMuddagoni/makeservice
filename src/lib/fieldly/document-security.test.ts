@@ -28,6 +28,10 @@ test("sanitizes user filenames and rejects paths, unsupported extensions and MIM
     /Only PDF/,
   );
   assert.throws(
+    () => validateProviderDocumentMetadata({ fileName: "identity.jpg", mimeType: "application/pdf", sizeBytes: 100 }),
+    /extension must match/,
+  );
+  assert.throws(
     () => validateProviderDocumentMetadata({ fileName: "identity.pdf", mimeType: "application/pdf", sizeBytes: 11 * 1024 * 1024 }),
     /10 MiB/,
   );
