@@ -164,7 +164,7 @@ function RequestPage() {
             <p className="mt-2 text-sm text-muted">{liveRequest.site.label}, {liveRequest.site.area} · {liveRequest.whenLabel}</p>
           </div>
           {liveRequest.status === "open" && (
-            <Button variant="outline" disabled={refreshingLiveRequest} onClick={() => void refreshLiveRequest()}>
+            <Button variant="secondary" disabled={refreshingLiveRequest} onClick={() => void refreshLiveRequest()}>
               {refreshingLiveRequest ? "Checking…" : "Check for quote updates"}
             </Button>
           )}
@@ -315,7 +315,7 @@ function RequestPage() {
         </section>
 
         {liveRequestError && <p role="alert" className="mt-3 rounded-xl bg-danger-soft p-3 text-sm text-danger">{liveRequestError}</p>}
-        <Button asChild variant="outline" className="mt-5"><Link to="/">Back to home</Link></Button>
+        <Button asChild variant="secondary" className="mt-5"><Link to="/">Back to home</Link></Button>
       </main>
     );
   }
