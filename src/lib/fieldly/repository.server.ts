@@ -1,11 +1,24 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { generateBookingStartCode, hashBookingStartCode, verifyBookingStartCodeHash } from "./booking-security.server";
 import { DEV_USER_ID } from "../auth/verify.server";
 import { getSql } from "../db";
 import { getProviderDocumentRequirements, SERVICE_ONBOARDING } from "./provider-onboarding";
 import { getService } from "./catalog";
 import { PROVIDER_DISCOVERY_SQL } from "./marketplace-queries";
+import { detectProviderDocumentMime, validateProviderDocumentMetadata } from "./document-security";
+import { scanProviderDocument } from "./clamav.server";
+import {
+  createPrivateDocumentDownloadUrl,
+  createPrivateDocumentUploadUrl,
+  deletePrivateDocument,
+  downloadPrivateDocument,
+} from "./storage.server";
 import type { Sql } from "../db";
+import type {
+  ConfirmProviderDocumentUploadInput,
+  CreateProviderDocumentUploadInput,
+  ReviewAdminProviderDocumentInput,
+} from "./marketplace-validation";
 import type { CreateJobRequestInput, DiscoverProvidersInput, SendBookingMessageInput, SetProviderAssetAvailabilityInput, SetProviderServiceAvailabilityInput, SubmitProviderQuoteInput, UpdateProviderBookingLocationInput } from "./marketplace-validation";
 
 export type FieldlyProfile = {
@@ -2701,5 +2714,386 @@ export async function sendBookingMessageForParticipant(
       createdAt: message.created_at,
       isMine: true,
     };
+  });
+}
+
+
+export type ProviderDocumentUploadUrlResult = {
+  uploadId: string;
+  signedUrl: string;
+  expiresAt: string;
+};
+
+/**
+ * Create a short-lived, one-path upload URL for a provider-owned document
+ * requirement. Uploads are fail-closed until the private malware scanner is
+ * configured and the feature flag is enabled on the server.
+ */
+export async function createProviderDocumentUploadForUser(
+  userId: string,
+  input: CreateProviderDocumentUploadInput,
+): Promise<ProviderDocumentUploadUrlResult> {
+  assertProductionIdentity(userId);
+  if (
+    process.env.PROVIDER_DOCUMENT_UPLOADS_ENABLED !== "true" ||
+    !process.env.CLAMAV_HOST?.trim()
+  ) {
+    throw new Error("Secure provider document uploads are not enabled on this deployment yet.");
+  }
+
+  const file = validateProviderDocumentMetadata({
+    fileName: input.fileName,
+    mimeType: input.mimeType,
+    sizeBytes: input.sizeBytes,
+  });
+  const sql = await getSql();
+
+  await sql.transaction(async (tx) => {
+    await requireProviderRole(tx, userId);
+    const businesses = await tx.query<{ id: string; verification_status: string }>(
+      `select id::text as id, verification_status::text as verification_status
+       from public.provider_businesses
+       where id = $1::uuid and owner_user_id = $2 and is_suspended = false
+       for update`,
+      [input.businessId, userId],
+    );
+    const business = businesses[0];
+    if (!business || business.verification_status === "rejected" || business.verification_status === "suspended") {
+      throw new Error("This provider business cannot submit documents.");
+    }
+
+    const requirements = await tx.query<{
+      secure_only: boolean;
+      job_specific: boolean;
+      status: string;
+    }>(
+      `select secure_only, job_specific, status
+       from public.provider_document_requirements
+       where business_id = $1::uuid and requirement_key = $2
+       limit 1`,
+      [input.businessId, input.documentType],
+    );
+    const requirement = requirements[0];
+    if (!requirement) {
+      throw new Error("This document is not part of the business verification checklist.");
+    }
+    if (requirement.secure_only) {
+      throw new Error("This item requires a secure identity or tax verification provider and cannot be uploaded here.");
+    }
+    if (requirement.job_specific) {
+      throw new Error("Job-specific documents must be collected against an individual booking.");
+    }
+
+    if (input.providerServiceId) {
+      const rows = await tx.query<{ id: string }>(
+        "select id::text as id from public.provider_services where id = $1::uuid and business_id = $2::uuid",
+        [input.providerServiceId, input.businessId],
+      );
+      if (!rows[0]) throw new Error("The selected service does not belong to this provider business.");
+    }
+    if (input.assetId) {
+      const rows = await tx.query<{ id: string }>(
+        "select id::text as id from public.provider_assets where id = $1::uuid and business_id = $2::uuid",
+        [input.assetId, input.businessId],
+      );
+      if (!rows[0]) throw new Error("The selected machine does not belong to this provider business.");
+    }
+    if (input.operatorId) {
+      const rows = await tx.query<{ id: string }>(
+        "select id::text as id from public.provider_operators where id = $1::uuid and business_id = $2::uuid",
+        [input.operatorId, input.businessId],
+      );
+      if (!rows[0]) throw new Error("The selected operator does not belong to this provider business.");
+    }
+  });
+
+  const uploadId = randomUUID();
+  const storagePath = `provider-documents/${input.businessId}/${uploadId}.${file.extension}`;
+  const signed = await createPrivateDocumentUploadUrl(storagePath);
+  const expiresAt = new Date(Date.now() + signed.expiresInSeconds * 1000).toISOString();
+
+  try {
+    await sql.query(
+      `insert into public.provider_document_upload_sessions (
+         id, user_id, business_id, requirement_key,
+         provider_service_id, asset_id, operator_id,
+         storage_bucket, storage_path, original_filename, mime_type,
+         size_bytes, status, expires_at
+       ) values (
+         $1::uuid, $2, $3::uuid, $4,
+         $5::uuid, $6::uuid, $7::uuid,
+         'fieldly-private', $8, $9, $10, $11, 'pending', $12::timestamptz
+       )`,
+      [
+        uploadId,
+        userId,
+        input.businessId,
+        input.documentType,
+        input.providerServiceId ?? null,
+        input.assetId ?? null,
+        input.operatorId ?? null,
+        storagePath,
+        file.fileName,
+        file.mimeType,
+        file.sizeBytes,
+        expiresAt,
+      ],
+    );
+  } catch {
+    throw new Error("The secure upload session could not be created. Request a new upload link.");
+  }
+
+  return { uploadId, signedUrl: signed.signedUrl, expiresAt };
+}
+
+export type ConfirmedProviderDocumentResult = {
+  documentId: string;
+  documentType: string;
+  status: "uploaded";
+  sizeBytes: number;
+  expiresOn: string | null;
+};
+
+/** Confirm the upload only after server-side byte, size and malware checks. */
+export async function confirmProviderDocumentUploadForUser(
+  userId: string,
+  input: ConfirmProviderDocumentUploadInput,
+): Promise<ConfirmedProviderDocumentResult> {
+  assertProductionIdentity(userId);
+  if (
+    process.env.PROVIDER_DOCUMENT_UPLOADS_ENABLED !== "true" ||
+    !process.env.CLAMAV_HOST?.trim()
+  ) {
+    throw new Error("Secure provider document uploads are not enabled on this deployment yet.");
+  }
+
+  const sql = await getSql();
+  const sessions = await sql.query<{
+    id: string;
+    business_id: string;
+    requirement_key: string;
+    provider_service_id: string | null;
+    asset_id: string | null;
+    operator_id: string | null;
+    storage_path: string;
+    original_filename: string;
+    mime_type: string;
+    size_bytes: string | number;
+    expires_at: string;
+    status: string;
+  }>(
+    `select id::text as id, business_id::text as business_id, requirement_key,
+            provider_service_id::text as provider_service_id,
+            asset_id::text as asset_id, operator_id::text as operator_id,
+            storage_path, original_filename, mime_type, size_bytes::text as size_bytes,
+            expires_at::text as expires_at, status
+     from public.provider_document_upload_sessions
+     where id = $1::uuid and user_id = $2
+     limit 1`,
+    [input.uploadId, userId],
+  );
+  const session = sessions[0];
+  if (!session || session.status !== "pending") {
+    throw new Error("This upload session is invalid, expired or already used.");
+  }
+  if (new Date(session.expires_at).getTime() <= Date.now()) {
+    await sql.query(
+      "update public.provider_document_upload_sessions set status = 'expired' where id = $1::uuid and status = 'pending'",
+      [input.uploadId],
+    );
+    await deletePrivateDocument(session.storage_path).catch(() => undefined);
+    throw new Error("The upload link expired. Request a new link.");
+  }
+
+  const expectedSize = Number(session.size_bytes);
+  let bytes: Uint8Array;
+  try {
+    bytes = await downloadPrivateDocument(session.storage_path);
+    if (bytes.byteLength !== expectedSize) {
+      throw new Error("The uploaded file size does not match the upload request.");
+    }
+    const actualMime = detectProviderDocumentMime(bytes);
+    if (!actualMime || actualMime !== session.mime_type) {
+      throw new Error("The uploaded file content does not match its declared document type.");
+    }
+    await scanProviderDocument(bytes);
+  } catch (error) {
+    await sql.query(
+      "update public.provider_document_upload_sessions set status = 'failed' where id = $1::uuid and status = 'pending'",
+      [input.uploadId],
+    ).catch(() => []);
+    await deletePrivateDocument(session.storage_path).catch(() => undefined);
+    throw error instanceof Error
+      ? error
+      : new Error("The uploaded document could not be validated.");
+  }
+
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const expiresOn = input.expiresOn ?? null;
+  const issuedOn = input.issuedOn ?? null;
+
+  return sql.transaction(async (tx) => {
+    await requireProviderRole(tx, userId);
+    const locked = await tx.query<{ status: string; expires_at: string }>(
+      `select status, expires_at::text as expires_at
+       from public.provider_document_upload_sessions
+       where id = $1::uuid and user_id = $2
+       for update`,
+      [input.uploadId, userId],
+    );
+    if (
+      !locked[0] ||
+      locked[0].status !== "pending" ||
+      new Date(locked[0].expires_at).getTime() <= Date.now()
+    ) {
+      throw new Error("This upload session is no longer available.");
+    }
+
+    const business = await tx.query<{ id: string }>(
+      `select id::text as id from public.provider_businesses
+       where id = $1::uuid and owner_user_id = $2 and is_suspended = false`,
+      [session.business_id, userId],
+    );
+    if (!business[0]) throw new Error("Provider ownership changed before the file was confirmed.");
+
+    const requirement = await tx.query<{ secure_only: boolean; job_specific: boolean }>(
+      `select secure_only, job_specific from public.provider_document_requirements
+       where business_id = $1::uuid and requirement_key = $2`,
+      [session.business_id, session.requirement_key],
+    );
+    if (!requirement[0] || requirement[0].secure_only || requirement[0].job_specific) {
+      throw new Error("The document requirement is no longer eligible for upload.");
+    }
+
+    const documents = await tx.query<{ id: string }>(
+      `insert into public.provider_documents (
+         business_id, provider_service_id, asset_id, operator_id,
+         document_type, storage_bucket, storage_path, original_filename,
+         mime_type, size_bytes, sha256_hex, status, issued_on, expires_on
+       ) values (
+         $1::uuid, $2::uuid, $3::uuid, $4::uuid,
+         $5, 'fieldly-private', $6, $7, $8, $9, $10, 'uploaded',
+         $11::date, $12::date
+       )
+       returning id::text as id`,
+      [
+        session.business_id,
+        session.provider_service_id,
+        session.asset_id,
+        session.operator_id,
+        session.requirement_key,
+        session.storage_path,
+        session.original_filename,
+        session.mime_type,
+        expectedSize,
+        sha256,
+        issuedOn,
+        expiresOn,
+      ],
+    );
+    const document = documents[0];
+    if (!document) throw new Error("The document metadata could not be saved.");
+
+    await tx.query(
+      `update public.provider_document_requirements
+       set status = 'uploaded', updated_at = now()
+       where business_id = $1::uuid and requirement_key = $2
+         and status <> 'not_applicable'`,
+      [session.business_id, session.requirement_key],
+    );
+    await tx.query(
+      `update public.provider_document_upload_sessions
+       set status = 'confirmed', confirmed_at = now()
+       where id = $1::uuid`,
+      [input.uploadId],
+    );
+    return {
+      documentId: document.id,
+      documentType: session.requirement_key,
+      status: "uploaded" as const,
+      sizeBytes: expectedSize,
+      expiresOn,
+    };
+  });
+}
+
+export async function createAdminProviderDocumentDownloadUrl(
+  adminUserId: string,
+  documentId: string,
+): Promise<{ signedUrl: string; expiresInSeconds: number }> {
+  assertProductionIdentity(adminUserId);
+  const sql = await getSql();
+  await requireFieldlyAdmin(sql, adminUserId);
+  const rows = await sql.query<{ storage_path: string; status: string }>(
+    `select storage_path, status::text as status
+     from public.provider_documents where id = $1::uuid limit 1`,
+    [documentId],
+  );
+  const document = rows[0];
+  if (!document || !["uploaded", "under_review", "verified", "rejected", "expired"].includes(document.status)) {
+    throw new Error("The provider document is not available for review.");
+  }
+  const signedUrl = await createPrivateDocumentDownloadUrl(document.storage_path, 300);
+  return { signedUrl, expiresInSeconds: 300 };
+}
+
+export async function reviewAdminProviderDocumentForUser(
+  adminUserId: string,
+  input: ReviewAdminProviderDocumentInput,
+): Promise<{ documentId: string; status: "verified" | "rejected" }> {
+  assertProductionIdentity(adminUserId);
+  if (input.decision === "rejected" && input.note.trim().length < 8) {
+    throw new Error("Add a reason of at least 8 characters when rejecting a document.");
+  }
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireFieldlyAdmin(tx, adminUserId);
+    const rows = await tx.query<{
+      id: string;
+      business_id: string;
+      document_type: string;
+      status: string;
+    }>(
+      `select id::text as id, business_id::text as business_id,
+              document_type, status::text as status
+       from public.provider_documents
+       where id = $1::uuid
+       for update`,
+      [input.documentId],
+    );
+    const document = rows[0];
+    if (!document || document.status !== "uploaded") {
+      throw new Error("Only an uploaded document can receive a verification decision.");
+    }
+
+    await tx.query(
+      `update public.provider_documents
+       set status = $2::fieldly_document_status,
+           reviewer_note = nullif($3, ''),
+           reviewed_by = $4,
+           reviewed_at = now()
+       where id = $1::uuid`,
+      [input.documentId, input.decision, input.note.trim(), adminUserId],
+    );
+    await tx.query(
+      `update public.provider_document_requirements
+       set status = $3, updated_at = now()
+       where business_id = $1::uuid and requirement_key = $2
+         and status <> 'not_applicable'`,
+      [document.business_id, document.document_type, input.decision],
+    );
+    await tx.query(
+      `insert into public.fieldly_admin_audit
+         (admin_user_id, action, target_type, target_id, reason, metadata)
+       values ($1, $2, 'provider_document', $3, nullif($4, ''), $5::jsonb)`,
+      [
+        adminUserId,
+        `provider_document.${input.decision}`,
+        document.id,
+        input.note.trim(),
+        JSON.stringify({ businessId: document.business_id, documentType: document.document_type }),
+      ],
+    );
+    return { documentId: document.id, status: input.decision };
   });
 }
