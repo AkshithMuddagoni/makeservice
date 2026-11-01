@@ -65,6 +65,8 @@ The ordered schema is in `migrations/auth/*.sql` and
 9. `migrations/fieldly/0007_index_foreign_keys.sql` — add foreign-key indexes and remove a duplicate index.
 10. `migrations/fieldly/0008_create_private_documents_bucket.sql` — provision the private provider-document bucket.
 11. `migrations/fieldly/0011_provider_document_upload_sessions.sql` — bind short-lived signed upload sessions to provider-owned document requirements.
+
+Provider documents use private Supabase Storage, a server-only signing adapter, content-signature checks and a ClamAV scan. Uploads remain disabled unless `PROVIDER_DOCUMENT_UPLOADS_ENABLED=true` and the private scanner is configured.
 11. `migrations/fieldly/0009_booking_start_code_issuance.sql` — enforce a safe cooldown for customer service-start code generation.
 12. `migrations/fieldly/0010_booking_start_code_issue_limit.sql` — cap customer start-code re-issuance.
 
