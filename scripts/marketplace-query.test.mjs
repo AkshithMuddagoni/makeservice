@@ -57,7 +57,7 @@ async function createMarketplaceFixture() {
     );
     await db.query(
       "insert into public.provider_asset_services (asset_id, provider_service_id) values ($1::uuid,$2::uuid)",
-      [asset[0].id, service[0].id],
+      [asset.rows[0].id, service.rows[0].id],
     );
     await db.query(
       "insert into public.provider_presence (business_id, is_online, last_seen_at) values ($1::uuid,true,now())",
