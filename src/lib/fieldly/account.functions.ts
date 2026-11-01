@@ -377,22 +377,3 @@ export const reviewAdminProviderAsset = createServerFn({ method: "POST" })
     const { applyAdminProviderAssetReviewDecision } = await import("./repository.server");
     return applyAdminProviderAssetReviewDecision(context.userId, data);
   });
-
-
-/** Review one registered service after business and equipment checks. */
-export const reviewAdminProviderService = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(adminItemReviewInputSchema)
-  .handler(async ({ context, data }) => {
-    const { applyAdminProviderServiceReviewDecision } = await import("./repository.server");
-    return applyAdminProviderServiceReviewDecision(context.userId, data);
-  });
-
-/** Review one machine independently from the provider business. */
-export const reviewAdminProviderAsset = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(adminItemReviewInputSchema)
-  .handler(async ({ context, data }) => {
-    const { applyAdminProviderAssetReviewDecision } = await import("./repository.server");
-    return applyAdminProviderAssetReviewDecision(context.userId, data);
-  });
