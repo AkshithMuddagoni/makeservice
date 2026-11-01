@@ -224,7 +224,7 @@ function FindPage() {
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button asChild><Link to="/requests/$requestId" params={{ requestId: createdLiveRequest.requestId }}>View saved request</Link></Button>
-              <Button variant="outline" asChild><Link to="/">Back to home</Link></Button>
+              <Button variant="secondary" asChild><Link to="/">Back to home</Link></Button>
             </div>
           </section>
         ) : (
