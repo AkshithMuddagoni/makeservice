@@ -9,8 +9,23 @@ import { getService } from "@/lib/fieldly/catalog";
 import { inr, timeAgo } from "@/lib/fieldly/format";
 import { formatKm, kmBetween } from "@/lib/fieldly/geo";
 import { useFieldly, useProviders } from "@/lib/fieldly/store";
+import { authEnabled } from "@/lib/auth/client";
+import { getCurrentJobRequestDetail } from "@/lib/fieldly/account.functions";
 
 export const Route = createFileRoute("/requests/$requestId")({ component: RequestPage });
+
+type LiveRequestDetail = {
+  id: string;
+  serviceId: string;
+  status: "open" | "booked" | "cancelled" | "expired";
+  createdAt: string;
+  whenLabel: string;
+  notes: string;
+  requirements: Record<string, string>;
+  site: { label: string; area: string; city: string; district?: string; state: string; pincode?: string; address?: string; landmark?: string; lat: number; lng: number };
+  provider: { businessId: string; name: string; area: string; city: string; state: string; latitude: number; longitude: number; yearsExperience: number };
+  distanceKm: number;
+};
 
 function RequestPage() {
   const { requestId } = Route.useParams();
@@ -30,8 +45,29 @@ function RequestPage() {
   const cancelRequest = useFieldly((s) => s.cancelRequest);
   const sendMessage = useFieldly((s) => s.sendMessage);
   const providers = useProviders();
+  const [liveRequest, setLiveRequest] = useState<LiveRequestDetail | null>(null);
+  const [liveRequestLoading, setLiveRequestLoading] = useState(authEnabled);
+  const [liveRequestError, setLiveRequestError] = useState("");
   const [shown, setShown] = useState(1);
   const [quoteConsent, setQuoteConsent] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!authEnabled) return;
+    let cancelled = false;
+    setLiveRequestLoading(true);
+    setLiveRequestError("");
+    void getCurrentJobRequestDetail({ data: { requestId } })
+      .then((result) => {
+        if (!cancelled) setLiveRequest(result);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setLiveRequestError(error instanceof Error ? error.message : "Could not load this request.");
+      })
+      .finally(() => {
+        if (!cancelled) setLiveRequestLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [requestId]);
 
   useEffect(() => {
     if (!request) return;
@@ -45,6 +81,69 @@ function RequestPage() {
     const timers = quotes.slice(1).map((_, i) => setTimeout(() => setShown(i + 2), 700 * (i + 1)));
     return () => timers.forEach(clearTimeout);
   }, [request, quotes.length, requestId]);
+
+  if (authEnabled) {
+    if (liveRequestLoading) {
+      return <main className="mx-auto max-w-3xl px-4 py-16 text-sm text-muted">Loading your saved request…</main>;
+    }
+    if (!liveRequest) {
+      return (
+        <main className="mx-auto max-w-xl px-4 py-16">
+          <h1 className="font-display text-3xl font-bold">Request unavailable</h1>
+          <p className="mt-2 text-sm text-muted">{liveRequestError || "This request does not exist or does not belong to the signed-in account."}</p>
+          <Link to="/" className="mt-4 inline-block font-semibold">Back to home</Link>
+        </main>
+      );
+    }
+    const liveService = getService(liveRequest.serviceId);
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-8">
+        <p className="text-xs font-semibold uppercase tracking-widest text-field">Saved service request</p>
+        <h1 className="mt-1 font-display text-3xl font-bold">{liveService?.name ?? liveRequest.serviceId}</h1>
+        <p className="mt-2 text-sm text-muted">{liveRequest.site.label}, {liveRequest.site.area} · {liveRequest.whenLabel}</p>
+        <section className="mt-5 rounded-2xl border border-line bg-card p-5">
+          <div className="flex items-center gap-2 text-sm font-bold text-field">
+            <BadgeCheck className="size-5" /> Request saved successfully
+          </div>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            Reference: <span className="font-mono font-semibold">{liveRequest.id}</span><br />
+            Status: {liveRequest.status}<br />
+            Sent to: {liveRequest.provider.name}<br />
+            Provider base location: {formatKm(liveRequest.distanceKm)} away
+          </p>
+          <p className="mt-3 rounded-xl bg-paper p-3 text-sm leading-5">
+            Your request is waiting for this provider to respond with a quote. No booking is confirmed and no payment has been taken.
+          </p>
+        </section>
+        <section className="mt-4 rounded-2xl border border-line bg-card p-5">
+          <h2 className="font-display text-lg font-bold">Work site</h2>
+          <p className="mt-2 text-sm text-muted">{liveRequest.site.address || liveRequest.site.label}, {liveRequest.site.area}, {liveRequest.site.city}, {liveRequest.site.state}</p>
+          {liveRequest.site.pincode && <p className="text-sm text-muted">PIN {liveRequest.site.pincode}</p>}
+          {liveRequest.site.landmark && <p className="text-sm text-muted">Landmark: {liveRequest.site.landmark}</p>}
+          <div className="mt-4 h-64 overflow-hidden rounded-xl">
+            <MapCanvas center={liveRequest.site} markers={[
+              { id: "site", lat: liveRequest.site.lat, lng: liveRequest.site.lng, label: "Your work site", kind: "site" },
+              { id: liveRequest.provider.businessId, lat: liveRequest.provider.latitude, lng: liveRequest.provider.longitude, label: liveRequest.provider.name + " · base location", kind: "provider" },
+            ]} />
+          </div>
+          <p className="mt-2 text-xs text-muted">The provider marker is the registered business base, not a live vehicle GPS location.</p>
+        </section>
+        <section className="mt-4 rounded-2xl border border-line bg-card p-5">
+          <h2 className="font-display text-lg font-bold">Service requirements</h2>
+          <ul className="mt-2 grid gap-2 text-sm">
+            {Object.entries(liveRequest.requirements).map(([key, value]) => (
+              <li key={key} className="flex justify-between gap-4 border-b border-line pb-2">
+                <span className="text-muted">{key.replaceAll("_", " ")}</span>
+                <span className="text-right font-semibold">{value}</span>
+              </li>
+            ))}
+          </ul>
+          {liveRequest.notes && <p className="mt-3 text-sm text-muted">Note: {liveRequest.notes}</p>}
+        </section>
+        <Button asChild className="mt-5"><Link to="/">Back to home</Link></Button>
+      </main>
+    );
+  }
 
   if (!request || !canViewRequest) {
     return (
