@@ -1,6 +1,7 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import { authClient, authEnabled } from "@/lib/auth/client";
+import { isValidIndiaE164Phone, isValidIndiaMobileNumber } from "@/lib/india-validation";
 import { submitCurrentProviderApplication } from "@/lib/fieldly/account.functions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -92,7 +93,7 @@ function JoinPage() {
   const verifiedPhone = authEnabled ? (authSession?.user?.phoneNumber ?? "") : phone;
   const verifiedPhoneDigits = verifiedPhone.startsWith("+91") ? verifiedPhone.slice(3) : verifiedPhone;
   const verifiedMobile = authEnabled
-    ? Boolean(authSession?.user?.phoneNumberVerified && /^\\+91[6-9]\\d{9}$/.test(verifiedPhone))
+    ? Boolean(authSession?.user?.phoneNumberVerified && isValidIndiaE164Phone(verifiedPhone))
     : phoneVerified;
   const [businessType, setBusinessType] = useState<ProviderBusinessType>(existingBusiness?.businessType ?? "PROPRIETORSHIP");
   const [legalName, setLegalName] = useState(existingBusiness?.legalName ?? "");
