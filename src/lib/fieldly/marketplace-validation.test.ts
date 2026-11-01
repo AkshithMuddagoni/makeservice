@@ -8,6 +8,11 @@ import {
   acceptProviderQuoteInputSchema,
   setProviderServiceAvailabilityInputSchema,
   setProviderAssetAvailabilityInputSchema,
+  getBookingDetailInputSchema,
+  updateProviderBookingStatusInputSchema,
+  issueBookingStartCodeInputSchema,
+  verifyBookingStartCodeInputSchema,
+  updateBookingParticipantInputSchema,
 } from "./marketplace-validation.ts";
 
 const site = {
@@ -153,4 +158,36 @@ test("provider service and machine availability require their own UUIDs and bool
   assert.throws(() => setProviderAssetAvailabilityInputSchema.parse({
     businessId, assetId, isAvailable: true, ownerUserId: "spoofed",
   }));
+});
+
+
+test("booking lifecycle inputs are scoped to UUIDs and permitted provider transitions", () => {
+  const bookingId = "f9b0c52f-a6f4-4d5e-8f6c-e6d8f6a5f516";
+  assert.deepEqual(getBookingDetailInputSchema.parse({ bookingId }), { bookingId });
+  assert.deepEqual(
+    updateProviderBookingStatusInputSchema.parse({ bookingId, status: "on_the_way", note: "Vehicle dispatched" }),
+    { bookingId, status: "on_the_way", note: "Vehicle dispatched" },
+  );
+  assert.throws(() => updateProviderBookingStatusInputSchema.parse({ bookingId, status: "service_started" }));
+  assert.throws(() => updateProviderBookingStatusInputSchema.parse({ bookingId, status: "paid" }));
+  assert.throws(() => getBookingDetailInputSchema.parse({ bookingId, customerUserId: "spoofed" }));
+});
+
+test("start-code issuance and verification validate booking UUID and four-digit code", () => {
+  const bookingId = "f9b0c52f-a6f4-4d5e-8f6c-e6d8f6a5f516";
+  assert.deepEqual(issueBookingStartCodeInputSchema.parse({ bookingId }), { bookingId });
+  assert.deepEqual(
+    verifyBookingStartCodeInputSchema.parse({ bookingId, code: "0427" }),
+    { bookingId, code: "0427" },
+  );
+  assert.throws(() => verifyBookingStartCodeInputSchema.parse({ bookingId, code: "427" }));
+  assert.throws(() => verifyBookingStartCodeInputSchema.parse({ bookingId, code: "abcd" }));
+  assert.throws(() => issueBookingStartCodeInputSchema.parse({ bookingId, customerUserId: "spoofed" }));
+});
+
+test("booking cancellation/dispute actions require a reason and reject extra identity fields", () => {
+  const bookingId = "f9b0c52f-a6f4-4d5e-8f6c-e6d8f6a5f516";
+  assert.equal(updateBookingParticipantInputSchema.parse({ bookingId, reason: "Provider could not access site." }).reason, "Provider could not access site.");
+  assert.throws(() => updateBookingParticipantInputSchema.parse({ bookingId, reason: "bad" }));
+  assert.throws(() => updateBookingParticipantInputSchema.parse({ bookingId, reason: "valid reason", userId: "spoofed" }));
 });
