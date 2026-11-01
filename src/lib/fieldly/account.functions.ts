@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "../auth/middleware";
 import { isValidIndiaPincode } from "../india-validation";
-import { acceptProviderQuoteInputSchema, createJobRequestInputSchema, discoverProvidersInputSchema, getBookingDetailInputSchema, issueBookingStartCodeInputSchema, setProviderAssetAvailabilityInputSchema, setProviderPresenceInputSchema, setProviderServiceAvailabilityInputSchema, stopProviderBookingLocationInputSchema, submitProviderQuoteInputSchema, updateBookingParticipantInputSchema, updateProviderBookingLocationInputSchema, updateProviderBookingStatusInputSchema, verifyBookingStartCodeInputSchema } from "./marketplace-validation";
+import { acceptProviderQuoteInputSchema, createJobRequestInputSchema, discoverProvidersInputSchema, getBookingDetailInputSchema, issueBookingStartCodeInputSchema, sendBookingMessageInputSchema, setProviderAssetAvailabilityInputSchema, setProviderPresenceInputSchema, setProviderServiceAvailabilityInputSchema, stopProviderBookingLocationInputSchema, submitProviderQuoteInputSchema, updateBookingParticipantInputSchema, updateProviderBookingLocationInputSchema, updateProviderBookingStatusInputSchema, verifyBookingStartCodeInputSchema } from "./marketplace-validation";
 
 /**
  * These functions are safe to call from React. Database access is dynamically
@@ -289,4 +289,14 @@ export const stopCurrentProviderBookingLocation = createServerFn({ method: "POST
   .handler(async ({ context, data }) => {
     const { stopProviderBookingLocationForUser } = await import("./repository.server");
     return stopProviderBookingLocationForUser(context.userId, data.bookingId);
+  });
+
+
+/** Send a text-only message to the other participant in a confirmed booking. */
+export const sendCurrentBookingMessage = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(sendBookingMessageInputSchema)
+  .handler(async ({ context, data }) => {
+    const { sendBookingMessageForParticipant } = await import("./repository.server");
+    return sendBookingMessageForParticipant(context.userId, data);
   });
