@@ -76,7 +76,7 @@ identities. Use the ordered migrations above only.
 
 ## Render
 
-The repository includes `render.yaml` for a Render Node web service (Node.js 22, `npm install && npm run build`, `npm run start`). It currently uses Render's **Free** plan for preview only; Render explicitly says Free instances are not for production and they spin down after 15 minutes idle. An owner-approved paid compute plan is required before production launch. The Blueprint declares `DATABASE_URL` as a secret prompt, asks Render to generate `BETTER_AUTH_SECRET`, sets `BETTER_AUTH_URL` to the current public origin, and keeps auth/OTP/document-upload feature flags off by default.
+The repository includes `render.yaml` for a Render Node web service (Node.js 22, `npm install && npm run build`, `npm run start`). The Blueprint now selects the minimum paid **Starter** web-service instance (0.5 CPU / 512 MB RAM). The existing `makeservice` Render service is still on Free until its instance type is changed in Dashboard → Settings → General → Instance Type → Update → Starter. The Blueprint declares `DATABASE_URL` as a secret prompt, asks Render to generate `BETTER_AUTH_SECRET`, sets `BETTER_AUTH_URL` to the public app origin, and keeps auth/OTP/document-upload feature flags off by default.
 
 For an **existing** Render service, do not assume Blueprint `sync: false` will prompt for a new value: Render only prompts for these variables during initial Blueprint creation. Add `DATABASE_URL` manually in the existing service's Dashboard > Environment before deploying this backend. Configure production secrets only in Render Environment settings; never put database URLs, passwords, OAuth secrets, payment credentials or private keys in frontend variables or GitHub.
 
