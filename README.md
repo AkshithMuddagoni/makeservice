@@ -64,6 +64,7 @@ The ordered schema is in `migrations/auth/*.sql` and
 8. `migrations/fieldly/0006_lock_down_migration_ledger.sql` — disable browser access to the custom migration ledger.
 9. `migrations/fieldly/0007_index_foreign_keys.sql` — add foreign-key indexes and remove a duplicate index.
 10. `migrations/fieldly/0008_create_private_documents_bucket.sql` — provision the private provider-document bucket.
+11. `migrations/fieldly/0009_booking_start_code_issuance.sql` — enforce a safe cooldown for customer service-start code generation.
 
 Both production and PGLite migration discovery explicitly include these folders.
 The Fieldly SQL is also tested independently without auth tables so its
