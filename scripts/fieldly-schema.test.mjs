@@ -15,6 +15,7 @@ const migrationFiles = [
   "migrations/fieldly/0005_provider_onboarding.sql",
   "migrations/fieldly/0006_lock_down_migration_ledger.sql",
   "migrations/fieldly/0007_index_foreign_keys.sql",
+  "migrations/fieldly/0008_create_private_documents_bucket.sql",
 ];
 
 test("Fieldly PostgreSQL migrations apply cleanly without Supabase Auth tables", async () => {
@@ -214,6 +215,47 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
     } finally {
       await rollbackDb.close();
     }
+  } finally {
+    await db.close();
+  }
+});
+
+test("private document bucket migration is safe without Supabase Storage installed", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec(await readFile(join(root, "migrations/fieldly/0008_create_private_documents_bucket.sql"), "utf8"));
+    const bucketSchema = await db.query("select to_regclass('storage.buckets') as bucket_table");
+    assert.equal(bucketSchema.rows[0].bucket_table, null);
+  } finally {
+    await db.close();
+  }
+});
+
+test("private document bucket is non-public and restricted to reviewable file types", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create schema storage");
+    await db.exec(`
+      create table storage.buckets (
+        id text primary key,
+        name text not null,
+        public boolean not null,
+        file_size_limit bigint,
+        allowed_mime_types text[]
+      )
+    `);
+    await db.exec(await readFile(join(root, "migrations/fieldly/0008_create_private_documents_bucket.sql"), "utf8"));
+    const rows = await db.query(
+      "select id, public, file_size_limit, allowed_mime_types from storage.buckets where id = 'fieldly-private'",
+    );
+    assert.equal(rows.rows.length, 1);
+    assert.equal(rows.rows[0].public, false);
+    assert.equal(Number(rows.rows[0].file_size_limit), 10485760);
+    assert.deepEqual(rows.rows[0].allowed_mime_types, [
+      "application/pdf", "image/jpeg", "image/png", "image/webp",
+    ]);
   } finally {
     await db.close();
   }
