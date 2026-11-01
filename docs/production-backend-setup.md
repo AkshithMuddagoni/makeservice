@@ -374,6 +374,59 @@ configured OTP flow succeeds, but the rest of the marketplace store still
 uses browser-local demo data. This does not yet enable real provider discovery,
 booking, chat, GPS tracking or payments.
 
+## Administrator role provisioning and provider review
+
+The `/admin` console and all admin server functions require the
+`admin` row in `public.fieldly_user_roles`. The app has no customer/provider
+function that can grant this role, and the admin page cannot grant access to
+itself.
+
+Bootstrap an administrator only after the intended person has completed a
+real Better Auth sign-in and their Indian mobile number is verified. In
+Supabase SQL Editor, first identify the intended account:
+
+```sql
+SELECT id, name, "phoneNumber", "phoneNumberVerified"
+FROM public."user"
+WHERE "phoneNumberVerified" = true
+ORDER BY "createdAt" DESC;
+```
+
+After independently confirming the exact user ID with the account owner,
+grant the role explicitly:
+
+```sql
+INSERT INTO public.fieldly_user_roles (user_id, role)
+VALUES ('<CONFIRMED_BETTER_AUTH_USER_ID>', 'admin'::fieldly_role)
+ON CONFLICT (user_id, role) DO NOTHING;
+```
+
+To revoke administrator access:
+
+```sql
+DELETE FROM public.fieldly_user_roles
+WHERE user_id = '<CONFIRMED_BETTER_AUTH_USER_ID>'
+  AND role = 'admin'::fieldly_role;
+```
+
+Treat the admin role as privileged production access. Use individual accounts,
+enable strong authentication, grant the minimum number of admin accounts, and
+keep role-grant/revoke SQL under change control. The `fieldly_admin_audit`
+table records every successful provider review decision.
+
+The admin review queue supports `submitted`, `under_review`, and
+`needs_information` applications. Reviewers can start/resume review, request
+information, or reject with a reason. Approval is rejected server-side unless
+every required checklist row is marked `verified` and an actual matching
+`provider_documents` row is also `verified`. Since private file uploads and
+document review are not implemented yet, approval is intentionally blocked
+for current submissions. This console does not return storage paths or raw
+document filenames to the browser. Secure file inspection and checklist
+verification must be completed with private Storage and short-lived,
+ownership-checked signed URLs before approvals can be enabled operationally.
+
+No database migration is required for this admin milestone: the role, audit
+table, foreign keys and RLS already exist in the seven migrations you applied.
 ## Sensitive data rules
 
 - Do not store full PAN, Aadhaar, bank account numbers, IFSC, card data or raw
