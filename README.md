@@ -100,3 +100,5 @@ Cashfree Easy Split and Razorpay Route are both under evaluation. See [docs/paym
 ## Technology stack
 
 React 19, TanStack Start/Router, Vite, TypeScript, Tailwind CSS 4, Lucide, MapLibre GL, Zustand, Node.js, Render and Supabase PostgreSQL.
+
+> Temporary CI validation branch for the booking lifecycle work. Do not merge this branch. PR #21 remains the canonical draft implementation.
