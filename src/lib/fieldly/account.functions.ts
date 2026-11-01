@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "../auth/middleware";
 import { isValidIndiaPincode } from "../india-validation";
-import { acceptProviderQuoteInputSchema, createJobRequestInputSchema, discoverProvidersInputSchema, setProviderAssetAvailabilityInputSchema, setProviderPresenceInputSchema, setProviderServiceAvailabilityInputSchema, submitProviderQuoteInputSchema } from "./marketplace-validation";
+import { acceptProviderQuoteInputSchema, createJobRequestInputSchema, discoverProvidersInputSchema, getBookingDetailInputSchema, issueBookingStartCodeInputSchema, setProviderAssetAvailabilityInputSchema, setProviderPresenceInputSchema, setProviderServiceAvailabilityInputSchema, submitProviderQuoteInputSchema, updateBookingParticipantInputSchema, updateProviderBookingStatusInputSchema, verifyBookingStartCodeInputSchema } from "./marketplace-validation";
 
 /**
  * These functions are safe to call from React. Database access is dynamically
@@ -213,4 +213,52 @@ export const setCurrentProviderAssetAvailability = createServerFn({ method: "POS
   .handler(async ({ context, data }) => {
     const { setProviderAssetAvailabilityForUser } = await import("./repository.server");
     return setProviderAssetAvailabilityForUser(context.userId, data);
+  });
+
+
+/** Fetch a participant-only booking detail and audit timeline. */
+export const getCurrentBookingDetail = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(getBookingDetailInputSchema)
+  .handler(async ({ context, data }) => {
+    const { getBookingDetailForUser } = await import("./repository.server");
+    return getBookingDetailForUser(context.userId, data.bookingId);
+  });
+
+/** Provider transitions: confirmed -> on the way -> arrived -> completed. */
+export const updateCurrentProviderBookingStatus = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(updateProviderBookingStatusInputSchema)
+  .handler(async ({ context, data }) => {
+    const { updateProviderBookingStatusForUser } = await import("./repository.server");
+    return updateProviderBookingStatusForUser(context.userId, data);
+  });
+
+/** Customer issues a one-time, five-minute service-start code after provider arrival. */
+export const issueCurrentBookingStartCode = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(issueBookingStartCodeInputSchema)
+  .handler(async ({ context, data }) => {
+    const { issueBookingStartCodeForCustomer } = await import("./repository.server");
+    return issueBookingStartCodeForCustomer(context.userId, data.bookingId);
+  });
+
+/** Assigned provider verifies the customer code; only a match starts service. */
+export const verifyCurrentBookingStartCode = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(verifyBookingStartCodeInputSchema)
+  .handler(async ({ context, data }) => {
+    const { verifyBookingStartCodeForProvider } = await import("./repository.server");
+    return verifyBookingStartCodeForProvider(context.userId, data);
+  });
+
+/** Customer or assigned provider can cancel before arrival or dispute after arrival. */
+export const updateCurrentBookingParticipantAction = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(updateBookingParticipantInputSchema.extend({
+    action: z.enum(["cancelled", "disputed"]),
+  }).strict())
+  .handler(async ({ context, data }) => {
+    const { updateBookingByParticipant } = await import("./repository.server");
+    return updateBookingByParticipant(context.userId, data);
   });
