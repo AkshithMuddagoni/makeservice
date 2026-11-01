@@ -58,7 +58,7 @@ named SQL files in basename order:
 The live `makeservice` Supabase database has been verified through migration
 0014. Migrations 0012–0014 were applied and recorded in `public._migrations`.
 The upload-session and operator/asset foreign-key warnings have been resolved.
-All 29 public tables currently have RLS enabled; the `anon` and
+All 30 public tables currently have RLS enabled; the `anon` and
 `authenticated` roles have no application-table grants. Do not add broad
 browser-facing policies: application access is intended to go through
 authenticated server functions with explicit ownership and role checks.
@@ -267,13 +267,17 @@ separate controlled SMS test.
 
 ## Render environment variables
 
-The checked-in `render.yaml` now selects the minimum paid **Starter**
-web-service instance (0.5 CPU / 512 MB RAM). The live `makeservice` service
-must still be changed from Free to Starter in its Dashboard:
-Settings → General → Instance Type → Update → Starter → Save Changes.
-Render automatically deploys the service to apply the instance-type change.
-Do this only after the required production environment variables below are in
-place; the current live service is intentionally still tracking `main`.
+The checked-in `render.yaml` keeps the web service on the **Free** plan
+during development and backend validation. The existing live `makeservice`
+service is also Free and continues tracking `main`; this PR branch is not
+deployed to it.
+
+Before a customer-facing production launch, upgrade the existing service in
+the Render Dashboard → Settings → General → Instance Type to **Starter**,
+after the persistent database/auth environment and all launch gates are ready.
+The upgrade is deliberately deferred; no paid plan change is being made now.
+A custom domain can be configured separately at launch and does not need to be
+purchased or connected during this development phase.
 
 The Blueprint declares the baseline variables for new Blueprint-created
 services:
@@ -484,7 +488,7 @@ the browser; download URLs are issued only after the server checks the admin rol
 
 Migration 0011 adds the server-only upload-session table. The role, audit table,
 foreign keys, RLS, private bucket and upload-session schema are in the current
-thirteen-migration deployment sequence.
+sixteen-migration deployment sequence.
 ## Private provider-document bucket
 
 Migration 0008 provisions `fieldly-private` as a non-public bucket with a 10 MiB file-size limit and an allowlist of PDF, JPEG, PNG and WebP. Migration 0011 adds server-only upload sessions that bind a signed upload to the provider owner and its specific document requirement. No browser Storage policies are created. Uploads are feature-gated by `PROVIDER_DOCUMENT_UPLOADS_ENABLED=true` and require a healthy private ClamAV scanner configured with `CLAMAV_HOST` (and optional `CLAMAV_PORT`). The server creates a one-time signed upload URL, then verifies the owner-bound upload session, size, file magic and ClamAV result before creating the document record. Administrator viewing uses a five-minute forced-download URL; only an administrator session can request it. Failed, mismatched or infected files are rejected and deletion is attempted. The scanner must be on a private network and health-monitored. A separate retention/deletion job, scan-evasion testing and external security audit are still required.
