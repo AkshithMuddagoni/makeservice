@@ -996,6 +996,17 @@ export type AdminProviderApplicationDetail = {
     reviewedAt: string | null;
     serviceIds: string[];
   }>;
+  operators: Array<{
+    id: string;
+    fullName: string;
+    phoneLast4: string | null;
+    roleTitle: string;
+    experienceYears: number;
+    verificationStatus: string;
+    reviewerNote: string | null;
+    reviewedAt: string | null;
+    assetIds: string[];
+  }>;
   documentRequirements: Array<{
     key: string;
     label: string;
@@ -1114,7 +1125,7 @@ export async function getAdminProviderApplicationDetail(
   const business = businesses[0];
   if (!business) return null;
 
-  const [services, assets, requirements, uploadedDocuments, audit] = await Promise.all([
+  const [services, assets, operators, requirements, uploadedDocuments, audit] = await Promise.all([
     sql.query<{
       id: string; service_id: string; selected_tasks: string[];
       specifications: Record<string, string>; verification_status: string;
@@ -1145,6 +1156,24 @@ export async function getAdminProviderApplicationDetail(
          on ps.id = pas.provider_service_id and ps.business_id = pa.business_id
        where pa.business_id = $1
        group by pa.id order by pa.created_at asc`,
+      [businessId],
+    ),
+    sql.query<{
+      id: string; full_name: string; phone_last4: string | null; role_title: string;
+      experience_years: number | string | null; verification_status: string;
+      reviewer_note: string | null; reviewed_at: string | null; asset_ids: string[] | null;
+    }>(
+      `select po.id::text as id, po.full_name, right(po.phone_e164, 4) as phone_last4,
+              po.role_title, po.experience_years,
+              po.verification_status::text as verification_status,
+              po.reviewer_note, po.reviewed_at::text as reviewed_at,
+              coalesce(array_agg(poa.asset_id::text) filter (where poa.asset_id is not null), '{}') as asset_ids
+       from public.provider_operators po
+       left join public.provider_operator_assets poa
+         on poa.operator_id = po.id and poa.business_id = po.business_id
+       where po.business_id = $1
+       group by po.id
+       order by po.created_at asc`,
       [businessId],
     ),
     sql.query<{
@@ -1190,6 +1219,9 @@ export async function getAdminProviderApplicationDetail(
           or (a.target_type = 'provider_asset' and a.target_id in (
             select pa.id::text from public.provider_assets pa where pa.business_id = $1::uuid
           ))
+          or (a.target_type = 'provider_operator' and a.target_id in (
+            select po.id::text from public.provider_operators po where po.business_id = $1::uuid
+          ))
        order by a.created_at desc
        limit 20`,
       [businessId],
@@ -1231,6 +1263,17 @@ export async function getAdminProviderApplicationDetail(
       registrationLast4: item.registration_last4, serialLast4: item.serial_last4,
       verificationStatus: item.verification_status, isAvailable: item.is_available,
       reviewerNote: item.reviewer_note, reviewedAt: item.reviewed_at, serviceIds: item.service_ids ?? [],
+    })),
+    operators: operators.map((item) => ({
+      id: item.id,
+      fullName: item.full_name,
+      phoneLast4: item.phone_last4,
+      roleTitle: item.role_title,
+      experienceYears: Number(item.experience_years ?? 0),
+      verificationStatus: item.verification_status,
+      reviewerNote: item.reviewer_note,
+      reviewedAt: item.reviewed_at,
+      assetIds: item.asset_ids ?? [],
     })),
     documentRequirements: requirements.map((item) => ({
       key: item.requirement_key, label: item.label, description: item.description,
