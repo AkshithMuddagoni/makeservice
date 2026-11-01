@@ -6,7 +6,7 @@ import { getProviderDocumentRequirements, SERVICE_ONBOARDING } from "./provider-
 import { getService } from "./catalog";
 import { PROVIDER_DISCOVERY_SQL } from "./marketplace-queries";
 import type { Sql } from "../db";
-import type { CreateJobRequestInput, DiscoverProvidersInput, SetProviderAssetAvailabilityInput, SetProviderServiceAvailabilityInput, SubmitProviderQuoteInput, UpdateProviderBookingLocationInput } from "./marketplace-validation";
+import type { CreateJobRequestInput, DiscoverProvidersInput, SendBookingMessageInput, SetProviderAssetAvailabilityInput, SetProviderServiceAvailabilityInput, SubmitProviderQuoteInput, UpdateProviderBookingLocationInput } from "./marketplace-validation";
 
 export type FieldlyProfile = {
   user_id: string;
@@ -2088,6 +2088,13 @@ export type LiveBookingDetail = {
     note: string | null;
     createdAt: string;
   }>;
+  messages: Array<{
+    id: string;
+    senderRole: "customer" | "provider";
+    messageText: string;
+    createdAt: string;
+    isMine: boolean;
+  }>;
 };
 
 type BookingRow = {
@@ -2144,22 +2151,24 @@ export async function getBookingDetailForUser(
     "select b.id::text as id,b.public_reference,b.status::text as status,b.amount_paise::text as amount_paise, " +
     "b.currency,b.service_id,b.scheduled_for::text as scheduled_for,b.created_at::text as created_at, " +
     "b.updated_at::text as updated_at,b.completed_at::text as completed_at,b.cancellation_reason,b.dispute_reason, " +
-    "b.customer_user_id,pb.owner_user_id as provider_owner_user_id,b.site_snapshot,b.requirements_snapshot,b.terms_snapshot,b.start_code_hash, " +
+    "b.customer_user_id,pb.owner_user_id as provider_owner_user_id,po.linked_user_id as assigned_operator_user_id," +
+    "b.site_snapshot,b.requirements_snapshot,b.terms_snapshot,b.start_code_hash, " +
     "b.start_code_expires_at::text as start_code_expires_at,b.start_code_attempts,b.start_code_issue_count, " +
     "pb.id::text as business_id,pb.trading_name as provider_name,pb.latitude as provider_latitude,pb.longitude as provider_longitude " +
     "from public.bookings b join public.provider_businesses pb on pb.id=b.business_id " +
-    "where b.id=$1::uuid and (b.customer_user_id=$2 or pb.owner_user_id=$2) limit 1",
+    "left join public.provider_operators po on po.id=b.assigned_operator_id " +
+    "where b.id=$1::uuid and (b.customer_user_id=$2 or pb.owner_user_id=$2 or po.linked_user_id=$2) limit 1",
     [bookingId, userId],
   );
   const row = rows[0];
   if (!row) return null;
 
   const isCustomer = row.customer_user_id === userId;
-  const isProvider = row.provider_owner_user_id === userId;
+  const isProvider = row.provider_owner_user_id === userId || row.assigned_operator_user_id === userId;
   if (isCustomer) await requireCustomerRole(sql, userId);
   if (isProvider) await requireProviderRole(sql, userId);
   if (!isCustomer && !isProvider) return null;
-  const [events, locations] = await Promise.all([
+  const [events, locations, messages] = await Promise.all([
     sql.query<{
       id: string; from_status: string | null; to_status: string;
       event_type: string; note: string | null; created_at: string;
@@ -2178,6 +2187,13 @@ export async function getBookingDetailForUser(
       "speed_mps::text as speed_mps,recorded_at::text as recorded_at,expires_at::text as expires_at " +
       "from public.booking_live_locations where booking_id=$1::uuid and expires_at>now() " +
       "and recorded_at>now()-interval '2 minutes' limit 1",
+      [bookingId],
+    ),
+    sql.query<{
+      id: string; sender_user_id: string; message_text: string; created_at: string;
+    }>(
+      "select id::text as id,sender_user_id,message_text,created_at::text as created_at " +
+      "from public.booking_messages where booking_id=$1::uuid order by created_at desc limit 100",
       [bookingId],
     ),
   ]);
@@ -2245,6 +2261,13 @@ export async function getBookingDetailForUser(
       note: event.note,
       createdAt: event.created_at,
     })),
+    messages: messages.map((message) => ({
+      id: message.id,
+      senderRole: message.sender_user_id === row.customer_user_id ? "customer" as const : "provider" as const,
+      messageText: message.message_text,
+      createdAt: message.created_at,
+      isMine: message.sender_user_id === userId,
+    })).reverse(),
   };
 }
 
@@ -2610,5 +2633,73 @@ export async function stopProviderBookingLocationForUser(
       [bookingId, access[0].business_id],
     );
     return { bookingId, stopped: rows.length > 0 };
+  });
+}
+
+
+export type BookingMessageResult = {
+  id: string;
+  senderRole: "customer" | "provider";
+  messageText: string;
+  createdAt: string;
+  isMine: boolean;
+};
+
+/** Send a participant-only message, with a per-booking 12/minute server limit. */
+export async function sendBookingMessageForParticipant(
+  userId: string,
+  input: SendBookingMessageInput,
+): Promise<BookingMessageResult> {
+  assertProductionIdentity(userId);
+  const messageText = input.messageText.trim();
+  if (!messageText || messageText.length > 2000) {
+    throw new Error("Messages must contain between 1 and 2,000 characters.");
+  }
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    const participants = await tx.query<{
+      status: LiveBookingStatus;
+      customer_user_id: string;
+      provider_owner_user_id: string;
+      assigned_operator_user_id: string | null;
+    }>(
+      "select b.status::text as status,b.customer_user_id,pb.owner_user_id as provider_owner_user_id, " +
+      "po.linked_user_id as assigned_operator_user_id " +
+      "from public.bookings b join public.provider_businesses pb on pb.id=b.business_id " +
+      "left join public.provider_operators po on po.id=b.assigned_operator_id " +
+      "where b.id=$1::uuid and (b.customer_user_id=$2 or pb.owner_user_id=$2 or po.linked_user_id=$2) " +
+      "for update of b",
+      [input.bookingId, userId],
+    );
+    const booking = participants[0];
+    if (!booking) throw new Error("Only the customer or assigned provider on this booking can send messages.");
+    const isCustomer = booking.customer_user_id === userId;
+    if (isCustomer) await requireCustomerRole(tx, userId);
+    else await requireProviderRole(tx, userId);
+    if (booking.status === "cancelled") throw new Error("Messages are closed for a cancelled booking.");
+
+    const counts = await tx.query<{ count: number }>(
+      "select count(*)::int as count from public.booking_messages " +
+      "where booking_id=$1::uuid and sender_user_id=$2 and created_at>now()-interval '1 minute'",
+      [input.bookingId, userId],
+    );
+    if (Number(counts[0]?.count ?? 0) >= 12) {
+      throw new Error("You have sent several messages. Wait a minute before sending another.");
+    }
+
+    const inserted = await tx.query<{ id: string; created_at: string }>(
+      "insert into public.booking_messages (booking_id,sender_user_id,message_text) " +
+      "values ($1::uuid,$2,$3) returning id::text as id,created_at::text as created_at",
+      [input.bookingId, userId, messageText],
+    );
+    const message = inserted[0];
+    if (!message) throw new Error("Your message could not be sent.");
+    return {
+      id: message.id,
+      senderRole: isCustomer ? "customer" : "provider",
+      messageText,
+      createdAt: message.created_at,
+      isMine: true,
+    };
   });
 }
