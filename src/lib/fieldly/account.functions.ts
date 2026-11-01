@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "../auth/middleware";
 import { isValidIndiaPincode } from "../india-validation";
-import { acceptProviderQuoteInputSchema, createJobRequestInputSchema, discoverProvidersInputSchema, setProviderPresenceInputSchema, submitProviderQuoteInputSchema } from "./marketplace-validation";
+import { acceptProviderQuoteInputSchema, createJobRequestInputSchema, discoverProvidersInputSchema, setProviderAssetAvailabilityInputSchema, setProviderPresenceInputSchema, setProviderServiceAvailabilityInputSchema, submitProviderQuoteInputSchema } from "./marketplace-validation";
 
 /**
  * These functions are safe to call from React. Database access is dynamically
@@ -194,4 +194,23 @@ export const acceptCurrentProviderQuote = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { acceptProviderQuoteForCustomer } = await import("./repository.server");
     return acceptProviderQuoteForCustomer(context.userId, data);
+  });
+
+
+/** Activate/pause an approved service for an owned approved provider business. */
+export const setCurrentProviderServiceAvailability = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(setProviderServiceAvailabilityInputSchema)
+  .handler(async ({ context, data }) => {
+    const { setProviderServiceAvailabilityForUser } = await import("./repository.server");
+    return setProviderServiceAvailabilityForUser(context.userId, data);
+  });
+
+/** Make an approved machine available/unavailable for customer assignments. */
+export const setCurrentProviderAssetAvailability = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(setProviderAssetAvailabilityInputSchema)
+  .handler(async ({ context, data }) => {
+    const { setProviderAssetAvailabilityForUser } = await import("./repository.server");
+    return setProviderAssetAvailabilityForUser(context.userId, data);
   });
