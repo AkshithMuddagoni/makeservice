@@ -1303,6 +1303,7 @@ function requiredServiceDocumentKeys(serviceId: string, selectedTasks: string[])
   if (serviceId === "crane") {
     keys.add("CRANE_LOAD_CHART");
     keys.add("CRANE_INSPECTION");
+    keys.add("CRANE_OPERATOR_COMPETENCE");
   }
   if (serviceId === "tanker") {
     keys.add("WATER_SOURCE_EVIDENCE");
@@ -1342,7 +1343,7 @@ async function countMissingScopedDocuments(
   input: {
     businessId: string;
     itemId: string;
-    scopeColumn: "provider_service_id" | "asset_id";
+    scopeColumn: "provider_service_id" | "asset_id" | "operator_id";
     documentKeys: string[];
   },
 ): Promise<number> {
@@ -1361,6 +1362,119 @@ async function countMissingScopedDocuments(
     [input.documentKeys, input.businessId, input.itemId],
   );
   return Number(rows[0]?.count ?? 0);
+}
+
+
+
+function requiredOperatorDocumentKeys(roleTitle: string): string[] {
+  const keys = ["OPERATOR_COMPETENCE_CERTIFICATE"];
+  if (/driver|road operator/i.test(roleTitle)) keys.push("OPERATOR_DL");
+  return keys;
+}
+
+/** An operator must be attached to approved machinery and have scoped evidence. */
+export async function applyAdminProviderOperatorReviewDecision(
+  adminUserId: string,
+  input: AdminItemReviewInput,
+): Promise<{ itemId: string; status: ProviderReviewStatus; pendingRequiredDocuments: number }> {
+  assertProductionIdentity(adminUserId);
+  assertAdminReviewReason(input.decision as AdminReviewDecision, input.note);
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireFieldlyAdmin(tx, adminUserId);
+    const rows = await tx.query<{
+      id: string; business_id: string; business_status: ProviderReviewStatus;
+      role_title: string; verification_status: ProviderReviewStatus;
+    }>(
+      `select po.id::text as id, po.business_id::text as business_id,
+              pb.verification_status::text as business_status,
+              po.role_title, po.verification_status::text as verification_status
+       from public.provider_operators po
+       join public.provider_businesses pb on pb.id = po.business_id
+       where po.id = $1::uuid and pb.is_suspended = false
+       for update of po, pb`,
+      [input.itemId],
+    );
+    const operator = rows[0];
+    if (!operator) throw new Error("Provider operator not found.");
+
+    const assignedAssets = await tx.query<{ id: string; verification_status: ProviderReviewStatus }>(
+      `select pa.id::text as id, pa.verification_status::text as verification_status
+       from public.provider_operator_assets poa
+       join public.provider_assets pa
+         on pa.id = poa.asset_id and pa.business_id = poa.business_id
+       where poa.operator_id = $1::uuid and poa.business_id = $2::uuid
+       order by pa.id`,
+      [operator.id, operator.business_id],
+    );
+    if (input.decision === "approved") {
+      if (!assignedAssets.length) {
+        throw new Error("Assign this operator to at least one machine before approval.");
+      }
+      if (assignedAssets.some((asset) => asset.verification_status !== "approved")) {
+        throw new Error("Approve every machine assigned to this operator before approving the operator.");
+      }
+    }
+
+    const pendingRequiredDocuments = await countMissingScopedDocuments(tx, {
+      businessId: operator.business_id,
+      itemId: operator.id,
+      scopeColumn: "operator_id",
+      documentKeys: requiredOperatorDocumentKeys(operator.role_title),
+    });
+    assertAdminItemReviewAllowed({
+      currentStatus: operator.verification_status,
+      decision: input.decision,
+      businessStatus: operator.business_status,
+      pendingRequiredDocuments,
+    });
+
+    const updated = await tx.query<{ verification_status: ProviderReviewStatus }>(
+      `update public.provider_operators
+       set verification_status = $2::fieldly_review_status,
+           reviewer_note = nullif($3, ''),
+           reviewed_by = $4,
+           reviewed_at = now(),
+           updated_at = now()
+       where id = $1::uuid
+       returning verification_status::text as verification_status`,
+      [operator.id, input.decision, input.note.trim(), adminUserId],
+    );
+    const status = updated[0]?.verification_status;
+    if (!status) throw new Error("Operator review decision could not be saved.");
+
+    await tx.query(
+      `insert into public.fieldly_admin_audit
+         (admin_user_id, action, target_type, target_id, reason, metadata)
+       values ($1, $2, 'provider_operator', $3, nullif($4, ''), $5::jsonb)`,
+      [adminUserId, `provider_operator.${input.decision}`, operator.id, input.note.trim(),
+       JSON.stringify({ businessId: operator.business_id, assignedAssetIds: assignedAssets.map((asset) => asset.id), pendingRequiredDocuments })],
+    );
+
+    await tx.query(
+      `update public.provider_document_requirements r
+       set status = case when not exists (
+         select 1 from public.provider_assets pa
+         where pa.business_id = r.business_id
+           and not exists (
+             select 1 from public.provider_operator_assets poa
+             join public.provider_operators po
+               on po.id = poa.operator_id and po.business_id = poa.business_id
+             where poa.business_id = r.business_id
+               and poa.asset_id = pa.id
+               and po.verification_status = 'approved'
+           )
+       ) and exists (
+         select 1 from public.provider_operators po
+         where po.business_id = r.business_id and po.verification_status = 'approved'
+       ) then 'verified' else 'submitted' end,
+           updated_at = now()
+       where r.business_id = $1::uuid and r.requirement_key = 'OPERATOR_ROSTER'`,
+      [operator.business_id],
+    );
+
+    return { itemId: operator.id, status, pendingRequiredDocuments };
+  });
 }
 
 /** Review one provider service independently from its parent business. */
