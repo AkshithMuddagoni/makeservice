@@ -1275,25 +1275,28 @@ export async function applyAdminProviderAssetReviewDecision(
     const rows = await tx.query<{
       id: string; business_id: string; business_status: ProviderReviewStatus; state: string;
       asset_type: string; ownership: string; road_use: string; vehicle_class: string | null;
-      verification_status: ProviderReviewStatus; linked_service_ids: string[] | null;
+      verification_status: ProviderReviewStatus;
     }>(
       `select pa.id::text as id, pa.business_id::text as business_id,
               pb.verification_status::text as business_status, pb.state,
               pa.asset_type, pa.ownership, pa.road_use, pa.vehicle_class,
-              pa.verification_status::text as verification_status,
-              coalesce(array_agg(ps.service_id) filter (where ps.service_id is not null), '{}') as linked_service_ids
+              pa.verification_status::text as verification_status
        from public.provider_assets pa
        join public.provider_businesses pb on pb.id = pa.business_id
-       left join public.provider_asset_services pas on pas.asset_id = pa.id
-       left join public.provider_services ps
-         on ps.id = pas.provider_service_id and ps.business_id = pa.business_id
        where pa.id = $1::uuid and pb.is_suspended = false
-       group by pa.id, pb.id
        for update of pa, pb`,
       [input.itemId],
     );
     const item = rows[0];
     if (!item) throw new Error("Provider machine not found.");
+    const linkedServices = await tx.query<{ service_id: string }>(
+      `select ps.service_id
+       from public.provider_asset_services pas
+       join public.provider_services ps
+         on ps.id = pas.provider_service_id and ps.business_id = $2::uuid
+       where pas.asset_id = $1::uuid`,
+      [item.id, item.business_id],
+    );
     const pendingRequiredDocuments = await countMissingScopedDocuments(tx, {
       businessId: item.business_id,
       itemId: item.id,
@@ -1304,7 +1307,7 @@ export async function applyAdminProviderAssetReviewDecision(
         ownership: item.ownership,
         roadUse: item.road_use,
         vehicleClass: item.vehicle_class,
-        linkedServiceIds: item.linked_service_ids ?? [],
+        linkedServiceIds: linkedServices.map((row) => row.service_id),
       }),
     });
     assertAdminItemReviewAllowed({
