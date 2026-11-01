@@ -20,6 +20,8 @@ const migrationFiles = [
   "migrations/fieldly/0010_booking_start_code_issue_limit.sql",
   "migrations/fieldly/0011_provider_document_upload_sessions.sql",
   "migrations/fieldly/0012_provider_operator_roster.sql",
+  "migrations/fieldly/0013_index_provider_document_upload_session_foreign_keys.sql",
+  "migrations/fieldly/0014_index_provider_operator_asset_foreign_keys.sql",
 ];
 
 test("Fieldly PostgreSQL migrations apply cleanly without Supabase Auth tables", async () => {
@@ -41,7 +43,6 @@ test("Fieldly PostgreSQL migrations apply cleanly without Supabase Auth tables",
       "provider_services",
       "provider_assets",
       "provider_documents",
-      "provider_operator_assets",
       "job_requests",
       "provider_quotes",
       "bookings",
@@ -213,6 +214,11 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
       "provider_operators_linked_user_id_idx",
       "provider_operator_assets_asset_idx",
       "provider_operator_assets_business_idx",
+      "provider_operator_assets_operator_business_fk_idx",
+      "provider_operator_assets_asset_business_fk_idx",
+      "provider_document_upload_sessions_provider_service_id_idx",
+      "provider_document_upload_sessions_asset_id_idx",
+      "provider_document_upload_sessions_operator_id_idx",
       "provider_quotes_business_id_idx",
       "provider_services_reviewed_by_idx",
     ];
