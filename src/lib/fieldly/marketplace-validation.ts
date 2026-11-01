@@ -1,0 +1,43 @@
+import { z } from "zod";
+import { isValidIndiaPincode } from "../india-validation";
+
+const serviceIdSchema = z.string().regex(/^[a-z0-9_-]{1,60}$/);
+const siteSchema = z.object({
+  label: z.string().trim().min(2).max(160),
+  area: z.string().trim().min(2).max(160),
+  city: z.string().trim().min(2).max(100),
+  state: z.string().trim().min(2).max(100),
+  district: z.string().trim().max(100).optional(),
+  pincode: z.string().trim().optional().refine(
+    (value) => value === undefined || value === "" || isValidIndiaPincode(value),
+    "Enter a valid six-digit Indian PIN code.",
+  ),
+  address: z.string().trim().max(300).optional(),
+  landmark: z.string().trim().max(160).optional(),
+  lat: z.number().finite().min(-90).max(90),
+  lng: z.number().finite().min(-180).max(180),
+}).strict();
+
+const requirementsSchema = z.record(
+  z.string().trim().min(1).max(80),
+  z.string().max(500),
+).refine((value) => Object.keys(value).length <= 30, "Too many service requirement fields.");
+
+export const discoverProvidersInputSchema = z.object({
+  serviceId: serviceIdSchema,
+  site: siteSchema,
+}).strict();
+
+export const createJobRequestInputSchema = z.object({
+  serviceId: serviceIdSchema,
+  businessId: z.string().uuid(),
+  site: siteSchema,
+  requirements: requirementsSchema,
+  whenLabel: z.string().trim().min(1).max(120),
+  scheduledFor: z.string().datetime({ offset: true }).nullable().optional(),
+  notes: z.string().trim().max(2000),
+  detailsConsent: z.literal(true),
+}).strict();
+
+export type DiscoverProvidersInput = z.infer<typeof discoverProvidersInputSchema>;
+export type CreateJobRequestInput = z.infer<typeof createJobRequestInputSchema>;
