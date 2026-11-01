@@ -1,11 +1,12 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { ArrowLeft, BadgeCheck, SlidersHorizontal } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MapCanvas } from "@/components/fieldly/map-canvas";
 import { Stars } from "@/components/fieldly/bits";
 import { CustomerSignInDialog } from "@/components/fieldly/customer-sign-in-dialog";
 import { Button } from "@/components/ui/button";
 import { authEnabled } from "@/lib/auth/client";
+import { createCurrentJobRequest, discoverCurrentProviders } from "@/lib/fieldly/account.functions";
 import { getService, isAvailableForService } from "@/lib/fieldly/catalog";
 import { formatKm, kmBetween, travelMinutes } from "@/lib/fieldly/geo";
 import { inr } from "@/lib/fieldly/format";
@@ -17,6 +18,28 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/find/$slug")({ component: FindPage });
 
 type SortKey = "recommended" | "nearest" | "rating" | "price";
+
+type LiveProvider = {
+  businessId: string;
+  providerServiceId: string;
+  serviceId: string;
+  name: string;
+  area: string;
+  city: string;
+  district: string;
+  state: string;
+  latitude: number;
+  longitude: number;
+  yearsExperience: number;
+  languages: string[];
+  bio: string;
+  equipment: string;
+  rating: number;
+  reviewCount: number;
+  distanceKm: number;
+};
+
+type CreatedLiveRequest = { requestId: string; providerName: string; distanceKm: number };
 
 function FindPage() {
   const { slug } = Route.useParams();
@@ -30,7 +53,69 @@ function FindPage() {
   const [verifiedOnly, setVerifiedOnly] = useState(true);
   const [q, setQ] = useState("");
   const [signInOpen, setSignInOpen] = useState(true);
+  const [liveProviders, setLiveProviders] = useState<LiveProvider[]>([]);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [liveError, setLiveError] = useState("");
+  const [requestingBusinessId, setRequestingBusinessId] = useState<string | null>(null);
+  const [createdLiveRequest, setCreatedLiveRequest] = useState<CreatedLiveRequest | null>(null);
   const req = draft?.serviceId === slug ? draft.requirements : {};
+
+  useEffect(() => {
+    if (!authEnabled || !site || session?.role !== "customer" || !service) return;
+    let cancelled = false;
+    setLiveLoading(true);
+    setLiveError("");
+    void discoverCurrentProviders({ data: { serviceId: slug, site } })
+      .then((result) => { if (!cancelled) setLiveProviders(result); })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setLiveProviders([]);
+          setLiveError(error instanceof Error ? error.message : "Unable to load verified providers.");
+        }
+      })
+      .finally(() => { if (!cancelled) setLiveLoading(false); });
+    return () => { cancelled = true; };
+  }, [slug, site, session?.role, service]);
+
+  async function createLiveRequest(provider: LiveProvider) {
+    if (!site || !service || session?.role !== "customer") {
+      setLiveError("Sign in with your customer account and confirm the work site first.");
+      return;
+    }
+    if (draft?.serviceId !== slug) {
+      setLiveError("Please complete the service requirements before requesting a quote.");
+      return;
+    }
+    setRequestingBusinessId(provider.businessId);
+    setLiveError("");
+    try {
+      const whenLabel = draft.whenLabel;
+      const scheduledFor = /^\\d{4}-\\d{2}-\\d{2}$/.test(whenLabel)
+        ? new Date(whenLabel + "T09:00:00+05:30").toISOString()
+        : null;
+      const result = await createCurrentJobRequest({
+        data: {
+          serviceId: slug,
+          businessId: provider.businessId,
+          site,
+          requirements: draft.requirements,
+          whenLabel,
+          scheduledFor,
+          notes: draft.notes,
+          detailsConsent: true,
+        },
+      });
+      setCreatedLiveRequest({
+        requestId: result.requestId,
+        providerName: result.providerName,
+        distanceKm: result.distanceKm,
+      });
+    } catch (error) {
+      setLiveError(error instanceof Error ? error.message : "Your request could not be saved.");
+    } finally {
+      setRequestingBusinessId(null);
+    }
+  }
 
   const rows = useMemo(() => {
     if (!service || !site) return [];
@@ -103,18 +188,110 @@ function FindPage() {
   ];
 
   if (authEnabled) {
+    const liveMarkers = [
+      { id: "site", lat: site.lat, lng: site.lng, label: "Your work site", kind: "site" as const },
+      ...liveProviders.slice(0, 12).map((provider) => ({
+        id: provider.businessId,
+        lat: provider.latitude,
+        lng: provider.longitude,
+        label: provider.name + " · " + formatKm(provider.distanceKm),
+        kind: "provider" as const,
+      })),
+    ];
+
     return (
-      <main className="mx-auto max-w-3xl px-4 py-16">
-        <section className="rounded-3xl border border-line bg-card p-6 sm:p-9">
+      <main className="mx-auto max-w-6xl px-4 py-8">
+        <Link to="/services/$slug" params={{ slug }} className="inline-flex items-center gap-1 text-sm font-semibold text-muted">
+          <ArrowLeft className="size-4" /> Edit service details
+        </Link>
+        <header className="mt-3">
           <p className="text-xs font-bold uppercase tracking-widest text-field">Verified provider network</p>
-          <h1 className="mt-2 font-display text-3xl font-bold">Live service bookings are not open yet.</h1>
-          <p className="mt-3 text-sm leading-6 text-muted">
-            We are connecting verified providers, secure work-site requests and real booking updates.
-            Sample provider profiles and simulated quotes are hidden on this deployment. No booking or
-            payment can be made here yet.
+          <h1 className="mt-1 font-display text-3xl font-bold">{service.name} near {site.label}</h1>
+          <p className="mt-2 text-sm text-muted">
+            Listings require an approved business, approved service, approved available equipment and a recent provider-online signal.
           </p>
-          <Button asChild className="mt-5"><Link to="/">Back to home</Link></Button>
-        </section>
+        </header>
+        {createdLiveRequest ? (
+          <section className="mt-6 rounded-3xl border border-field/20 bg-field-soft/40 p-6">
+            <div className="flex items-center gap-2 text-sm font-bold text-field">
+              <BadgeCheck className="size-5" /> Service request saved
+            </div>
+            <h2 className="mt-2 font-display text-2xl font-bold">Your request was sent to {createdLiveRequest.providerName}.</h2>
+            <p className="mt-2 text-sm leading-6 text-muted">
+              Reference: <span className="font-mono font-semibold">{createdLiveRequest.requestId}</span><br />
+              Provider base location: {formatKm(createdLiveRequest.distanceKm)} away.<br />
+              No quote has been accepted, no booking is confirmed, and no payment has been taken.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button asChild><Link to="/requests/$requestId" params={{ requestId: createdLiveRequest.requestId }}>View saved request</Link></Button>
+              <Button variant="outline" asChild><Link to="/">Back to home</Link></Button>
+            </div>
+          </section>
+        ) : (
+          <div className="mt-5 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+            <section className="min-w-0">
+              {liveLoading ? (
+                <p className="rounded-2xl border border-line bg-card p-5 text-sm text-muted">Searching verified providers in the selected service radius…</p>
+              ) : liveProviders.length === 0 ? (
+                <div className="rounded-2xl border border-line bg-card p-5">
+                  <h2 className="font-display text-xl font-bold">No verified providers are currently available.</h2>
+                  <p className="mt-2 text-sm leading-6 text-muted">
+                    No provider currently meets all approval, equipment, availability and recent-online requirements within {service.radiusKm} km. Demo profiles are not shown as real providers.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  <p className="text-sm font-semibold">{liveProviders.length} verified provider{liveProviders.length === 1 ? "" : "s"} found</p>
+                  {liveProviders.map((provider) => (
+                    <article key={provider.businessId} className="rounded-2xl border border-line bg-card p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 font-semibold">
+                            <span className="truncate">{provider.name}</span>
+                            <BadgeCheck className="size-4 shrink-0 text-field" />
+                            <span className="rounded-full bg-field-soft px-2 py-1 text-xs font-semibold text-field">Verified</span>
+                          </div>
+                          <p className="mt-1 text-xs text-muted">{provider.area}, {provider.city}, {provider.state}</p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+                            {provider.reviewCount > 0 ? (
+                              <><Stars value={provider.rating} /><span>{provider.rating.toFixed(1)} · {provider.reviewCount} reviews</span></>
+                            ) : <span>New provider · no reviews yet</span>}
+                            <span>{formatKm(provider.distanceKm)} away</span>
+                            <span>{provider.yearsExperience} years’ experience</span>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="mt-3 text-sm">{provider.equipment || service.name}</p>
+                      {provider.bio && <p className="mt-1 text-sm leading-5 text-muted">{provider.bio}</p>}
+                      {provider.languages.length > 0 && <p className="mt-2 text-xs text-muted">Languages: {provider.languages.join(", ")}</p>}
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-xs text-muted">Final price is provided in the provider's quote.</p>
+                        <Button
+                          disabled={requestingBusinessId !== null}
+                          onClick={() => void createLiveRequest(provider)}
+                        >
+                          {requestingBusinessId === provider.businessId ? "Sending request…" : "Request a quote"}
+                        </Button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+              {liveError && <p role="alert" className="mt-3 rounded-xl bg-danger-soft p-3 text-sm text-danger">{liveError}</p>}
+              {draft?.serviceId === slug && draft.siteImages?.length ? (
+                <p className="mt-3 text-xs leading-5 text-muted">
+                  You selected {draft.siteImages.length} site photo(s). Secure photo upload is not enabled yet, so these photos are not included in the database request.
+                </p>
+              ) : null}
+            </section>
+            <aside className="h-80 overflow-hidden rounded-2xl border border-line lg:sticky lg:top-20">
+              <MapCanvas center={site} markers={liveMarkers} className="h-full" />
+              <p className="bg-card px-3 py-2 text-xs text-muted">
+                Map pins show verified provider base locations, not live vehicle positions.
+              </p>
+            </aside>
+          </div>
+        )}
       </main>
     );
   }
