@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "../auth/middleware";
 import { isValidIndiaPincode } from "../india-validation";
-import { createJobRequestInputSchema, discoverProvidersInputSchema, setProviderPresenceInputSchema, submitProviderQuoteInputSchema } from "./marketplace-validation";
+import { acceptProviderQuoteInputSchema, createJobRequestInputSchema, discoverProvidersInputSchema, setProviderPresenceInputSchema, submitProviderQuoteInputSchema } from "./marketplace-validation";
 
 /**
  * These functions are safe to call from React. Database access is dynamically
@@ -184,4 +184,14 @@ export const submitCurrentProviderQuote = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { submitProviderQuoteForUser } = await import("./repository.server");
     return submitProviderQuoteForUser(context.userId, data);
+  });
+
+
+/** Accept a pending provider quote and confirm the booking atomically. */
+export const acceptCurrentProviderQuote = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(acceptProviderQuoteInputSchema)
+  .handler(async ({ context, data }) => {
+    const { acceptProviderQuoteForCustomer } = await import("./repository.server");
+    return acceptProviderQuoteForCustomer(context.userId, data);
   });
