@@ -753,7 +753,7 @@ import {
 async function requireFieldlyAdmin(sql: Awaited<ReturnType<typeof getSql>>, userId: string) {
   assertProductionIdentity(userId);
   const rows = await sql.query<{ role: string }>(
-    "select role::text as role from public.fieldly_user_roles where user_id = $1 and role = 'admin' limit 1",
+    "select role::text as role from public.fieldly_user_roles where user_id = $1 and role = 'admin' for share",
     [userId],
   );
   if (!rows[0]) {
@@ -1070,10 +1070,12 @@ export async function applyAdminProviderReviewDecision(input: {
   note: string;
 }): Promise<{ businessId: string; status: ProviderReviewStatus; pendingRequiredDocuments: number }> {
   const sql = await getSql();
-  await requireFieldlyAdmin(sql, input.adminUserId);
   assertAdminReviewReason(input.decision, input.note);
 
   return sql.transaction(async (tx) => {
+    // Lock the admin-role row for this transaction. A concurrent revocation
+    // must wait until this review decision and its audit record commit.
+    await requireFieldlyAdmin(tx, input.adminUserId);
     const businessRows = await tx.query<{
       id: string; verification_status: ProviderReviewStatus;
     }>(
