@@ -649,6 +649,7 @@ export type ProviderDashboardApplication = {
     reviewerNote: string | null;
     reviewedAt: string | null;
     assetIds: string[];
+    documents: Array<{ documentType: string; status: string; expiresOn: string | null }>;
   }>;
   documentRequirements: Array<{
     key: string;
@@ -713,7 +714,7 @@ export async function getProviderDashboardForUser(
 
   const applications: ProviderDashboardApplication[] = [];
   for (const business of businesses) {
-    const [services, assets, operators, requirements, payouts, presence] = await Promise.all([
+    const [services, assets, operators, operatorDocuments, requirements, payouts, presence] = await Promise.all([
       sql.query<{
         id: string;
         service_id: string;
@@ -791,6 +792,19 @@ export async function getProviderDashboardForUser(
          where po.business_id = $1
          group by po.id
          order by po.created_at asc`,
+        [business.id],
+      ),
+      sql.query<{
+        operator_id: string;
+        document_type: string;
+        status: string;
+        expires_on: string | null;
+      }>(
+        `select operator_id::text as operator_id, document_type,
+                status::text as status, expires_on::text as expires_on
+         from public.provider_documents
+         where business_id = $1 and operator_id is not null
+         order by created_at desc`,
         [business.id],
       ),
       sql.query<{
@@ -890,6 +904,13 @@ export async function getProviderDashboardForUser(
         reviewerNote: operator.reviewer_note,
         reviewedAt: operator.reviewed_at,
         assetIds: operator.asset_ids ?? [],
+        documents: operatorDocuments
+          .filter((document) => document.operator_id === operator.id)
+          .map((document) => ({
+            documentType: document.document_type,
+            status: document.status,
+            expiresOn: document.expires_on,
+          })),
       })),
       documentRequirements: requirements.map((requirement) => ({
         key: requirement.requirement_key,
