@@ -13,7 +13,7 @@ import { useFieldly, useProviders } from "@/lib/fieldly/store";
 import type { BookingStatus } from "@/lib/fieldly/types";
 import { cn } from "@/lib/utils";
 import { authEnabled } from "@/lib/auth/client";
-import { getCurrentBookingDetail, issueCurrentBookingStartCode, stopCurrentProviderBookingLocation, updateCurrentBookingParticipantAction, updateCurrentProviderBookingLocation, updateCurrentProviderBookingStatus, verifyCurrentBookingStartCode } from "@/lib/fieldly/account.functions";
+import { getCurrentBookingDetail, issueCurrentBookingStartCode, sendCurrentBookingMessage, stopCurrentProviderBookingLocation, updateCurrentBookingParticipantAction, updateCurrentProviderBookingLocation, updateCurrentProviderBookingStatus, verifyCurrentBookingStartCode } from "@/lib/fieldly/account.functions";
 
 export const Route = createFileRoute("/bookings/$bookingId")({ component: BookingPage });
 
@@ -54,6 +54,10 @@ type LiveBooking = {
   events: Array<{
     id: string; fromStatus: string | null; toStatus: string;
     eventType: string; note: string | null; createdAt: string;
+  }>;
+  messages: Array<{
+    id: string; senderRole: "customer" | "provider"; messageText: string;
+    createdAt: string; isMine: boolean;
   }>;
 };
 
@@ -109,6 +113,8 @@ function BookingPage() {
   const [verificationAttemptsLeft, setVerificationAttemptsLeft] = useState<number | null>(null);
   const [sharingLiveLocation, setSharingLiveLocation] = useState(false);
   const [liveLocationError, setLiveLocationError] = useState("");
+  const [chatDraft, setChatDraft] = useState("");
+  const [sendingChatMessage, setSendingChatMessage] = useState(false);
   const watchIdRef = useRef<number | null>(null);
   const lastLocationSentAtRef = useRef(0);
 
@@ -237,6 +243,25 @@ function BookingPage() {
       void stopCurrentProviderBookingLocation({ data: { bookingId } }).catch(() => undefined);
     }
   }, [liveBooking?.status, bookingId]);
+
+  async function sendLiveChatMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const messageText = chatDraft.trim();
+    if (!messageText || !liveBooking) return;
+    setSendingChatMessage(true);
+    setLiveError("");
+    try {
+      await sendCurrentBookingMessage({
+        data: { bookingId, messageText },
+      });
+      setChatDraft("");
+      await refreshLiveBooking();
+    } catch (error) {
+      setLiveError(error instanceof Error ? error.message : "Your message could not be sent.");
+    } finally {
+      setSendingChatMessage(false);
+    }
+  }
 
   async function issueLiveStartCode() {
     setLiveBusy(true);
@@ -420,6 +445,52 @@ function BookingPage() {
                   </li>
                 ))}
               </ol>
+            </section>
+
+            <section className="mt-4 rounded-2xl border border-line bg-card p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="font-display text-xl font-bold">Booking chat</h2>
+                  <p className="mt-1 text-xs text-muted">Text-only chat with the customer or assigned provider. Phone numbers are not shared here.</p>
+                </div>
+                <span className="text-xs text-muted">{liveBooking.messages.length} message(s)</span>
+              </div>
+              <div className="mt-4 grid max-h-80 gap-2 overflow-y-auto pr-1">
+                {liveBooking.messages.length === 0 ? (
+                  <p className="rounded-xl bg-paper p-3 text-sm text-muted">
+                    No messages yet. Use this chat to coordinate the booked service.
+                  </p>
+                ) : liveBooking.messages.map((message) => (
+                  <div key={message.id} className={cn("max-w-[88%] rounded-2xl p-3", message.isMine ? "ml-auto bg-field-soft/60" : "mr-auto bg-paper")}>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold">{message.isMine ? "You" : message.senderRole === "customer" ? "Customer" : "Provider"}</p>
+                      <p className="text-[11px] text-muted">{whenClock(new Date(message.createdAt).getTime())}</p>
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5">{message.messageText}</p>
+                  </div>
+                ))}
+              </div>
+              {liveBooking.status === "cancelled" ? (
+                <p className="mt-3 rounded-xl bg-paper p-3 text-xs text-muted">Messaging is closed for a cancelled booking.</p>
+              ) : (
+                <form onSubmit={(event) => void sendLiveChatMessage(event)} className="mt-3 grid gap-2">
+                  <textarea
+                    value={chatDraft}
+                    onChange={(event) => setChatDraft(event.target.value.slice(0, 2000))}
+                    maxLength={2000}
+                    rows={3}
+                    placeholder="Write a message to the other booking participant…"
+                    className="w-full rounded-xl border border-line bg-white p-3 text-sm"
+                    aria-label="Booking chat message"
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-muted">{chatDraft.length}/2000 · 12 messages/minute</span>
+                    <Button type="submit" size="sm" disabled={sendingChatMessage || chatDraft.trim().length === 0}>
+                      {sendingChatMessage ? "Sending…" : "Send message"}
+                    </Button>
+                  </div>
+                </form>
+              )}
             </section>
           </section>
 
