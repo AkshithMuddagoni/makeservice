@@ -159,6 +159,45 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
     );
     assert.equal(requirementsTable?.rowsecurity, true);
 
+    const expectedIndexes = [
+      "booking_events_actor_user_id_idx",
+      "booking_live_locations_business_id_idx",
+      "booking_live_locations_operator_id_idx",
+      "booking_messages_sender_user_id_idx",
+      "bookings_assigned_asset_id_idx",
+      "bookings_assigned_operator_id_idx",
+      "bookings_provider_service_id_idx",
+      "fieldly_admin_audit_admin_user_id_idx",
+      "fieldly_user_roles_granted_by_idx",
+      "job_request_targets_business_id_idx",
+      "job_request_targets_provider_service_id_idx",
+      "provider_asset_services_provider_service_id_idx",
+      "provider_assets_reviewed_by_idx",
+      "provider_businesses_reviewed_by_idx",
+      "provider_documents_asset_id_idx",
+      "provider_documents_operator_id_idx",
+      "provider_documents_provider_service_id_idx",
+      "provider_documents_reviewed_by_idx",
+      "provider_operators_linked_user_id_idx",
+      "provider_quotes_business_id_idx",
+      "provider_services_reviewed_by_idx",
+    ];
+    const indexes = await db.query(
+      "select indexname from pg_indexes where schemaname = 'public'",
+    );
+    const indexNames = new Set(indexes.rows.map((row) => row.indexname));
+    for (const name of expectedIndexes) {
+      assert.ok(indexNames.has(name), `missing expected foreign-key index: ${name}`);
+    }
+    assert.ok(
+      !indexNames.has("provider_businesses_owner_lookup_idx"),
+      "the duplicate provider owner index must be removed",
+    );
+    const migrationLedger = await db.query(
+      "select tablename, rowsecurity from pg_tables where schemaname = 'public' and tablename = '_migrations'",
+    );
+    assert.equal(migrationLedger.rows[0]?.rowsecurity, true);
+
     const rollbackDb = new PGlite();
     try {
       await rollbackDb.waitReady;
