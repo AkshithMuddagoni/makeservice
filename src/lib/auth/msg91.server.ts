@@ -1,5 +1,5 @@
-import { isValidIndiaE164Phone, isValidIndiaMobileNumber } from "../india-validation.ts";
-export { isValidIndiaE164Phone } from "../india-validation.ts";
+import { isValidIndiaE164Phone as validateIndiaE164Phone, isValidIndiaMobileNumber } from "../india-validation.ts";
+export { validateIndiaE164Phone as isValidIndiaE164Phone };
 
 /**
  * Server-only MSG91 delivery for Better Auth's generated phone OTP.
@@ -16,14 +16,9 @@ export type Msg91Settings = {
 
 export type Msg91Fetch = typeof fetch;
 
-/** Validate the exact E.164 representation required by the Indian OTP flow. */
-export function isValidIndiaE164Phone(phoneNumber: string): boolean {
-  return /^\+91[6-9]\d{9}$/.test(phoneNumber);
-}
-
 /** Stable placeholder email required by Better Auth for phone-only sign-up. */
 export function temporaryEmailForIndiaPhone(phoneNumber: string): string {
-  if (!isValidIndiaE164Phone(phoneNumber)) {
+  if (!validateIndiaE164Phone(phoneNumber)) {
     throw new Error("Phone number must be a valid Indian E.164 mobile number.");
   }
   return `customer+${phoneNumber.replace(/\D/g, "")}@phone.fieldly.invalid`;
@@ -34,7 +29,7 @@ export function normalizeIndiaMobile(phoneNumber: string): string {
   const national = digits.startsWith("91") && digits.length === 12
     ? digits.slice(2)
     : digits;
-  if (!/^[6-9]\d{9}$/.test(national)) {
+  if (!isValidIndiaMobileNumber(national)) {
     throw new Error("Phone number must be a valid Indian mobile number.");
   }
   return `91${national}`;
