@@ -39,6 +39,7 @@ The canonical migration sequence is:
 8. `migrations/fieldly/0006_lock_down_migration_ledger.sql` — enable RLS on the custom migration ledger and revoke all browser-role access.
 9. `migrations/fieldly/0007_index_foreign_keys.sql` — add supporting indexes for foreign keys and remove a confirmed duplicate provider-owner index.
 10. `migrations/fieldly/0008_create_private_documents_bucket.sql` — provision a non-public 10 MiB provider-document bucket with PDF/JPEG/PNG/WebP allowlisting and no browser policies.
+11. `migrations/fieldly/0011_provider_document_upload_sessions.sql` — bind one-time upload sessions to the verified provider, business and document scope; final document rows are created only after server-side inspection.
 11. `migrations/fieldly/0009_booking_start_code_issuance.sql` — record the last service-start code issuance time to enforce a regeneration cooldown without storing plaintext codes.
 12. `migrations/fieldly/0010_booking_start_code_issue_limit.sql` — cap customer start-code issuance at five attempts per booking.
 
@@ -153,7 +154,7 @@ Your database should finish with twelve migration ledger records:
 `0001_auth.sql`, `0002_phone_number_fields.sql`,
 `0003_rate_limit.sql`, `0004_lock_down_auth_data_access.sql`,
 `0001_fieldly_core.sql`, `0002_lock_down_browser_data_access.sql`, and
-`0005_provider_onboarding.sql`, `0006_lock_down_migration_ledger.sql`, `0007_index_foreign_keys.sql`, and `0008_create_private_documents_bucket.sql`. On the current makeservice project, the first seven were already applied; migrations 0006 and 0007 have been applied and recorded, so only the private-bucket migration remains pending.
+`0005_provider_onboarding.sql`, `0006_lock_down_migration_ledger.sql`, `0007_index_foreign_keys.sql`, and `0008_create_private_documents_bucket.sql` and `0011_provider_document_upload_sessions.sql`. On the current makeservice project, migrations 0006, 0007 and 0008 are already applied; migration 0011 is the new upload-session table migration.
 If the runner reports any SQL or connection error, stop and share only the
 error text with credentials and hostnames removed. Do not retry against
 production.
@@ -431,7 +432,7 @@ No database migration is required for this admin milestone: the role, audit
 table, foreign keys and RLS already exist in the eight migrations in the deployment sequence.
 ## Private provider-document bucket
 
-Migration 0008 provisions `fieldly-private` as a non-public bucket with a 10 MiB file-size limit and an allowlist of PDF, JPEG, PNG and WebP. No browser Storage policies are created. The bucket is infrastructure only: **there is no upload endpoint, signed URL endpoint, admin file viewer, malware scanner or document-retention job yet**. Do not ask providers to submit KYC files until those authenticated server workflows exist.
+Migration 0008 provisions `fieldly-private` as a non-public bucket with a 10 MiB file-size limit and an allowlist of PDF, JPEG, PNG and WebP. Migration 0011 adds server-only upload sessions that bind a signed upload to the provider owner and its specific document requirement. No browser Storage policies are created. The bucket is infrastructure only: **uploads are feature-gated by `PROVIDER_DOCUMENT_UPLOADS_ENABLED=true` and require a healthy private ClamAV scanner configured with `CLAMAV_HOST` (and optional `CLAMAV_PORT`). The application rejects uploaded files if the scan cannot complete or reports a threat. A separate retention/deletion job and external security audit are still required**. Do not ask providers to submit KYC files until those authenticated server workflows exist.
 
 ## Sensitive data rules
 
