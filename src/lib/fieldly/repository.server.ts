@@ -870,6 +870,7 @@ export type AdminProviderApplicationDetail = {
   uploadedDocuments: Array<{
     id: string;
     documentType: string;
+    originalFilename: string;
     mimeType: string;
     sizeBytes: number;
     status: string;
@@ -1017,10 +1018,10 @@ export async function getAdminProviderApplicationDetail(
       [businessId],
     ),
     sql.query<{
-      id: string; document_type: string; mime_type: string;
+      id: string; document_type: string; original_filename: string; mime_type: string;
       size_bytes: string; status: string; expires_on: string | null; created_at: string;
     }>(
-      `select id, document_type, mime_type, size_bytes::text as size_bytes,
+      `select id, document_type, original_filename, mime_type, size_bytes::text as size_bytes,
               status::text as status, expires_on::text as expires_on, created_at::text as created_at
        from public.provider_documents
        where business_id = $1
@@ -1034,7 +1035,10 @@ export async function getAdminProviderApplicationDetail(
               a.created_at::text as created_at
        from public.fieldly_admin_audit a
        join public."user" u on u.id = a.admin_user_id
-       where a.target_type = 'provider_business' and a.target_id = $1
+       where (a.target_type = 'provider_business' and a.target_id = $1)
+          or (a.target_type = 'provider_document' and a.target_id in (
+            select d.id::text from public.provider_documents d where d.business_id = $1::uuid
+          ))
        order by a.created_at desc
        limit 20`,
       [businessId],
@@ -1082,7 +1086,7 @@ export async function getAdminProviderApplicationDetail(
       jobSpecific: item.job_specific, status: item.status,
     })),
     uploadedDocuments: uploadedDocuments.map((item) => ({
-      id: item.id, documentType: item.document_type,
+      id: item.id, documentType: item.document_type, originalFilename: item.original_filename,
       mimeType: item.mime_type, sizeBytes: Number(item.size_bytes), status: item.status,
       expiresOn: item.expires_on, createdAt: item.created_at,
     })),
