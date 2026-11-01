@@ -1,4 +1,5 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
+import { resolveDbSource } from "./db-config";
 
 /** Which database backend is active. */
 export type DbSource = "postgres" | "pglite";
@@ -15,7 +16,10 @@ const databaseUrl =
  * `DATABASE_URL` is set, otherwise local embedded **PGLite** for preview/dev.
  * The database URL is read only on the server and must never be exposed to Vite.
  */
-export const dbSource: DbSource = databaseUrl ? "postgres" : "pglite";
+export const dbSource: DbSource = resolveDbSource(
+  typeof process !== "undefined" ? process.env.NODE_ENV : undefined,
+  databaseUrl,
+);
 
 /**
  * Minimal shared SQL surface, satisfied by PostgreSQL and PGLite. Both the
