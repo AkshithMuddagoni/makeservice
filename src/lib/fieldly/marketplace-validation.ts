@@ -140,3 +140,19 @@ export const stopProviderBookingLocationInputSchema = z.object({
 }).strict();
 
 export type UpdateProviderBookingLocationInput = z.infer<typeof updateProviderBookingLocationInputSchema>;
+
+
+export const updateProviderBookingLocationInputSchema = z.object({
+  bookingId: z.string().uuid(),
+  latitude: z.number().finite().min(-90).max(90),
+  longitude: z.number().finite().min(-180).max(180),
+  accuracyMeters: z.number().finite().min(0).max(200),
+  headingDegrees: z.number().finite().min(0).max(360).nullable(),
+  speedMps: z.number().finite().min(0).max(120).nullable(),
+}).strict();
+
+export const stopProviderBookingLocationInputSchema = z.object({
+  bookingId: z.string().uuid(),
+}).strict();
+
+export type UpdateProviderBookingLocationInput = z.infer<typeof updateProviderBookingLocationInputSchema>;
