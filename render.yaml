@@ -2,8 +2,9 @@ services:
   - type: web
     name: fieldly-marketplace
     runtime: node
-    # Minimum always-on paid web-service tier (0.5 CPU / 512 MB RAM).
-    plan: starter
+    # Keep the service on Free during development and backend validation.
+    # Upgrade the existing Render service before customer-facing production.
+    plan: free
     buildCommand: npm install && npm run build
     startCommand: npm run start
     healthCheckPath: /
