@@ -425,6 +425,17 @@ function ReviewDetail({
               <p className="mt-2 text-xs text-muted">{statusLabel(asset.ownership)} · {statusLabel(asset.roadUse)}</p>
               <p className="mt-1 text-xs text-muted">For: {asset.serviceIds.map((id) => SERVICE_ONBOARDING[id]?.label ?? id).join(", ")}</p>
               {asset.registrationLast4 && <p className="mt-1 text-xs text-muted">Registration ending {asset.registrationLast4}</p>}
+              {asset.reviewerNote && <p className="mt-2 text-xs text-muted">Reviewer note: {asset.reviewerNote}</p>}
+              <p className="mt-1 text-[11px] text-muted">{asset.isAvailable ? "Available" : "Unavailable"}{asset.reviewedAt ? " · Reviewed " + new Date(asset.reviewedAt).toLocaleString() : ""}</p>
+              {["draft", "submitted", "under_review", "needs_information"].includes(asset.verificationStatus) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" variant="secondary" disabled={itemBusyId !== null || !["draft", "submitted", "needs_information"].includes(asset.verificationStatus)} onClick={() => onItemDecision(asset.id, "asset", "under_review")}>Start / resume review</Button>
+                  <Button size="sm" variant="secondary" disabled={itemBusyId !== null || !["submitted", "under_review"].includes(asset.verificationStatus) || note.trim().length < 8} onClick={() => onItemDecision(asset.id, "asset", "needs_information")}>Request information</Button>
+                  <Button size="sm" variant="danger" disabled={itemBusyId !== null || note.trim().length < 8} onClick={() => onItemDecision(asset.id, "asset", "rejected")}>Reject machine</Button>
+                  <Button size="sm" disabled={itemBusyId !== null || !["submitted", "under_review"].includes(asset.verificationStatus) || detail.verificationStatus !== "approved"} onClick={() => onItemDecision(asset.id, "asset", "approved")}>Approve machine</Button>
+                </div>
+              )}
+              {itemBusyId === "asset:" + asset.id && <p className="mt-2 text-xs text-muted">Saving machine review…</p>}
             </div>
           ))}
         </div>
