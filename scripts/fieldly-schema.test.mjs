@@ -40,6 +40,7 @@ test("Fieldly PostgreSQL migrations apply cleanly without Supabase Auth tables",
       "provider_services",
       "provider_assets",
       "provider_documents",
+      "provider_document_upload_sessions",
       "job_requests",
       "provider_quotes",
       "bookings",
@@ -55,7 +56,7 @@ test("Fieldly PostgreSQL migrations apply cleanly without Supabase Auth tables",
 
     for (const row of tables.rows.filter((row) => row.tablename.startsWith("fieldly_") ||
       row.tablename.startsWith("provider_") ||
-      ["job_requests", "job_request_targets", "bookings", "booking_events",
+      ["provider_document_upload_sessions", "job_requests", "job_request_targets", "bookings", "booking_events",
        "booking_messages", "booking_live_locations", "payment_intents",
        "payment_webhook_events"].includes(row.tablename))) {
       assert.equal(row.rowsecurity, true, `RLS is not enabled on ${row.tablename}`);
