@@ -11,8 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
-import { Route as DeskRouteImport } from './routes/desk'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as DeskRouteImport } from './routes/desk'
 import { Route as JoinRouteImport } from './routes/join'
 import { Route as BookingsIndexRouteImport } from './routes/bookings.index'
 import { Route as BookingsBookingIdRouteImport } from './routes/bookings.$bookingId'
@@ -20,6 +20,7 @@ import { Route as FindSlugRouteImport } from './routes/find.$slug'
 import { Route as ProvidersProviderIdRouteImport } from './routes/providers.$providerId'
 import { Route as RequestsRequestIdRouteImport } from './routes/requests.$requestId'
 import { Route as ServicesSlugRouteImport } from './routes/services.$slug'
+import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -31,14 +32,14 @@ const AccountRoute = AccountRouteImport.update({
   path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DeskRoute = DeskRouteImport.update({
-  id: '/desk',
-  path: '/desk',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeskRoute = DeskRouteImport.update({
+  id: '/desk',
+  path: '/desk',
   getParentRoute: () => rootRouteImport,
 } as any)
 const JoinRoute = JoinRouteImport.update({
@@ -76,12 +77,17 @@ const ServicesSlugRoute = ServicesSlugRouteImport.update({
   path: '/services/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
+  id: '/api/auth/$',
+  path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
-  '/desk': typeof DeskRoute
   '/admin': typeof AdminRoute
+  '/desk': typeof DeskRoute
   '/join': typeof JoinRoute
   '/bookings/$bookingId': typeof BookingsBookingIdRoute
   '/find/$slug': typeof FindSlugRoute
@@ -89,12 +95,13 @@ export interface FileRoutesByFullPath {
   '/requests/$requestId': typeof RequestsRequestIdRoute
   '/services/$slug': typeof ServicesSlugRoute
   '/bookings/': typeof BookingsIndexRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
-  '/desk': typeof DeskRoute
   '/admin': typeof AdminRoute
+  '/desk': typeof DeskRoute
   '/join': typeof JoinRoute
   '/bookings/$bookingId': typeof BookingsBookingIdRoute
   '/find/$slug': typeof FindSlugRoute
@@ -102,13 +109,14 @@ export interface FileRoutesByTo {
   '/requests/$requestId': typeof RequestsRequestIdRoute
   '/services/$slug': typeof ServicesSlugRoute
   '/bookings': typeof BookingsIndexRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
-  '/desk': typeof DeskRoute
   '/admin': typeof AdminRoute
+  '/desk': typeof DeskRoute
   '/join': typeof JoinRoute
   '/bookings/$bookingId': typeof BookingsBookingIdRoute
   '/find/$slug': typeof FindSlugRoute
@@ -116,14 +124,15 @@ export interface FileRoutesById {
   '/requests/$requestId': typeof RequestsRequestIdRoute
   '/services/$slug': typeof ServicesSlugRoute
   '/bookings/': typeof BookingsIndexRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/account'
-    | '/desk'
     | '/admin'
+    | '/desk'
     | '/join'
     | '/bookings/$bookingId'
     | '/find/$slug'
@@ -131,12 +140,13 @@ export interface FileRouteTypes {
     | '/requests/$requestId'
     | '/services/$slug'
     | '/bookings/'
+    | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/account'
-    | '/desk'
     | '/admin'
+    | '/desk'
     | '/join'
     | '/bookings/$bookingId'
     | '/find/$slug'
@@ -144,12 +154,13 @@ export interface FileRouteTypes {
     | '/requests/$requestId'
     | '/services/$slug'
     | '/bookings'
+    | '/api/auth/$'
   id:
     | '__root__'
     | '/'
     | '/account'
-    | '/desk'
     | '/admin'
+    | '/desk'
     | '/join'
     | '/bookings/$bookingId'
     | '/find/$slug'
@@ -157,13 +168,14 @@ export interface FileRouteTypes {
     | '/requests/$requestId'
     | '/services/$slug'
     | '/bookings/'
+    | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRoute
-  DeskRoute: typeof DeskRoute
   AdminRoute: typeof AdminRoute
+  DeskRoute: typeof DeskRoute
   JoinRoute: typeof JoinRoute
   BookingsBookingIdRoute: typeof BookingsBookingIdRoute
   FindSlugRoute: typeof FindSlugRoute
@@ -171,6 +183,7 @@ export interface RootRouteChildren {
   RequestsRequestIdRoute: typeof RequestsRequestIdRoute
   ServicesSlugRoute: typeof ServicesSlugRoute
   BookingsIndexRoute: typeof BookingsIndexRoute
+  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -189,18 +202,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/desk': {
-      id: '/desk'
-      path: '/desk'
-      fullPath: '/desk'
-      preLoaderRoute: typeof DeskRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/admin': {
       id: '/admin'
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/desk': {
+      id: '/desk'
+      path: '/desk'
+      fullPath: '/desk'
+      preLoaderRoute: typeof DeskRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/join': {
@@ -252,14 +265,21 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServicesSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/auth/$': {
+      id: '/api/auth/$'
+      path: '/api/auth/$'
+      fullPath: '/api/auth/$'
+      preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
-  DeskRoute: DeskRoute,
   AdminRoute: AdminRoute,
+  DeskRoute: DeskRoute,
   JoinRoute: JoinRoute,
   BookingsBookingIdRoute: BookingsBookingIdRoute,
   FindSlugRoute: FindSlugRoute,
@@ -267,6 +287,7 @@ const rootRouteChildren: RootRouteChildren = {
   RequestsRequestIdRoute: RequestsRequestIdRoute,
   ServicesSlugRoute: ServicesSlugRoute,
   BookingsIndexRoute: BookingsIndexRoute,
+  ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
