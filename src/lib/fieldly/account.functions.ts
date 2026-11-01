@@ -13,6 +13,7 @@ import {
   getBookingDetailInputSchema,
   issueBookingStartCodeInputSchema,
   reviewAdminProviderDocumentInputSchema,
+  saveProviderOperatorInputSchema,
   sendBookingMessageInputSchema,
   setProviderAssetAvailabilityInputSchema,
   setProviderPresenceInputSchema,
@@ -376,4 +377,23 @@ export const reviewAdminProviderAsset = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { applyAdminProviderAssetReviewDecision } = await import("./repository.server");
     return applyAdminProviderAssetReviewDecision(context.userId, data);
+  });
+
+
+/** Provider owner adds or updates one operator and the machines they may operate. */
+export const saveCurrentProviderOperator = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(saveProviderOperatorInputSchema)
+  .handler(async ({ context, data }) => {
+    const { saveProviderOperatorForUser } = await import("./repository.server");
+    return saveProviderOperatorForUser(context.userId, data);
+  });
+
+/** Administrator verifies one operator after machine assignment and scoped evidence checks. */
+export const reviewAdminProviderOperator = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(adminItemReviewInputSchema)
+  .handler(async ({ context, data }) => {
+    const { applyAdminProviderOperatorReviewDecision } = await import("./repository.server");
+    return applyAdminProviderOperatorReviewDecision(context.userId, data);
   });
