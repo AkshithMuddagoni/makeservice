@@ -2,7 +2,7 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import { authClient, authEnabled } from "@/lib/auth/client";
 import { isValidIndiaE164Phone, isValidIndiaMobileNumber } from "@/lib/india-validation";
-import { submitCurrentProviderApplication } from "@/lib/fieldly/account.functions";
+import { confirmCurrentProviderDocumentUpload, createCurrentProviderDocumentUpload, submitCurrentProviderApplication } from "@/lib/fieldly/account.functions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { controlClass } from "@/components/fieldly/bits";
@@ -139,6 +139,8 @@ function JoinPage() {
   const [createdProviderId, setCreatedProviderId] = useState<string | null>(null);
   const [isProductionSubmitted, setIsProductionSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadingDocumentKey, setUploadingDocumentKey] = useState<string | null>(null);
+  const [uploadedDocumentKeys, setUploadedDocumentKeys] = useState<string[]>([]);
   const [declarationAccepted, setDeclarationAccepted] = useState(false);
 
   const selectedServices = useMemo(
@@ -295,28 +297,90 @@ function JoinPage() {
     }));
   }
 
+  async function uploadProviderDocument(key: string, file: File) {
+    const requirement = documentRequirements.find((doc) => doc.key === key);
+    if (!isProductionSubmitted || !createdProviderId) {
+      toast.info("Submit your provider application first. Secure document upload becomes available in the application status step.");
+      return;
+    }
+    if (requirement?.secureOnly) {
+      toast.info("This item requires a secure identity / tax verification provider and cannot be uploaded through this form.");
+      return;
+    }
+    if (requirement?.jobSpecific) {
+      toast.info("This document is collected for an individual job, not the permanent provider profile.");
+      return;
+    }
+    if (file.size < 1 || file.size > 10 * 1024 * 1024) {
+      toast.error("Choose a document no larger than 10 MiB.");
+      return;
+    }
+    const allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Only PDF, JPEG, PNG and WebP files are accepted.");
+      return;
+    }
+
+    setUploadingDocumentKey(key);
+    try {
+      const upload = await createCurrentProviderDocumentUpload({
+        data: {
+          businessId: createdProviderId,
+          documentType: key,
+          fileName: file.name,
+          mimeType: file.type,
+          sizeBytes: file.size,
+        },
+      });
+      const headers: Record<string, string> = {
+        "Content-Type": file.type,
+        "x-upsert": "false",
+      };
+      const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      if (publishableKey) headers.apikey = publishableKey;
+
+      const response = await fetch(upload.signedUrl, {
+        method: "PUT",
+        headers,
+        body: file,
+        credentials: "omit",
+        redirect: "error",
+      });
+      if (!response.ok) {
+        throw new Error("Private storage did not accept the file. Request a new upload link and try again.");
+      }
+
+      await confirmCurrentProviderDocumentUpload({
+        data: { uploadId: upload.uploadId },
+      });
+      setUploadedDocumentKeys((current) => current.includes(key) ? current : [...current, key]);
+      toast.success("File uploaded and malware-scanned. It is now awaiting administrator verification.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The document could not be uploaded securely.");
+    } finally {
+      setUploadingDocumentKey(null);
+    }
+  }
+
   function onDocumentSelect(key: string, event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
     if (!file) return;
     if (authEnabled) {
-      toast.info("Secure document upload is not enabled yet. Your checklist will be saved as pending; no file is uploaded.");
-      event.currentTarget.value = "";
+      void uploadProviderDocument(key, file);
       return;
     }
     const requirement = documentRequirements.find((doc) => doc.key === key);
     if (requirement?.secureOnly) {
       toast.info("This identity / tax item must be completed through secure production KYC, not the local preview.");
-      event.currentTarget.value = "";
       return;
     }
     if (file.size > 8 * 1024 * 1024) {
       toast.error("Choose a document under 8 MB.");
-      event.currentTarget.value = "";
       return;
     }
     setSelectedDocumentKeys((current) => current.includes(key) ? current : [...current, key]);
     // The File object and file name are intentionally not read or persisted.
-    event.currentTarget.value = "";
     toast.success("Document marked as ready in this preview. It has not been uploaded.");
   }
 
@@ -892,7 +956,7 @@ function JoinPage() {
           <Summary label="Business address" value={businessAddress + ", " + district + " – " + pincode} />
           <Summary label="Services" value={selectedServices.map((id) => SERVICE_ONBOARDING[id].label + " (" + (serviceTasks[id] ?? []).length + " task types)").join("; ")} />
           <Summary label="Machines" value={completedAssets.map((asset) => asset.make + " " + asset.model + " — " + asset.assetType).join("; ")} />
-          <Summary label="Documents" value={authEnabled ? (documentRequirements.length + " checklist requirements saved; no files uploaded yet.") : (selectedDocumentKeys.length + " marked ready in preview; none have been uploaded or verified.")} />
+          <Summary label="Documents" value={authEnabled ? (uploadedDocumentKeys.length + " files uploaded and awaiting review; secure identity checks may still be pending.") : (selectedDocumentKeys.length + " marked ready in preview; none have been uploaded or verified.")} />
           <div className="rounded-xl bg-paper p-3 text-xs leading-5 text-muted">
             By submitting, you confirm that the business information is accurate, you are authorised to list the equipment, and all required licences, permits, insurance and site-specific approvals will remain valid for the work offered. Misleading claims, expired documents, unsafe equipment or missing legal permission may lead to rejection or suspension.
           </div>
@@ -931,6 +995,47 @@ function JoinPage() {
             <p>Machine and document review: Submitted separately per item</p>
             <p>Payout onboarding: Not started</p>
           </div>
+          {isProductionSubmitted && (
+            <section className="mt-5 rounded-2xl border border-line p-4">
+              <h3 className="font-display text-lg font-bold">Secure document submission</h3>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Files are uploaded to private storage, checked against their file signatures and malware-scanned before they enter the review queue. Upload links expire after two hours. A file remains unverified until an administrator reviews it.
+              </p>
+              <div className="mt-3 grid gap-2">
+                {documentRequirements.filter((doc) => !doc.jobSpecific).map((doc) => (
+                  <div key={doc.key} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line p-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold">{doc.label}{doc.requiredForApproval ? " *" : ""}</p>
+                      <p className="mt-1 text-[11px] text-muted">
+                        {doc.secureOnly
+                          ? "Requires secure identity / tax KYC integration"
+                          : uploadedDocumentKeys.includes(doc.key)
+                            ? "Uploaded — awaiting administrator verification"
+                            : "Not uploaded"}
+                      </p>
+                    </div>
+                    {doc.secureOnly ? (
+                      <span className="rounded-full bg-paper px-3 py-2 text-xs font-semibold">Secure KYC step</span>
+                    ) : (
+                      <label className="cursor-pointer rounded-xl border border-line px-3 py-2 text-xs font-semibold">
+                        {uploadingDocumentKey === doc.key ? "Uploading…" : uploadedDocumentKeys.includes(doc.key) ? "Upload replacement" : "Upload file"}
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png,.webp"
+                          disabled={uploadingDocumentKey !== null}
+                          className="sr-only"
+                          onChange={(event) => onDocumentSelect(doc.key, event)}
+                        />
+                      </label>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {!import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY && (
+                <p className="mt-3 text-xs text-amber-800">Secure storage is not configured on this build.</p>
+              )}
+            </section>
+          )}
           <div className="mt-5 flex flex-wrap gap-2">
             {isProductionSubmitted ? (
               <Button variant="secondary" onClick={() => void navigate({ to: "/desk" })}>Open provider dashboard</Button>
