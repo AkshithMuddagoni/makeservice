@@ -115,5 +115,6 @@ export async function createPrivateDocumentDownloadUrl(path: string, expiresInSe
   if (parsed.origin !== config.origin || !parsed.pathname.startsWith("/storage/v1/object/sign/fieldly-private/")) {
     throw new Error("Storage returned an invalid signed download URL.");
   }
+  parsed.searchParams.set("download", "true");
   return parsed.toString();
 }
