@@ -315,8 +315,9 @@ function JoinPage() {
       toast.error("Choose a document no larger than 10 MiB.");
       return;
     }
-    const allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
-    if (!allowedTypes.includes(file.type)) {
+    const allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"] as const;
+    const mimeType = allowedTypes.find((allowedType) => allowedType === file.type);
+    if (!mimeType) {
       toast.error("Only PDF, JPEG, PNG and WebP files are accepted.");
       return;
     }
@@ -328,7 +329,7 @@ function JoinPage() {
           businessId: createdProviderId,
           documentType: key,
           fileName: file.name,
-          mimeType: file.type,
+          mimeType,
           sizeBytes: file.size,
         },
       });
