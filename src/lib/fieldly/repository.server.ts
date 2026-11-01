@@ -1,6 +1,10 @@
 import { DEV_USER_ID } from "../auth/verify.server";
 import { getSql } from "../db";
 import { getProviderDocumentRequirements, SERVICE_ONBOARDING } from "./provider-onboarding";
+import { getService } from "./catalog";
+import { PROVIDER_DISCOVERY_SQL } from "./marketplace-queries";
+import type { Sql } from "../db";
+import type { CreateJobRequestInput, DiscoverProvidersInput } from "./marketplace-validation";
 
 export type FieldlyProfile = {
   user_id: string;
@@ -1142,6 +1146,174 @@ export async function applyAdminProviderReviewDecision(input: {
       businessId: input.businessId,
       status: updated[0].verification_status,
       pendingRequiredDocuments,
+    };
+  });
+}
+
+ 
+export type MarketplaceProviderResult = {
+  businessId: string;
+  providerServiceId: string;
+  serviceId: string;
+  name: string;
+  area: string;
+  city: string;
+  district: string;
+  state: string;
+  latitude: number;
+  longitude: number;
+  yearsExperience: number;
+  languages: string[];
+  bio: string;
+  equipment: string;
+  rating: number;
+  reviewCount: number;
+  distanceKm: number;
+};
+
+type MarketplaceProviderRow = {
+  business_id: string;
+  provider_service_id: string;
+  name: string;
+  area: string;
+  city: string;
+  district: string;
+  state: string;
+  latitude: number;
+  longitude: number;
+  years_experience: number;
+  languages: string[] | null;
+  bio: string | null;
+  equipment: string;
+  rating: number;
+  review_count: number;
+  distance_km: number;
+};
+
+async function requireCustomerRole(sql: Sql, userId: string): Promise<void> {
+  assertProductionIdentity(userId);
+  const roles = await sql.query<{ role: FieldlyRole }>(
+    "select role::text as role from public.fieldly_user_roles where user_id = $1",
+    [userId],
+  );
+  if (!roles.some((row) => row.role === "customer")) {
+    throw new Error("A customer account is required to discover providers or create a service request.");
+  }
+}
+
+async function discoverProviderRows(
+  sql: Sql,
+  input: DiscoverProvidersInput,
+): Promise<MarketplaceProviderResult[]> {
+  const service = getService(input.serviceId);
+  if (!service) throw new Error("Unknown service. Refresh the page and choose a valid service.");
+  const rows = await sql.query<MarketplaceProviderRow>(
+    PROVIDER_DISCOVERY_SQL,
+    [input.serviceId, input.site.lat, input.site.lng, service.radiusKm, 25],
+  );
+  return rows.map((row) => ({
+    businessId: row.business_id,
+    providerServiceId: row.provider_service_id,
+    serviceId: input.serviceId,
+    name: row.name,
+    area: row.area,
+    city: row.city,
+    district: row.district,
+    state: row.state,
+    latitude: Number(row.latitude),
+    longitude: Number(row.longitude),
+    yearsExperience: Number(row.years_experience ?? 0),
+    languages: row.languages ?? [],
+    bio: row.bio ?? "",
+    equipment: row.equipment,
+    rating: Number(row.rating ?? 0),
+    reviewCount: Number(row.review_count ?? 0),
+    distanceKm: Number(row.distance_km),
+  }));
+}
+
+/** Public fields only; all eligibility comes from the live database. */
+export async function discoverProvidersForCustomer(
+  userId: string,
+  input: DiscoverProvidersInput,
+): Promise<MarketplaceProviderResult[]> {
+  const sql = await getSql();
+  await requireCustomerRole(sql, userId);
+  return discoverProviderRows(sql, input);
+}
+
+export type CreateJobRequestResult = {
+  requestId: string;
+  createdAt: string;
+  providerName: string;
+  distanceKm: number;
+};
+
+export async function createJobRequestForCustomer(
+  userId: string,
+  input: CreateJobRequestInput,
+): Promise<CreateJobRequestResult> {
+  const service = getService(input.serviceId);
+  if (!service) throw new Error("Unknown service. Refresh the page and choose a valid service.");
+  const scheduledAt = input.scheduledFor ? new Date(input.scheduledFor) : null;
+  if (scheduledAt) {
+    const now = Date.now();
+    const scheduledTime = scheduledAt.getTime();
+    if (!Number.isFinite(scheduledTime) || scheduledTime < now - 60_000) {
+      throw new Error("Choose a service time in the future.");
+    }
+    if (scheduledTime > now + 180 * 24 * 60 * 60 * 1000) {
+      throw new Error("Service requests can be scheduled up to 180 days ahead.");
+    }
+  }
+
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireCustomerRole(tx, userId);
+    // Re-check approval, linked approved machinery, availability and the
+    // provider heartbeat inside the same transaction as request creation.
+    const eligibleProviders = await discoverProviderRows(tx, input);
+    const selected = eligibleProviders.find((provider) => provider.businessId === input.businessId);
+    if (!selected) {
+      throw new Error("This provider is no longer verified, online, available or within range. Refresh the provider list.");
+    }
+
+    const inserted = await tx.query<{ id: string; created_at: string }>(
+      "insert into public.job_requests (customer_user_id, service_id, status, site_label, site_address, area, city, district, state, pincode, landmark, latitude, longitude, scheduled_for, scheduling_note, requirements, customer_notes, details_consent_at) " +
+      "values ($1, $2, 'open', $3, $4, $5, $6, $7, $8, nullif($9, ''), nullif($10, ''), $11, $12, $13, $14, $15::jsonb, $16, now()) " +
+      "returning id::text as id, created_at::text as created_at",
+      [
+        userId,
+        input.serviceId,
+        input.site.label,
+        input.site.address?.trim() || input.site.label,
+        input.site.area,
+        input.site.city,
+        input.site.district?.trim() || null,
+        input.site.state,
+        input.site.pincode?.trim() || "",
+        input.site.landmark?.trim() || "",
+        input.site.lat,
+        input.site.lng,
+        scheduledAt ? scheduledAt.toISOString() : null,
+        input.whenLabel,
+        JSON.stringify(input.requirements),
+        input.notes.trim(),
+      ],
+    );
+    const request = inserted[0];
+    if (!request) throw new Error("The service request could not be saved.");
+
+    await tx.query(
+      "insert into public.job_request_targets (request_id, business_id, provider_service_id, status) values ($1::uuid, $2::uuid, $3::uuid, 'sent')",
+      [request.id, selected.businessId, selected.providerServiceId],
+    );
+
+    return {
+      requestId: request.id,
+      createdAt: request.created_at,
+      providerName: selected.name,
+      distanceKm: selected.distanceKm,
     };
   });
 }
