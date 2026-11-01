@@ -2,6 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "../auth/middleware";
 import { isValidIndiaPincode } from "../india-validation";
+import {
+  confirmProviderDocumentUploadInputSchema,
+  createProviderDocumentUploadInputSchema,
+  getAdminProviderDocumentInputSchema,
+  reviewAdminProviderDocumentInputSchema,
+} from "./marketplace-validation";
 import { acceptProviderQuoteInputSchema, createJobRequestInputSchema, discoverProvidersInputSchema, getBookingDetailInputSchema, issueBookingStartCodeInputSchema, sendBookingMessageInputSchema, setProviderAssetAvailabilityInputSchema, setProviderPresenceInputSchema, setProviderServiceAvailabilityInputSchema, stopProviderBookingLocationInputSchema, submitProviderQuoteInputSchema, updateBookingParticipantInputSchema, updateProviderBookingLocationInputSchema, updateProviderBookingStatusInputSchema, verifyBookingStartCodeInputSchema } from "./marketplace-validation";
 
 /**
@@ -299,4 +305,41 @@ export const sendCurrentBookingMessage = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { sendBookingMessageForParticipant } = await import("./repository.server");
     return sendBookingMessageForParticipant(context.userId, data);
+  });
+
+
+/** Provider creates a short-lived signed URL for one allowed business document. */
+export const createCurrentProviderDocumentUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(createProviderDocumentUploadInputSchema)
+  .handler(async ({ context, data }) => {
+    const { createProviderDocumentUploadForUser } = await import("./repository.server");
+    return createProviderDocumentUploadForUser(context.userId, data);
+  });
+
+/** Provider confirms the signed upload after server-side file inspection and malware scanning. */
+export const confirmCurrentProviderDocumentUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(confirmProviderDocumentUploadInputSchema)
+  .handler(async ({ context, data }) => {
+    const { confirmProviderDocumentUploadForUser } = await import("./repository.server");
+    return confirmProviderDocumentUploadForUser(context.userId, data);
+  });
+
+/** Only a server-authorized administrator can receive a short-lived document download URL. */
+export const getAdminProviderDocumentDownloadUrl = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(getAdminProviderDocumentInputSchema)
+  .handler(async ({ context, data }) => {
+    const { createAdminProviderDocumentDownloadUrl: createDownloadUrl } = await import("./repository.server");
+    return createDownloadUrl(context.userId, data.documentId);
+  });
+
+/** Record an audit-logged document verification decision. */
+export const reviewAdminProviderDocument = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(reviewAdminProviderDocumentInputSchema)
+  .handler(async ({ context, data }) => {
+    const { reviewAdminProviderDocumentForUser } = await import("./repository.server");
+    return reviewAdminProviderDocumentForUser(context.userId, data);
   });
