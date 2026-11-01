@@ -5,7 +5,7 @@ import { getProviderDocumentRequirements, SERVICE_ONBOARDING } from "./provider-
 import { getService } from "./catalog";
 import { PROVIDER_DISCOVERY_SQL } from "./marketplace-queries";
 import type { Sql } from "../db";
-import type { CreateJobRequestInput, DiscoverProvidersInput } from "./marketplace-validation";
+import type { CreateJobRequestInput, DiscoverProvidersInput, SetProviderAssetAvailabilityInput, SetProviderServiceAvailabilityInput, SubmitProviderQuoteInput } from "./marketplace-validation";
 
 export type FieldlyProfile = {
   user_id: string;
@@ -1887,5 +1887,101 @@ export async function acceptProviderQuoteForCustomer(
       amountPaise,
       status: "confirmed",
     };
+  });
+}
+
+
+/** Enable/pause one approved service for an owned approved business. */
+export async function setProviderServiceAvailabilityForUser(
+  userId: string,
+  input: SetProviderServiceAvailabilityInput,
+): Promise<{ providerServiceId: string; isAvailable: boolean; isListed: boolean }> {
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireProviderRole(tx, userId);
+    const businesses = await tx.query<{ id: string }>(
+      "select id::text as id from public.provider_businesses where id=$1::uuid and owner_user_id=$2 " +
+      "and verification_status='approved' and is_suspended=false for update",
+      [input.businessId, userId],
+    );
+    if (!businesses[0]) throw new Error("This approved business is not owned by your signed-in provider account.");
+
+    const services = await tx.query<{ id: string; verification_status: string }>(
+      "select id::text as id, verification_status::text as verification_status from public.provider_services " +
+      "where id=$1::uuid and business_id=$2::uuid for update",
+      [input.providerServiceId, input.businessId],
+    );
+    const service = services[0];
+    if (!service) throw new Error("The selected service does not belong to this business.");
+    if (input.isAvailable && service.verification_status !== "approved") {
+      throw new Error("This service must pass MakeService admin verification before it can accept requests.");
+    }
+    if (input.isAvailable) {
+      const machines = await tx.query<{ count: number }>(
+        "select count(*)::int as count from public.provider_asset_services pas " +
+        "join public.provider_assets pa on pa.id=pas.asset_id and pa.business_id=$1::uuid " +
+        "where pas.provider_service_id=$2::uuid and pa.verification_status='approved'",
+        [input.businessId, input.providerServiceId],
+      );
+      if (Number(machines[0]?.count ?? 0) < 1) {
+        throw new Error("Link at least one admin-approved machine to this service before activating it.");
+      }
+    }
+    const updated = await tx.query<{ id: string; is_available: boolean; is_listed: boolean }>(
+      "update public.provider_services set is_listed=case when $2 then true else is_listed end, " +
+      "is_available=$2, updated_at=now() where id=$1::uuid and business_id=$3::uuid " +
+      "returning id::text as id,is_available,is_listed",
+      [input.providerServiceId, input.isAvailable, input.businessId],
+    );
+    const row = updated[0];
+    if (!row) throw new Error("Service availability could not be saved.");
+    return { providerServiceId: row.id, isAvailable: row.is_available, isListed: row.is_listed };
+  });
+}
+
+/** Enable/pause one approved machine; it must be linked to an active approved service. */
+export async function setProviderAssetAvailabilityForUser(
+  userId: string,
+  input: SetProviderAssetAvailabilityInput,
+): Promise<{ assetId: string; isAvailable: boolean }> {
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireProviderRole(tx, userId);
+    const businesses = await tx.query<{ id: string }>(
+      "select id::text as id from public.provider_businesses where id=$1::uuid and owner_user_id=$2 " +
+      "and verification_status='approved' and is_suspended=false for update",
+      [input.businessId, userId],
+    );
+    if (!businesses[0]) throw new Error("This approved business is not owned by your signed-in provider account.");
+
+    const assets = await tx.query<{ id: string; verification_status: string }>(
+      "select id::text as id,verification_status::text as verification_status from public.provider_assets " +
+      "where id=$1::uuid and business_id=$2::uuid for update",
+      [input.assetId, input.businessId],
+    );
+    const asset = assets[0];
+    if (!asset) throw new Error("The selected machine does not belong to this business.");
+    if (input.isAvailable && asset.verification_status !== "approved") {
+      throw new Error("This machine must pass MakeService admin verification before it can be assigned to customer work.");
+    }
+    if (input.isAvailable) {
+      const services = await tx.query<{ count: number }>(
+        "select count(*)::int as count from public.provider_asset_services pas " +
+        "join public.provider_services ps on ps.id=pas.provider_service_id and ps.business_id=$1::uuid " +
+        "where pas.asset_id=$2::uuid and ps.verification_status='approved' and ps.is_listed=true and ps.is_available=true",
+        [input.businessId, input.assetId],
+      );
+      if (Number(services[0]?.count ?? 0) < 1) {
+        throw new Error("Activate an admin-approved service linked to this machine first.");
+      }
+    }
+    const updated = await tx.query<{ id: string; is_available: boolean }>(
+      "update public.provider_assets set is_available=$2,updated_at=now() " +
+      "where id=$1::uuid and business_id=$3::uuid returning id::text as id,is_available",
+      [input.assetId, input.isAvailable, input.businessId],
+    );
+    const row = updated[0];
+    if (!row) throw new Error("Machine availability could not be saved.");
+    return { assetId: row.id, isAvailable: row.is_available };
   });
 }
