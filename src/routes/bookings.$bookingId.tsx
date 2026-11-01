@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Check, Star } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { ChatBox, StatusPill, requirementLines } from "@/components/fieldly/bits";
 import { MapCanvas, type MapMarker } from "@/components/fieldly/map-canvas";
@@ -148,7 +148,7 @@ function BookingPage() {
     }
   }
 
-  async function verifyLiveStartCode(event: React.FormEvent<HTMLFormElement>) {
+  async function verifyLiveStartCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLiveBusy(true);
     setLiveError("");
