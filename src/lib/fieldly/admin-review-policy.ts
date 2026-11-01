@@ -62,3 +62,43 @@ export function assertAdminReviewReason(
     throw new Error("Review notes cannot exceed 2,000 characters.");
   }
 }
+
+
+export type AdminItemReviewDecision = "under_review" | "needs_information" | "rejected" | "approved";
+
+const ALLOWED_ITEM_DECISIONS: Record<ProviderReviewStatus, readonly AdminItemReviewDecision[]> = {
+  draft: ["under_review", "needs_information", "rejected"],
+  submitted: ["under_review", "needs_information", "rejected", "approved"],
+  under_review: ["needs_information", "rejected", "approved"],
+  needs_information: ["under_review", "rejected"],
+  approved: [],
+  rejected: [],
+  suspended: [],
+};
+
+/** A service or machine can only be approved after its parent business. */
+export function assertAdminItemReviewAllowed(input: {
+  currentStatus: ProviderReviewStatus;
+  decision: AdminItemReviewDecision;
+  businessStatus: ProviderReviewStatus;
+  pendingRequiredDocuments: number;
+  approvedLinkedAssets?: number;
+  requiresApprovedAsset?: boolean;
+}): void {
+  if (!ALLOWED_ITEM_DECISIONS[input.currentStatus].includes(input.decision)) {
+    throw new Error(`Cannot move a ${input.currentStatus} item to ${input.decision}.`);
+  }
+  if (input.pendingRequiredDocuments < 0) {
+    throw new Error("Pending item document count cannot be negative.");
+  }
+  if (input.decision !== "approved") return;
+  if (input.businessStatus !== "approved") {
+    throw new Error("Approve the parent provider business before approving its services or machinery.");
+  }
+  if (input.pendingRequiredDocuments > 0) {
+    throw new Error("Item approval is blocked until all required item documents are verified and current.");
+  }
+  if (input.requiresApprovedAsset && (input.approvedLinkedAssets ?? 0) < 1) {
+    throw new Error("Approve at least one linked machine before approving this service.");
+  }
+}
