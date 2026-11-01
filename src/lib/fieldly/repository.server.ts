@@ -739,3 +739,408 @@ export async function getProviderDashboardForUser(
   }
   return applications;
 }
+
+
+import {
+  assertAdminReviewDecisionAllowed,
+  assertAdminReviewReason,
+  type AdminReviewDecision,
+  type ProviderReviewStatus,
+} from "./admin-review-policy";
+
+/** Admin is granted only through a controlled database operation; there is no
+ * customer/provider API or UI that can add this role to their own account. */
+async function requireFieldlyAdmin(sql: Awaited<ReturnType<typeof getSql>>, userId: string) {
+  assertProductionIdentity(userId);
+  const rows = await sql.query<{ role: string }>(
+    "select role::text as role from public.fieldly_user_roles where user_id = $1 and role = 'admin' limit 1",
+    [userId],
+  );
+  if (!rows[0]) {
+    const error = new Error("Administrator access is required.");
+    Object.assign(error, { status: 403 });
+    throw error;
+  }
+}
+
+export type AdminProviderQueueItem = {
+  id: string;
+  tradeName: string;
+  legalName: string;
+  ownerFullName: string;
+  businessType: string;
+  city: string | null;
+  district: string;
+  state: string;
+  verificationStatus: ProviderReviewStatus;
+  createdAt: string;
+  serviceCount: number;
+  assetCount: number;
+  requiredDocumentCount: number;
+  pendingRequiredDocumentCount: number;
+};
+
+export type AdminProviderApplicationDetail = {
+  id: string;
+  ownerFullName: string;
+  tradeName: string;
+  legalName: string;
+  businessType: string;
+  address: string;
+  area: string;
+  district: string;
+  city: string | null;
+  state: string;
+  pincode: string;
+  gstStatus: string;
+  aggregateTurnoverBand: string;
+  udyamProvided: boolean;
+  authorisedRepresentative: boolean;
+  yearsExperience: number;
+  languages: string[];
+  bio: string;
+  verificationStatus: ProviderReviewStatus;
+  reviewerNote: string | null;
+  createdAt: string;
+  services: Array<{
+    id: string;
+    serviceId: string;
+    selectedTasks: string[];
+    specifications: Record<string, string>;
+    verificationStatus: string;
+    isListed: boolean;
+    isAvailable: boolean;
+    reviewerNote: string | null;
+  }>;
+  assets: Array<{
+    id: string;
+    assetType: string;
+    make: string;
+    model: string;
+    yearOfManufacture: number | null;
+    ownership: string;
+    roadUse: string;
+    vehicleClass: string | null;
+    registrationLast4: string | null;
+    serialLast4: string | null;
+    verificationStatus: string;
+    isAvailable: boolean;
+    reviewerNote: string | null;
+    serviceIds: string[];
+  }>;
+  documentRequirements: Array<{
+    key: string;
+    label: string;
+    description: string;
+    requiredForApproval: boolean;
+    secureOnly: boolean;
+    jobSpecific: boolean;
+    status: string;
+  }>;
+  uploadedDocuments: Array<{
+    id: string;
+    documentType: string;
+    originalFilename: string;
+    mimeType: string;
+    sizeBytes: number;
+    status: string;
+    expiresOn: string | null;
+    createdAt: string;
+  }>;
+  audit: Array<{
+    id: string;
+    action: string;
+    reason: string | null;
+    adminName: string;
+    createdAt: string;
+  }>;
+};
+
+export async function getAdminProviderReviewQueue(adminUserId: string): Promise<AdminProviderQueueItem[]> {
+  const sql = await getSql();
+  await requireFieldlyAdmin(sql, adminUserId);
+  return sql.query<AdminProviderQueueItem>(
+    `select
+       b.id,
+       b.trading_name as "tradeName",
+       b.legal_name as "legalName",
+       b.owner_full_name as "ownerFullName",
+       b.business_type as "businessType",
+       b.city,
+       b.district,
+       b.state,
+       b.verification_status::text as "verificationStatus",
+       b.created_at::text as "createdAt",
+       (select count(*)::int from public.provider_services s where s.business_id = b.id) as "serviceCount",
+       (select count(*)::int from public.provider_assets a where a.business_id = b.id) as "assetCount",
+       (select count(*)::int from public.provider_document_requirements r
+         where r.business_id = b.id and r.required_for_approval) as "requiredDocumentCount",
+       (select count(*)::int
+          from public.provider_document_requirements r
+          left join public.provider_documents d
+            on d.business_id = r.business_id
+           and d.document_type = r.requirement_key
+           and d.status = 'verified'
+         where r.business_id = b.id
+           and r.required_for_approval
+           and r.status <> 'not_applicable'
+           and (r.status <> 'verified' or d.id is null)
+       ) as "pendingRequiredDocumentCount"
+     from public.provider_businesses b
+     where b.is_suspended = false
+       and b.verification_status in ('submitted', 'under_review', 'needs_information')
+     order by
+       case b.verification_status
+         when 'submitted' then 0
+         when 'needs_information' then 1
+         else 2
+       end,
+       b.created_at asc
+     limit 100`,
+  );
+}
+
+export async function getAdminProviderApplicationDetail(
+  adminUserId: string,
+  businessId: string,
+): Promise<AdminProviderApplicationDetail | null> {
+  const sql = await getSql();
+  await requireFieldlyAdmin(sql, adminUserId);
+  const businesses = await sql.query<{
+    id: string;
+    owner_full_name: string;
+    trading_name: string;
+    legal_name: string;
+    business_type: string;
+    address_line: string;
+    area: string;
+    district: string;
+    city: string | null;
+    state: string;
+    pincode: string;
+    gst_status: string;
+    aggregate_turnover_band: string;
+    udyam_provided: boolean;
+    authorised_representative: boolean;
+    years_experience: number;
+    languages: string[];
+    bio: string;
+    verification_status: ProviderReviewStatus;
+    reviewer_note: string | null;
+    created_at: string;
+  }>(
+    `select id, owner_full_name, trading_name, legal_name, business_type,
+            address_line, area, district, city, state, pincode, gst_status,
+            aggregate_turnover_band, udyam_provided, authorised_representative,
+            years_experience, languages, bio,
+            verification_status::text as verification_status,
+            reviewer_note, created_at::text as created_at
+     from public.provider_businesses
+     where id = $1 and is_suspended = false
+     limit 1`,
+    [businessId],
+  );
+  const business = businesses[0];
+  if (!business) return null;
+
+  const [services, assets, requirements, uploadedDocuments, audit] = await Promise.all([
+    sql.query<{
+      id: string; service_id: string; selected_tasks: string[];
+      specifications: Record<string, string>; verification_status: string;
+      is_listed: boolean; is_available: boolean; reviewer_note: string | null;
+    }>(
+      `select id, service_id, selected_tasks, specifications,
+              verification_status::text as verification_status,
+              is_listed, is_available, reviewer_note
+       from public.provider_services
+       where business_id = $1 order by created_at asc`,
+      [businessId],
+    ),
+    sql.query<{
+      id: string; asset_type: string; make: string; model: string;
+      year_of_manufacture: number | null; ownership: string; road_use: string;
+      vehicle_class: string | null; registration_last4: string | null;
+      serial_last4: string | null; verification_status: string;
+      is_available: boolean; reviewer_note: string | null; service_ids: string[] | null;
+    }>(
+      `select pa.id, pa.asset_type, pa.make, pa.model, pa.year_of_manufacture,
+              pa.ownership, pa.road_use, pa.vehicle_class, pa.registration_last4,
+              pa.serial_last4, pa.verification_status::text as verification_status,
+              pa.is_available, pa.reviewer_note,
+              coalesce(array_agg(ps.service_id) filter (where ps.service_id is not null), '{}') as service_ids
+       from public.provider_assets pa
+       left join public.provider_asset_services pas on pas.asset_id = pa.id
+       left join public.provider_services ps
+         on ps.id = pas.provider_service_id and ps.business_id = pa.business_id
+       where pa.business_id = $1
+       group by pa.id order by pa.created_at asc`,
+      [businessId],
+    ),
+    sql.query<{
+      requirement_key: string; label: string; description: string;
+      required_for_approval: boolean; secure_only: boolean; job_specific: boolean; status: string;
+    }>(
+      `select requirement_key, label, description, required_for_approval,
+              secure_only, job_specific, status
+       from public.provider_document_requirements
+       where business_id = $1
+       order by required_for_approval desc, label asc`,
+      [businessId],
+    ),
+    sql.query<{
+      id: string; document_type: string; original_filename: string; mime_type: string;
+      size_bytes: string; status: string; expires_on: string | null; created_at: string;
+    }>(
+      `select id, document_type, original_filename, mime_type, size_bytes::text as size_bytes,
+              status::text as status, expires_on::text as expires_on, created_at::text as created_at
+       from public.provider_documents
+       where business_id = $1
+       order by created_at desc`,
+      [businessId],
+    ),
+    sql.query<{
+      id: string; action: string; reason: string | null; admin_name: string; created_at: string;
+    }>(
+      `select a.id, a.action, a.reason, u.name as admin_name,
+              a.created_at::text as created_at
+       from public.fieldly_admin_audit a
+       join public."user" u on u.id = a.admin_user_id
+       where a.target_type = 'provider_business' and a.target_id = $1
+       order by a.created_at desc
+       limit 20`,
+      [businessId],
+    ),
+  ]);
+
+  return {
+    id: business.id,
+    ownerFullName: business.owner_full_name,
+    tradeName: business.trading_name,
+    legalName: business.legal_name,
+    businessType: business.business_type,
+    address: business.address_line,
+    area: business.area,
+    district: business.district,
+    city: business.city,
+    state: business.state,
+    pincode: business.pincode,
+    gstStatus: business.gst_status,
+    aggregateTurnoverBand: business.aggregate_turnover_band,
+    udyamProvided: business.udyam_provided,
+    authorisedRepresentative: business.authorised_representative,
+    yearsExperience: Number(business.years_experience ?? 0),
+    languages: business.languages ?? [],
+    bio: business.bio,
+    verificationStatus: business.verification_status,
+    reviewerNote: business.reviewer_note,
+    createdAt: business.created_at,
+    services: services.map((item) => ({
+      id: item.id, serviceId: item.service_id, selectedTasks: item.selected_tasks ?? [],
+      specifications: item.specifications ?? {}, verificationStatus: item.verification_status,
+      isListed: item.is_listed, isAvailable: item.is_available, reviewerNote: item.reviewer_note,
+    })),
+    assets: assets.map((item) => ({
+      id: item.id, assetType: item.asset_type, make: item.make, model: item.model,
+      yearOfManufacture: item.year_of_manufacture, ownership: item.ownership,
+      roadUse: item.road_use, vehicleClass: item.vehicle_class,
+      registrationLast4: item.registration_last4, serialLast4: item.serial_last4,
+      verificationStatus: item.verification_status, isAvailable: item.is_available,
+      reviewerNote: item.reviewer_note, serviceIds: item.service_ids ?? [],
+    })),
+    documentRequirements: requirements.map((item) => ({
+      key: item.requirement_key, label: item.label, description: item.description,
+      requiredForApproval: item.required_for_approval, secureOnly: item.secure_only,
+      jobSpecific: item.job_specific, status: item.status,
+    })),
+    uploadedDocuments: uploadedDocuments.map((item) => ({
+      id: item.id, documentType: item.document_type, originalFilename: item.original_filename,
+      mimeType: item.mime_type, sizeBytes: Number(item.size_bytes), status: item.status,
+      expiresOn: item.expires_on, createdAt: item.created_at,
+    })),
+    audit: audit.map((item) => ({
+      id: item.id, action: item.action, reason: item.reason,
+      adminName: item.admin_name, createdAt: item.created_at,
+    })),
+  };
+}
+
+export async function applyAdminProviderReviewDecision(input: {
+  adminUserId: string;
+  businessId: string;
+  decision: AdminReviewDecision;
+  note: string;
+}): Promise<{ businessId: string; status: ProviderReviewStatus; pendingRequiredDocuments: number }> {
+  const sql = await getSql();
+  await requireFieldlyAdmin(sql, input.adminUserId);
+  assertAdminReviewReason(input.decision, input.note);
+
+  return sql.transaction(async (tx) => {
+    const businessRows = await tx.query<{
+      id: string; verification_status: ProviderReviewStatus;
+    }>(
+      `select id, verification_status::text as verification_status
+       from public.provider_businesses
+       where id = $1 and is_suspended = false
+       for update`,
+      [input.businessId],
+    );
+    const business = businessRows[0];
+    if (!business) throw new Error("Provider application not found.");
+
+    const pendingRows = await tx.query<{ count: number }>(
+      `select count(*)::int as count
+       from public.provider_document_requirements r
+       left join public.provider_documents d
+         on d.business_id = r.business_id
+        and d.document_type = r.requirement_key
+        and d.status = 'verified'
+       where r.business_id = $1
+         and r.required_for_approval = true
+         and r.status <> 'not_applicable'
+         and (r.status <> 'verified' or d.id is null)`,
+      [input.businessId],
+    );
+    const pendingRequiredDocuments = Number(pendingRows[0]?.count ?? 0);
+    assertAdminReviewDecisionAllowed(
+      business.verification_status,
+      input.decision,
+      pendingRequiredDocuments,
+    );
+
+    const updated = await tx.query<{ verification_status: ProviderReviewStatus }>(
+      `update public.provider_businesses
+       set verification_status = $2::fieldly_review_status,
+           reviewer_note = nullif($3, ''),
+           reviewed_by = $4,
+           reviewed_at = now(),
+           updated_at = now()
+       where id = $1
+       returning verification_status::text as verification_status`,
+      [input.businessId, input.decision, input.note.trim(), input.adminUserId],
+    );
+    if (!updated[0]) throw new Error("Provider review decision could not be saved.");
+
+    await tx.query(
+      `insert into public.fieldly_admin_audit
+         (admin_user_id, action, target_type, target_id, reason, metadata)
+       values ($1, $2, 'provider_business', $3, nullif($4, ''), $5::jsonb)`,
+      [
+        input.adminUserId,
+        `provider_application.${input.decision}`,
+        input.businessId,
+        input.note.trim(),
+        JSON.stringify({
+          previousStatus: business.verification_status,
+          nextStatus: input.decision,
+          pendingRequiredDocuments,
+        }),
+      ],
+    );
+
+    return {
+      businessId: input.businessId,
+      status: updated[0].verification_status,
+      pendingRequiredDocuments,
+    };
+  });
+}
