@@ -58,6 +58,7 @@ const SERVICE_SCOPED_DOCUMENTS: Record<string, string> = {
   WALTA_ACKNOWLEDGEMENT: "borewell",
   CRANE_LOAD_CHART: "crane",
   CRANE_INSPECTION: "crane",
+  CRANE_OPERATOR_COMPETENCE: "crane",
   WATER_SOURCE_EVIDENCE: "tanker",
   POTABLE_WATER_QUALITY: "tanker",
   POTABLE_WATER_FBO_LICENSE: "tanker",
@@ -999,7 +1000,12 @@ function JoinPage() {
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => setStep(3)}>Back</Button>
             <Button onClick={() => {
-              const missing = documentRequirements.filter((doc) => doc.requiredForApproval && !doc.secureOnly && !selectedDocumentKeys.includes(doc.key));
+              const missing = documentRequirements.filter((doc) =>
+                doc.requiredForApproval &&
+                !doc.secureOnly &&
+                !["OPERATOR_ROSTER", "OPERATOR_DL", "OPERATOR_COMPETENCE_CERTIFICATE"].includes(doc.key) &&
+                !selectedDocumentKeys.includes(doc.key),
+              );
               if (missing.length) toast.info("Some required documents are still pending. You can still submit for manual review.");
               setStep(5);
             }}>Review application</Button>
@@ -1058,7 +1064,7 @@ function JoinPage() {
             <section className="mt-5 rounded-2xl border border-line p-4">
               <h3 className="font-display text-lg font-bold">Secure document submission</h3>
               <p className="mt-1 text-xs leading-5 text-muted">
-                Files are uploaded to private storage, checked against their file signatures and malware-scanned before they enter the review queue. Upload links expire after two hours. A file remains unverified until an administrator reviews it.
+                Files are uploaded to private storage, checked against their file signatures and malware-scanned before they enter the review queue. Upload links expire after two hours. A file remains unverified until an administrator reviews it. Add machine operators and upload their role-specific evidence in the Provider Desk after submitting this application.
               </p>
               <div className="mt-3 grid gap-2">
                 {documentRequirements.filter((doc) => !doc.jobSpecific && !["OPERATOR_ROSTER", "OPERATOR_DL", "OPERATOR_COMPETENCE_CERTIFICATE"].includes(doc.key)).map((doc) => (
