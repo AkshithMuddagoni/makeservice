@@ -2129,6 +2129,7 @@ type BookingRow = {
   dispute_reason: string | null;
   customer_user_id: string;
   provider_owner_user_id: string;
+  assigned_operator_user_id: string | null;
   site_snapshot: Record<string, unknown>;
   requirements_snapshot: Record<string, string>;
   terms_snapshot: Record<string, unknown>;
