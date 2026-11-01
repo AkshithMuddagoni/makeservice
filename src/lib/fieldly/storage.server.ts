@@ -68,17 +68,21 @@ async function requestStorage(
 export async function createPrivateDocumentUploadUrl(path: string): Promise<{ signedUrl: string; expiresInSeconds: number }> {
   const config = storageConfig();
   const endpoint = `/object/upload/sign/${BUCKET}/${encodePath(path)}`;
-  const response = await requestStorage("POST", endpoint, { upsert: false });
-  const result = await response.json() as { url?: string; token?: string };
-  if (!result.token) throw new Error("Storage did not return an upload token.");
-  const signedUrl = result.url
-    ? new URL(`${config.baseUrl}${result.url}`, config.origin).toString()
-    : new URL(`${endpoint}?token=${encodeURIComponent(result.token)}`, config.baseUrl).toString();
-  const parsed = new URL(signedUrl);
-  if (parsed.origin !== config.origin || !parsed.pathname.startsWith("/storage/v1/object/upload/sign/fieldly-private/")) {
+  const response = await requestStorage("POST", endpoint, {});
+  // Supabase Storage returns a relative URL containing the one-time upload
+  // token as a query parameter. This mirrors supabase-js createSignedUploadUrl.
+  const result = await response.json() as { url?: string };
+  if (!result.url) throw new Error("Storage did not return a signed upload URL.");
+  const signedUrl = new URL(`${config.baseUrl}${result.url}`, config.origin);
+  const token = signedUrl.searchParams.get("token");
+  if (!token) throw new Error("Storage did not return an upload token.");
+  if (
+    signedUrl.origin !== config.origin ||
+    !signedUrl.pathname.startsWith("/storage/v1/object/upload/sign/fieldly-private/")
+  ) {
     throw new Error("Storage returned an invalid signed upload URL.");
   }
-  return { signedUrl: parsed.toString(), expiresInSeconds: 2 * 60 * 60 };
+  return { signedUrl: signedUrl.toString(), expiresInSeconds: 2 * 60 * 60 };
 }
 
 export async function downloadPrivateDocument(path: string): Promise<Uint8Array> {
