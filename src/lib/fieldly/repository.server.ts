@@ -505,6 +505,8 @@ export type ProviderDashboardApplication = {
   reviewedAt: string | null;
   createdAt: string;
   payoutStatus: string;
+  isOnline: boolean;
+  presenceUpdatedAt: string | null;
   services: Array<{
     id: string;
     serviceId: string;
@@ -597,7 +599,7 @@ export async function getProviderDashboardForUser(
 
   const applications: ProviderDashboardApplication[] = [];
   for (const business of businesses) {
-    const [services, assets, requirements, payouts] = await Promise.all([
+    const [services, assets, requirements, payouts, presence] = await Promise.all([
       sql.query<{
         id: string;
         service_id: string;
@@ -675,6 +677,13 @@ export async function getProviderDashboardForUser(
          limit 1`,
         [business.id],
       ),
+      sql.query<{ is_online: boolean; updated_at: string }>(
+        `select is_online, updated_at::text as updated_at
+         from public.provider_presence
+         where business_id = $1
+         limit 1`,
+        [business.id],
+      ),
     ]);
 
     applications.push({
@@ -701,6 +710,8 @@ export async function getProviderDashboardForUser(
       reviewedAt: business.reviewed_at,
       createdAt: business.created_at,
       payoutStatus: payouts[0]?.onboarding_status ?? "not_started",
+      isOnline: presence[0]?.is_online ?? false,
+      presenceUpdatedAt: presence[0]?.updated_at ?? null,
       services: services.map((service) => ({
         id: service.id,
         serviceId: service.service_id,
