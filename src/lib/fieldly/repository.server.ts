@@ -1099,7 +1099,24 @@ export async function getAdminProviderReviewQueue(adminUserId: string): Promise<
                    )
                )
              ))
-             or (r.requirement_key <> 'OPERATOR_ROSTER'
+             or (r.requirement_key = 'OPERATOR_DL' and exists (
+               select 1 from public.provider_operators po
+               join public.provider_operator_assets poa
+                 on poa.operator_id = po.id and poa.business_id = po.business_id
+               join public.provider_assets pa
+                 on pa.id = poa.asset_id and pa.business_id = poa.business_id
+               where po.business_id = r.business_id
+                 and (pa.road_use in ('public_road', 'commercial_transport') or lower(po.role_title) like '%driver%')
+                 and not exists (
+                   select 1 from public.provider_documents od
+                   where od.business_id = r.business_id
+                     and od.operator_id = po.id
+                     and od.document_type = 'OPERATOR_DL'
+                     and od.status = 'verified'
+                     and (od.expires_on is null or od.expires_on >= current_date)
+                 )
+             ))
+             or (r.requirement_key not in ('OPERATOR_ROSTER', 'OPERATOR_DL')
                  and r.status <> 'not_applicable'
                  and (r.status <> 'verified' or d.id is null))
            )
@@ -1402,9 +1419,9 @@ async function countMissingScopedDocuments(
 
 
 
-function requiredOperatorDocumentKeys(roleTitle: string): string[] {
+function requiredOperatorDocumentKeys(roleTitle: string, hasRoadUseAsset: boolean): string[] {
   const keys = ["OPERATOR_COMPETENCE_CERTIFICATE"];
-  if (/driver|road operator/i.test(roleTitle)) keys.push("OPERATOR_DL");
+  if (hasRoadUseAsset || /driver/i.test(roleTitle)) keys.push("OPERATOR_DL");
   return keys;
 }
 
@@ -1434,8 +1451,8 @@ export async function applyAdminProviderOperatorReviewDecision(
     const operator = rows[0];
     if (!operator) throw new Error("Provider operator not found.");
 
-    const assignedAssets = await tx.query<{ id: string; verification_status: ProviderReviewStatus }>(
-      `select pa.id::text as id, pa.verification_status::text as verification_status
+    const assignedAssets = await tx.query<{ id: string; verification_status: ProviderReviewStatus; road_use: string }>(
+      `select pa.id::text as id, pa.verification_status::text as verification_status, pa.road_use
        from public.provider_operator_assets poa
        join public.provider_assets pa
          on pa.id = poa.asset_id and pa.business_id = poa.business_id
@@ -1456,7 +1473,10 @@ export async function applyAdminProviderOperatorReviewDecision(
       businessId: operator.business_id,
       itemId: operator.id,
       scopeColumn: "operator_id",
-      documentKeys: requiredOperatorDocumentKeys(operator.role_title),
+      documentKeys: requiredOperatorDocumentKeys(
+        operator.role_title,
+        assignedAssets.some((asset) => ["public_road", "commercial_transport"].includes(asset.road_use)),
+      ),
     });
     assertAdminItemReviewAllowed({
       currentStatus: operator.verification_status,
@@ -1734,7 +1754,24 @@ export async function applyAdminProviderReviewDecision(input: {
                  )
              )
            ))
-           or (r.requirement_key <> 'OPERATOR_ROSTER'
+           or (r.requirement_key = 'OPERATOR_DL' and exists (
+             select 1 from public.provider_operators po
+             join public.provider_operator_assets poa
+               on poa.operator_id = po.id and poa.business_id = po.business_id
+             join public.provider_assets pa
+               on pa.id = poa.asset_id and pa.business_id = poa.business_id
+             where po.business_id = r.business_id
+               and (pa.road_use in ('public_road', 'commercial_transport') or lower(po.role_title) like '%driver%')
+               and not exists (
+                 select 1 from public.provider_documents od
+                 where od.business_id = r.business_id
+                   and od.operator_id = po.id
+                   and od.document_type = 'OPERATOR_DL'
+                   and od.status = 'verified'
+                   and (od.expires_on is null or od.expires_on >= current_date)
+               )
+           ))
+           or (r.requirement_key not in ('OPERATOR_ROSTER', 'OPERATOR_DL')
                and r.status <> 'not_applicable'
                and (r.status <> 'verified' or d.id is null))
          )`,
