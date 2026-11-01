@@ -1317,3 +1317,96 @@ export async function createJobRequestForCustomer(
     };
   });
 }
+
+ 
+export type CustomerJobRequestDetail = {
+  id: string;
+  serviceId: string;
+  status: "open" | "booked" | "cancelled" | "expired";
+  createdAt: string;
+  whenLabel: string;
+  notes: string;
+  requirements: Record<string, string>;
+  site: {
+    label: string; area: string; city: string; district?: string; state: string;
+    pincode?: string; address?: string; landmark?: string; lat: number; lng: number;
+  };
+  provider: {
+    businessId: string; name: string; area: string; city: string; state: string;
+    latitude: number; longitude: number; yearsExperience: number;
+  };
+  distanceKm: number;
+};
+
+/** Read a request only for its verified customer owner. */
+export async function getCustomerJobRequestForUser(
+  userId: string,
+  requestId: string,
+): Promise<CustomerJobRequestDetail | null> {
+  const sql = await getSql();
+  await requireCustomerRole(sql, userId);
+  const rows = await sql.query<{
+    id: string; service_id: string; status: CustomerJobRequestDetail["status"];
+    created_at: string; scheduling_note: string; customer_notes: string;
+    requirements: Record<string, string>; site_label: string; site_address: string;
+    area: string | null; city: string; district: string | null; state: string;
+    pincode: string | null; landmark: string | null; latitude: number; longitude: number;
+    business_id: string; provider_name: string; provider_area: string; provider_city: string;
+    provider_state: string; provider_latitude: number; provider_longitude: number;
+    years_experience: number;
+  }>(
+    "select jr.id::text as id, jr.service_id, jr.status::text as status, jr.created_at::text as created_at, " +
+    "jr.scheduling_note, jr.customer_notes, jr.requirements, jr.site_label, jr.site_address, jr.area, " +
+    "jr.city, jr.district, jr.state, jr.pincode, jr.landmark, jr.latitude, jr.longitude, " +
+    "pb.id::text as business_id, pb.trading_name as provider_name, coalesce(pb.area,'') as provider_area, " +
+    "coalesce(pb.city,pb.district,'') as provider_city, pb.state as provider_state, pb.latitude as provider_latitude, " +
+    "pb.longitude as provider_longitude, pb.years_experience " +
+    "from public.job_requests jr " +
+    "join public.job_request_targets jrt on jrt.request_id = jr.id " +
+    "join public.provider_businesses pb on pb.id = jrt.business_id " +
+    "where jr.id = $1::uuid and jr.customer_user_id = $2 limit 1",
+    [requestId, userId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const radians = (degrees: number) => (degrees * Math.PI) / 180;
+  const lat1 = radians(Number(row.latitude));
+  const lat2 = radians(Number(row.provider_latitude));
+  const dLat = lat2 - lat1;
+  const dLng = radians(Number(row.provider_longitude) - Number(row.longitude));
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  const distanceKm = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
+  return {
+    id: row.id,
+    serviceId: row.service_id,
+    status: row.status,
+    createdAt: row.created_at,
+    whenLabel: row.scheduling_note,
+    notes: row.customer_notes,
+    requirements: row.requirements ?? {},
+    site: {
+      label: row.site_label,
+      area: row.area ?? "",
+      city: row.city,
+      district: row.district ?? undefined,
+      state: row.state,
+      pincode: row.pincode ?? undefined,
+      address: row.site_address,
+      landmark: row.landmark ?? undefined,
+      lat: Number(row.latitude),
+      lng: Number(row.longitude),
+    },
+    provider: {
+      businessId: row.business_id,
+      name: row.provider_name,
+      area: row.provider_area,
+      city: row.provider_city,
+      state: row.provider_state,
+      latitude: Number(row.provider_latitude),
+      longitude: Number(row.provider_longitude),
+      yearsExperience: Number(row.years_experience ?? 0),
+    },
+    distanceKm,
+  };
+}
