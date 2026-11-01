@@ -4,7 +4,18 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { toast } from "sonner";
 import { StatusPill, requirementLines } from "@/components/fieldly/bits";
 import { authClient, authEnabled } from "@/lib/auth/client";
-import { getCurrentProviderBookings, getCurrentProviderDashboard, getCurrentProviderOpenRequests, setCurrentProviderAssetAvailability, setCurrentProviderPresence, setCurrentProviderServiceAvailability, submitCurrentProviderQuote } from "@/lib/fieldly/account.functions";
+import {
+  confirmCurrentProviderDocumentUpload,
+  createCurrentProviderDocumentUpload,
+  getCurrentProviderBookings,
+  getCurrentProviderDashboard,
+  getCurrentProviderOpenRequests,
+  saveCurrentProviderOperator,
+  setCurrentProviderAssetAvailability,
+  setCurrentProviderPresence,
+  setCurrentProviderServiceAvailability,
+  submitCurrentProviderQuote,
+} from "@/lib/fieldly/account.functions";
 import { SERVICE_ONBOARDING } from "@/lib/fieldly/provider-onboarding";
 import { Button } from "@/components/ui/button";
 import { getService, isAvailableForService, isEligible, isServiceOperational } from "@/lib/fieldly/catalog";
@@ -258,6 +269,8 @@ function ProductionDeskHome() {
               ) : <p className="mt-3 text-sm text-muted">No machines recorded.</p>}
             </section>
 
+            <OperatorRosterManager application={application} onRefresh={() => loadApplications(true)} />
+
             <section className="border-t border-line p-5 sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-display text-lg font-bold">Verification checklist</h3>
@@ -290,6 +303,213 @@ function ProductionDeskHome() {
 
 type LiveProviderRequest = Awaited<ReturnType<typeof getCurrentProviderOpenRequests>>[number];
 type LiveProviderBooking = Awaited<ReturnType<typeof getCurrentProviderBookings>>[number];
+
+
+
+function OperatorRosterManager({
+  application,
+  onRefresh,
+}: {
+  application: ProductionApplication;
+  onRefresh: () => Promise<void>;
+}) {
+  const [fullName, setFullName] = useState("");
+  const [phoneE164, setPhoneE164] = useState("");
+  const [roleTitle, setRoleTitle] = useState("Machine operator");
+  const [experienceYears, setExperienceYears] = useState("1");
+  const [assetIds, setAssetIds] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState<string | null>(null);
+
+  const hasRoadUseAsset = application.assets.some((asset) =>
+    ["public_road", "commercial_transport"].includes(asset.roadUse.toLowerCase()),
+  );
+
+  async function addOperator(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!fullName.trim() || !roleTitle.trim() || assetIds.length === 0) {
+      toast.error("Enter the operator name and role, then assign at least one machine.");
+      return;
+    }
+    const experience = Number(experienceYears);
+    if (!Number.isFinite(experience) || experience < 0 || experience > 80) {
+      toast.error("Enter valid operator experience between 0 and 80 years.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await saveCurrentProviderOperator({
+        data: {
+          businessId: application.id,
+          fullName: fullName.trim(),
+          phoneE164: phoneE164.trim() || null,
+          roleTitle: roleTitle.trim(),
+          experienceYears: experience,
+          assetIds,
+        },
+      });
+      toast.success("Operator saved and submitted for administrator review.");
+      setFullName("");
+      setPhoneE164("");
+      setRoleTitle("Machine operator");
+      setExperienceYears("1");
+      setAssetIds([]);
+      await onRefresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not save this operator.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function uploadOperatorDocument(
+    operatorId: string,
+    documentType: "OPERATOR_COMPETENCE_CERTIFICATE" | "OPERATOR_DL",
+    file: File | undefined,
+  ) {
+    if (!file) return;
+    if (file.size < 1 || file.size > 10 * 1024 * 1024) {
+      toast.error("Choose a document no larger than 10 MiB.");
+      return;
+    }
+    const allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"] as const;
+    const mimeType = allowedTypes.find((type) => type === file.type);
+    if (!mimeType) {
+      toast.error("Only PDF, JPEG, PNG and WebP files are accepted.");
+      return;
+    }
+    const key = operatorId + ":" + documentType;
+    setUploading(key);
+    try {
+      const upload = await createCurrentProviderDocumentUpload({
+        data: {
+          businessId: application.id,
+          operatorId,
+          documentType,
+          fileName: file.name,
+          mimeType,
+          sizeBytes: file.size,
+        },
+      });
+      const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      if (!publishableKey) throw new Error("Private document storage is not configured on this build.");
+      const response = await fetch(upload.signedUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": mimeType,
+          "x-upsert": "false",
+          apikey: publishableKey,
+        },
+        body: file,
+        credentials: "omit",
+        redirect: "error",
+      });
+      if (!response.ok) throw new Error("Private storage rejected the file. Request a new upload link and retry.");
+      await confirmCurrentProviderDocumentUpload({ data: { uploadId: upload.uploadId } });
+      toast.success("Operator document uploaded, malware-scanned and submitted for review.");
+      await onRefresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not upload this operator document.");
+    } finally {
+      setUploading(null);
+    }
+  }
+
+  return (
+    <section className="border-t border-line p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-display text-lg font-bold">Operator & driver roster</h3>
+        <span className="text-xs text-muted">{application.operators.length} operator(s) recorded</span>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-muted">
+        Add the people who will operate each registered machine. Every machine needs at least one named operator. Operator approval is separate from business and machine approval. Upload competency evidence and, where applicable, a driving licence against the individual operator.
+      </p>
+
+      {application.operators.length > 0 && (
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {application.operators.map((operator) => {
+            const assignedAssets = application.assets.filter((asset) => operator.assetIds.includes(asset.id));
+            const competence = operator.documents.find((doc) => doc.documentType === "OPERATOR_COMPETENCE_CERTIFICATE");
+            const licence = operator.documents.find((doc) => doc.documentType === "OPERATOR_DL");
+            const needsLicence = hasRoadUseAsset || /driver/i.test(operator.roleTitle);
+            return (
+              <div key={operator.id} className="rounded-2xl border border-line p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold">{operator.fullName}</p>
+                    <p className="mt-1 text-xs text-muted">{operator.roleTitle} · {operator.experienceYears} years' experience{operator.phoneLast4 ? " · phone ending " + operator.phoneLast4 : ""}</p>
+                  </div>
+                  <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", reviewTone(operator.verificationStatus))}>{reviewLabel(operator.verificationStatus)}</span>
+                </div>
+                <p className="mt-2 text-xs text-muted">Machines: {assignedAssets.map((asset) => asset.make + " " + asset.model).join(", ") || "No machine assigned"}</p>
+                {operator.reviewerNote && <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">{operator.reviewerNote}</p>}
+                <div className="mt-3 grid gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold">Competency / training evidence</span>
+                    <span className="text-[11px] text-muted">{competence ? reviewLabel(competence.status) : "Not uploaded"}</span>
+                  </div>
+                  <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-line px-3 py-2 text-xs font-semibold">
+                    {uploading === operator.id + ":OPERATOR_COMPETENCE_CERTIFICATE" ? "Uploading…" : competence ? "Upload replacement" : "Upload competency file"}
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="sr-only" disabled={uploading !== null} onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; void uploadOperatorDocument(operator.id, "OPERATOR_COMPETENCE_CERTIFICATE", file); }} />
+                  </label>
+                  {needsLicence && (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-semibold">Driving licence</span>
+                        <span className="text-[11px] text-muted">{licence ? reviewLabel(licence.status) : "Not uploaded"}</span>
+                      </div>
+                      <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-line px-3 py-2 text-xs font-semibold">
+                        {uploading === operator.id + ":OPERATOR_DL" ? "Uploading…" : licence ? "Upload replacement" : "Upload driving licence"}
+                        <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="sr-only" disabled={uploading !== null} onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; void uploadOperatorDocument(operator.id, "OPERATOR_DL", file); }} />
+                      </label>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <form onSubmit={(event) => void addOperator(event)} className="mt-5 rounded-2xl bg-paper p-4">
+        <h4 className="font-semibold">Add an operator</h4>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1 text-xs font-semibold">
+            Full name
+            <input value={fullName} onChange={(event) => setFullName(event.target.value)} required minLength={2} maxLength={120} className="rounded-xl border border-line bg-card p-3 text-sm font-normal" placeholder="Operator's legal name" />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold">
+            Mobile number (optional, +91 format)
+            <input value={phoneE164} onChange={(event) => setPhoneE164(event.target.value)} className="rounded-xl border border-line bg-card p-3 text-sm font-normal" placeholder="+919876543210" />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold">
+            Role / machine responsibility
+            <input value={roleTitle} onChange={(event) => setRoleTitle(event.target.value)} required maxLength={80} className="rounded-xl border border-line bg-card p-3 text-sm font-normal" placeholder="e.g. JCB operator, driver, rig operator" />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold">
+            Experience (years)
+            <input type="number" min="0" max="80" step="0.5" value={experienceYears} onChange={(event) => setExperienceYears(event.target.value)} required className="rounded-xl border border-line bg-card p-3 text-sm font-normal" />
+          </label>
+        </div>
+        <fieldset className="mt-4">
+          <legend className="text-xs font-semibold">Assign this operator to machine(s)</legend>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {application.assets.map((asset) => (
+              <label key={asset.id} className="flex items-center gap-2 rounded-xl border border-line bg-card p-3 text-xs">
+                <input type="checkbox" checked={assetIds.includes(asset.id)} onChange={(event) => setAssetIds((current) => event.target.checked ? [...current, asset.id] : current.filter((id) => id !== asset.id))} />
+                <span>{asset.make} {asset.model} · {asset.assetType}</span>
+              </label>
+            ))}
+          </div>
+          {!application.assets.length && <p className="mt-2 text-xs text-muted">Register a machine before adding an operator.</p>}
+        </fieldset>
+        <Button type="submit" className="mt-4" disabled={saving || !application.assets.length || assetIds.length === 0}>
+          {saving ? "Saving operator…" : "Save operator"}
+        </Button>
+      </form>
+    </section>
+  );
+}
 
 function ProductionProviderOperations({ applications, onRefresh }: { applications: ProductionApplication[]; onRefresh: () => Promise<void> }) {
   const approvedBusinesses = applications.filter((application) => application.verificationStatus === "approved");
