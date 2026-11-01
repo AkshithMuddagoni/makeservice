@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { DEV_USER_ID } from "../auth/verify.server";
 import { getSql } from "../db";
 import { getProviderDocumentRequirements, SERVICE_ONBOARDING } from "./provider-onboarding";
@@ -1347,6 +1348,22 @@ export type CustomerJobRequestDetail = {
     latitude: number; longitude: number; yearsExperience: number;
   };
   distanceKm: number;
+  quotes: Array<{
+    id: string;
+    businessId: string;
+    providerName: string;
+    amountPaise: number;
+    currency: string;
+    note: string;
+    inclusions: string[];
+    exclusions: string[];
+    extraCharges: Array<{ label: string; amountPaise: number }>;
+    cancellationTerms: string;
+    etaMinutes: number | null;
+    status: "pending" | "accepted" | "declined" | "withdrawn" | "expired";
+    createdAt: string;
+    expiresAt: string | null;
+  }>;
 };
 
 /** Read a request only for its verified customer owner. */
@@ -1380,6 +1397,32 @@ export async function getCustomerJobRequestForUser(
   );
   const row = rows[0];
   if (!row) return null;
+  const quoteRows = await sql.query<{
+    id: string;
+    business_id: string;
+    provider_name: string;
+    amount_paise: string | number;
+    currency: string;
+    note: string;
+    inclusions: string[];
+    exclusions: string[];
+    extra_charges: Array<{ label: string; amountPaise: number }>;
+    cancellation_terms: string;
+    eta_minutes: number | null;
+    status: CustomerJobRequestDetail["quotes"][number]["status"];
+    created_at: string;
+    expires_at: string | null;
+  }>(
+    "select pq.id::text as id, pb.id::text as business_id, pb.trading_name as provider_name, " +
+    "pq.amount_paise::text as amount_paise, pq.currency, pq.note, pq.inclusions, pq.exclusions, " +
+    "pq.extra_charges, pq.cancellation_terms, pq.eta_minutes, pq.status::text as status, " +
+    "pq.created_at::text as created_at, pq.expires_at::text as expires_at " +
+    "from public.provider_quotes pq " +
+    "join public.provider_businesses pb on pb.id = pq.business_id " +
+    "where pq.request_id = $1::uuid and pq.status <> 'withdrawn' " +
+    "order by pq.created_at asc",
+    [requestId],
+  );
   const radians = (degrees: number) => (degrees * Math.PI) / 180;
   const lat1 = radians(Number(row.latitude));
   const lat2 = radians(Number(row.provider_latitude));
@@ -1419,6 +1462,22 @@ export async function getCustomerJobRequestForUser(
       yearsExperience: Number(row.years_experience ?? 0),
     },
     distanceKm,
+    quotes: quoteRows.map((quote) => ({
+      id: quote.id,
+      businessId: quote.business_id,
+      providerName: quote.provider_name,
+      amountPaise: Number(quote.amount_paise),
+      currency: quote.currency,
+      note: quote.note,
+      inclusions: quote.inclusions ?? [],
+      exclusions: quote.exclusions ?? [],
+      extraCharges: quote.extra_charges ?? [],
+      cancellationTerms: quote.cancellation_terms,
+      etaMinutes: quote.eta_minutes,
+      status: quote.status,
+      createdAt: quote.created_at,
+      expiresAt: quote.expires_at,
+    })),
   };
 }
 
@@ -1654,6 +1713,163 @@ export async function submitProviderQuoteForUser(
       businessId: input.businessId,
       amountPaise,
       status: "pending",
+    };
+  });
+}
+
+
+export type AcceptProviderQuoteResult = {
+  bookingId: string;
+  publicReference: string;
+  amountPaise: number;
+  status: "confirmed";
+};
+
+/** Accept one pending provider quote and create exactly one booking atomically. */
+export async function acceptProviderQuoteForCustomer(
+  userId: string,
+  input: { quoteId: string; termsAccepted: true },
+): Promise<AcceptProviderQuoteResult> {
+  assertProductionIdentity(userId);
+  if (input.termsAccepted !== true) throw new Error("Review and accept the provider terms before confirming this booking.");
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireCustomerRole(tx, userId);
+    const rows = await tx.query<{
+      request_id: string;
+      service_id: string;
+      scheduled_for: string | null;
+      site_label: string;
+      site_address: string;
+      area: string | null;
+      city: string;
+      district: string | null;
+      state: string;
+      pincode: string | null;
+      landmark: string | null;
+      latitude: number;
+      longitude: number;
+      requirements: Record<string, string>;
+      customer_notes: string;
+      business_id: string;
+      provider_service_id: string;
+      provider_name: string;
+      amount_paise: string | number;
+      currency: string;
+      note: string;
+      inclusions: string[];
+      exclusions: string[];
+      extra_charges: Array<{ label: string; amountPaise: number }>;
+      cancellation_terms: string;
+      eta_minutes: number | null;
+      quote_created_at: string;
+    }>(
+      "select jr.id::text as request_id, jr.service_id, jr.scheduled_for::text as scheduled_for, " +
+      "jr.site_label, jr.site_address, jr.area, jr.city, jr.district, jr.state, jr.pincode, jr.landmark, " +
+      "jr.latitude, jr.longitude, jr.requirements, jr.customer_notes, pb.id::text as business_id, " +
+      "ps.id::text as provider_service_id, pb.trading_name as provider_name, pq.amount_paise::text as amount_paise, " +
+      "pq.currency, pq.note, pq.inclusions, pq.exclusions, pq.extra_charges, pq.cancellation_terms, " +
+      "pq.eta_minutes, pq.created_at::text as quote_created_at " +
+      "from public.provider_quotes pq " +
+      "join public.job_requests jr on jr.id = pq.request_id " +
+      "join public.job_request_targets jrt on jrt.request_id = jr.id and jrt.business_id = pq.business_id " +
+      "join public.provider_businesses pb on pb.id = pq.business_id " +
+      "join public.provider_services ps on ps.id = jrt.provider_service_id and ps.business_id = pb.id " +
+      "where pq.id = $1::uuid and jr.customer_user_id = $2 " +
+      "and jr.status = 'open' and pq.status = 'pending' " +
+      "and (pq.expires_at is null or pq.expires_at > now()) " +
+      "and pb.verification_status = 'approved' and pb.is_suspended = false " +
+      "and ps.verification_status = 'approved' and ps.is_listed = true and ps.is_available = true " +
+      "and exists (select 1 from public.provider_asset_services pas " +
+      "join public.provider_assets pa on pa.id = pas.asset_id and pa.business_id = pb.id " +
+      "where pas.provider_service_id = ps.id and pa.verification_status = 'approved' and pa.is_available = true) " +
+      "for update of jr, pq, jrt",
+      [input.quoteId, userId],
+    );
+    const quote = rows[0];
+    if (!quote) {
+      throw new Error("This quote is no longer available, or it does not belong to your account.");
+    }
+    const amountPaise = Number(quote.amount_paise);
+    if (!Number.isSafeInteger(amountPaise) || amountPaise < 1) {
+      throw new Error("The provider quote contains an invalid amount.");
+    }
+
+    const publicReference = "MS-" + new Date().toISOString().slice(0, 10).replaceAll("-", "") +
+      "-" + randomUUID().replaceAll("-", "").slice(0, 8).toUpperCase();
+    const siteSnapshot = {
+      label: quote.site_label,
+      address: quote.site_address,
+      area: quote.area,
+      city: quote.city,
+      district: quote.district,
+      state: quote.state,
+      pincode: quote.pincode,
+      landmark: quote.landmark,
+      latitude: Number(quote.latitude),
+      longitude: Number(quote.longitude),
+    };
+    const termsSnapshot = {
+      currency: quote.currency,
+      amountPaise,
+      note: quote.note,
+      inclusions: quote.inclusions ?? [],
+      exclusions: quote.exclusions ?? [],
+      extraCharges: quote.extra_charges ?? [],
+      cancellationTerms: quote.cancellation_terms,
+      etaMinutes: quote.eta_minutes,
+      acceptedAt: new Date().toISOString(),
+    };
+
+    const bookings = await tx.query<{ id: string }>(
+      "insert into public.bookings (" +
+      "public_reference, request_id, quote_id, customer_user_id, business_id, provider_service_id, " +
+      "service_id, status, amount_paise, currency, scheduled_for, site_snapshot, requirements_snapshot, terms_snapshot" +
+      ") values ($1, $2::uuid, $3::uuid, $4, $5::uuid, $6::uuid, $7, 'confirmed', $8, $9, $10, $11::jsonb, $12::jsonb, $13::jsonb) " +
+      "returning id::text as id",
+      [
+        publicReference,
+        quote.request_id,
+        input.quoteId,
+        userId,
+        quote.business_id,
+        quote.provider_service_id,
+        quote.service_id,
+        amountPaise,
+        quote.currency,
+        quote.scheduled_for,
+        JSON.stringify(siteSnapshot),
+        JSON.stringify(quote.requirements ?? {}),
+        JSON.stringify(termsSnapshot),
+      ],
+    );
+    const booking = bookings[0];
+    if (!booking) throw new Error("The booking could not be confirmed.");
+
+    await tx.query(
+      "insert into public.booking_events (booking_id, actor_user_id, from_status, to_status, event_type, note, metadata) " +
+      "values ($1::uuid, $2, null, 'confirmed', 'quote_accepted', 'Customer accepted provider quote', $3::jsonb)",
+      [booking.id, userId, JSON.stringify({ quoteId: input.quoteId, publicReference })],
+    );
+    await tx.query(
+      "update public.job_requests set status = 'booked', updated_at = now() where id = $1::uuid and status = 'open'",
+      [quote.request_id],
+    );
+    await tx.query(
+      "update public.provider_quotes set status = case when id = $1::uuid then 'accepted'::fieldly_quote_status else 'declined'::fieldly_quote_status end, updated_at = now() " +
+      "where request_id = $2::uuid and status = 'pending'",
+      [input.quoteId, quote.request_id],
+    );
+    await tx.query(
+      "update public.job_request_targets set status = case when business_id = $1::uuid then 'accepted' else 'closed' end " +
+      "where request_id = $2::uuid",
+      [quote.business_id, quote.request_id],
+    );
+    return {
+      bookingId: booking.id,
+      publicReference,
+      amountPaise,
+      status: "confirmed",
     };
   });
 }
