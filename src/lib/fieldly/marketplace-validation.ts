@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isValidIndiaE164Phone } from "../india-validation";
+import { isValidIndiaE164Phone } from "../india-validation.ts";
 import { isValidIndiaPincode } from "../india-validation.ts";
 
 const serviceIdSchema = z.string().regex(/^[a-z0-9_-]{1,60}$/);
