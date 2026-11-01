@@ -67,3 +67,11 @@ export const submitProviderQuoteInputSchema = z.object({
 
 export type SetProviderPresenceInput = z.infer<typeof setProviderPresenceInputSchema>;
 export type SubmitProviderQuoteInput = z.infer<typeof submitProviderQuoteInputSchema>;
+
+
+export const acceptProviderQuoteInputSchema = z.object({
+  quoteId: z.string().uuid(),
+  termsAccepted: z.literal(true),
+}).strict();
+
+export type AcceptProviderQuoteInput = z.infer<typeof acceptProviderQuoteInputSchema>;
