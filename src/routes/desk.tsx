@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { toast } from "sonner";
 import { StatusPill, requirementLines } from "@/components/fieldly/bits";
 import { authClient, authEnabled } from "@/lib/auth/client";
-import { getCurrentProviderDashboard, getCurrentProviderOpenRequests, setCurrentProviderPresence, submitCurrentProviderQuote } from "@/lib/fieldly/account.functions";
+import { getCurrentProviderDashboard, getCurrentProviderOpenRequests, setCurrentProviderAssetAvailability, setCurrentProviderPresence, setCurrentProviderServiceAvailability, submitCurrentProviderQuote } from "@/lib/fieldly/account.functions";
 import { SERVICE_ONBOARDING } from "@/lib/fieldly/provider-onboarding";
 import { Button } from "@/components/ui/button";
 import { getService, isAvailableForService, isEligible, isServiceOperational } from "@/lib/fieldly/catalog";
@@ -283,14 +283,14 @@ function ProductionDeskHome() {
         ))}
       </div>
 
-      {applications.length > 0 && <ProductionProviderOperations applications={applications} />}
+      {applications.length > 0 && <ProductionProviderOperations applications={applications} onRefresh={() => loadApplications(true)} />}
     </div>
   );
 }
 
 type LiveProviderRequest = Awaited<ReturnType<typeof getCurrentProviderOpenRequests>>[number];
 
-function ProductionProviderOperations({ applications }: { applications: ProductionApplication[] }) {
+function ProductionProviderOperations({ applications, onRefresh }: { applications: ProductionApplication[]; onRefresh: () => Promise<void> }) {
   const approvedBusinesses = applications.filter((application) => application.verificationStatus === "approved");
   const [selectedBusinessId, setSelectedBusinessId] = useState(approvedBusinesses[0]?.id ?? "");
   const [onlineByBusiness, setOnlineByBusiness] = useState<Record<string, boolean>>(
@@ -300,6 +300,7 @@ function ProductionProviderOperations({ applications }: { applications: Producti
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [savingPresence, setSavingPresence] = useState(false);
+  const [savingAvailabilityId, setSavingAvailabilityId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const online = Boolean(onlineByBusiness[selectedBusinessId]);
   const selectedBusiness = approvedBusinesses.find((item) => item.id === selectedBusinessId);
@@ -308,9 +309,7 @@ function ProductionProviderOperations({ applications }: { applications: Producti
   useEffect(() => {
     setOnlineByBusiness((current) => {
       const next = { ...current };
-      for (const application of approvedBusinesses) {
-        if (!(application.id in next)) next[application.id] = application.isOnline;
-      }
+      for (const application of approvedBusinesses) next[application.id] = application.isOnline;
       return next;
     });
     if (!selectedBusinessId && approvedBusinesses[0]) setSelectedBusinessId(approvedBusinesses[0].id);
@@ -360,16 +359,60 @@ function ProductionProviderOperations({ applications }: { applications: Producti
   // browser closes, the heartbeat expires and discovery stops showing the unit.
   useEffect(() => {
     if (!online || !selectedBusinessId) return;
-    const interval = window.setInterval(() => {
+    const ping = () => {
       void setCurrentProviderPresence({
         data: { businessId: selectedBusinessId, isOnline: true },
       }).catch(() => {
         setOnlineByBusiness((current) => ({ ...current, [selectedBusinessId]: false }));
         setError("Your online heartbeat could not be renewed. Go online again before accepting new requests.");
       });
-    }, 4 * 60 * 1000);
+    };
+    ping();
+    const interval = window.setInterval(ping, 4 * 60 * 1000);
     return () => window.clearInterval(interval);
   }, [online, selectedBusinessId]);
+
+  async function toggleServiceAvailability(service: ProductionApplication["services"][number]) {
+    if (!selectedBusinessId) return;
+    setSavingAvailabilityId(service.id);
+    try {
+      await setCurrentProviderServiceAvailability({
+        data: {
+          businessId: selectedBusinessId,
+          providerServiceId: service.id,
+          isAvailable: !service.isAvailable,
+        },
+      });
+      await onRefresh();
+      await loadRequests(true);
+      toast.success(!service.isAvailable ? "Service activated for eligible customer requests." : "Service paused for new requests.");
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Service availability could not be changed.");
+    } finally {
+      setSavingAvailabilityId(null);
+    }
+  }
+
+  async function toggleAssetAvailability(asset: ProductionApplication["assets"][number]) {
+    if (!selectedBusinessId) return;
+    setSavingAvailabilityId(asset.id);
+    try {
+      await setCurrentProviderAssetAvailability({
+        data: {
+          businessId: selectedBusinessId,
+          assetId: asset.id,
+          isAvailable: !asset.isAvailable,
+        },
+      });
+      await onRefresh();
+      await loadRequests(true);
+      toast.success(!asset.isAvailable ? "Machine marked available for eligible services." : "Machine paused for new assignments.");
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Machine availability could not be changed.");
+    } finally {
+      setSavingAvailabilityId(null);
+    }
+  }
 
   async function sendQuote(
     request: LiveProviderRequest,
@@ -448,13 +491,74 @@ function ProductionProviderOperations({ applications }: { applications: Producti
           </div>
 
           {selectedBusiness && (
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
-              <span>{selectedBusiness.services.filter((service) => service.verificationStatus === "approved" && service.isListed && service.isAvailable).length} approved/listed available service(s)</span>
-              <span>·</span>
-              <span>{selectedBusiness.assets.filter((asset) => asset.verificationStatus === "approved" && asset.isAvailable).length} approved available machine(s)</span>
-              <span>·</span>
-              <span>Online signal expires after 10 minutes without a heartbeat</span>
-            </div>
+            <>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
+                <span>{selectedBusiness.services.filter((service) => service.verificationStatus === "approved" && service.isListed && service.isAvailable).length} approved/listed available service(s)</span>
+                <span>·</span>
+                <span>{selectedBusiness.assets.filter((asset) => asset.verificationStatus === "approved" && asset.isAvailable).length} approved available machine(s)</span>
+                <span>·</span>
+                <span>Online signal expires after 10 minutes without a heartbeat</span>
+              </div>
+
+              <div className="mt-5 grid gap-4 rounded-2xl border border-line p-4">
+                <div>
+                  <h3 className="font-display text-lg font-bold">Activate approved services</h3>
+                  <p className="mt-1 text-xs leading-5 text-muted">A service can be listed only after admin approval and at least one approved machine is linked to it.</p>
+                </div>
+                {selectedBusiness.services.map((service) => {
+                  const serviceAssets = selectedBusiness.assets.filter((asset) =>
+                    asset.serviceIds.includes(service.serviceId) && asset.verificationStatus === "approved",
+                  );
+                  const serviceName = getService(service.serviceId)?.name ?? service.serviceId;
+                  const canActivate = service.verificationStatus === "approved" && serviceAssets.length > 0;
+                  return (
+                    <div key={service.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3 last:border-0 last:pb-0">
+                      <div>
+                        <p className="text-sm font-semibold">{serviceName}</p>
+                        <p className="mt-1 text-xs text-muted">{reviewLabel(service.verificationStatus)} · {serviceAssets.length} approved linked machine(s)</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={service.isAvailable ? "secondary" : "outline"}
+                        disabled={!canActivate || savingAvailabilityId !== null}
+                        onClick={() => void toggleServiceAvailability(service)}
+                      >
+                        {savingAvailabilityId === service.id ? "Saving…" : service.isAvailable ? "Pause service" : "Activate service"}
+                      </Button>
+                    </div>
+                  );
+                })}
+                <div className="border-t border-line pt-4">
+                  <h3 className="font-display text-lg font-bold">Machine availability</h3>
+                  <p className="mt-1 text-xs leading-5 text-muted">A machine must be approved and linked to at least one active approved service.</p>
+                </div>
+                {selectedBusiness.assets.map((asset) => {
+                  const linkedService = selectedBusiness.services.some((service) =>
+                    asset.serviceIds.includes(service.serviceId) &&
+                    service.verificationStatus === "approved" &&
+                    service.isListed &&
+                    service.isAvailable,
+                  );
+                  const canActivate = asset.verificationStatus === "approved" && linkedService;
+                  return (
+                    <div key={asset.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3 last:border-0 last:pb-0">
+                      <div>
+                        <p className="text-sm font-semibold">{[asset.assetType, asset.make, asset.model].filter(Boolean).join(" ")}</p>
+                        <p className="mt-1 text-xs text-muted">{reviewLabel(asset.verificationStatus)} · {asset.serviceIds.length} linked service(s)</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={asset.isAvailable ? "secondary" : "outline"}
+                        disabled={!canActivate || savingAvailabilityId !== null}
+                        onClick={() => void toggleAssetAvailability(asset)}
+                      >
+                        {savingAvailabilityId === asset.id ? "Saving…" : asset.isAvailable ? "Pause machine" : "Make available"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
 
           {error && <p role="alert" className="mt-3 rounded-xl bg-danger-soft p-3 text-sm text-danger">{error}</p>}
