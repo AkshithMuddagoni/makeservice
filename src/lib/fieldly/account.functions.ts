@@ -262,3 +262,12 @@ export const updateCurrentBookingParticipantAction = createServerFn({ method: "P
     const { updateBookingByParticipant } = await import("./repository.server");
     return updateBookingByParticipant(context.userId, data);
   });
+
+
+/** List confirmed and historical bookings belonging to this provider owner. */
+export const getCurrentProviderBookings = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const { getProviderBookingsForUser } = await import("./repository.server");
+    return getProviderBookingsForUser(context.userId);
+  });
