@@ -2104,6 +2104,7 @@ type BookingRow = {
   cancellation_reason: string | null;
   dispute_reason: string | null;
   customer_user_id: string;
+  provider_owner_user_id: string;
   site_snapshot: Record<string, unknown>;
   requirements_snapshot: Record<string, string>;
   terms_snapshot: Record<string, unknown>;
@@ -2143,7 +2144,7 @@ export async function getBookingDetailForUser(
     "select b.id::text as id,b.public_reference,b.status::text as status,b.amount_paise::text as amount_paise, " +
     "b.currency,b.service_id,b.scheduled_for::text as scheduled_for,b.created_at::text as created_at, " +
     "b.updated_at::text as updated_at,b.completed_at::text as completed_at,b.cancellation_reason,b.dispute_reason, " +
-    "b.customer_user_id,b.site_snapshot,b.requirements_snapshot,b.terms_snapshot,b.start_code_hash, " +
+    "b.customer_user_id,pb.owner_user_id as provider_owner_user_id,b.site_snapshot,b.requirements_snapshot,b.terms_snapshot,b.start_code_hash, " +
     "b.start_code_expires_at::text as start_code_expires_at,b.start_code_attempts,b.start_code_issue_count, " +
     "pb.id::text as business_id,pb.trading_name as provider_name,pb.latitude as provider_latitude,pb.longitude as provider_longitude " +
     "from public.bookings b join public.provider_businesses pb on pb.id=b.business_id " +
@@ -2154,11 +2155,10 @@ export async function getBookingDetailForUser(
   if (!row) return null;
 
   const isCustomer = row.customer_user_id === userId;
-  const isProvider = !isCustomer && await (async () => {
-    await requireProviderRole(sql, userId);
-    return true;
-  })();
+  const isProvider = row.provider_owner_user_id === userId;
   if (isCustomer) await requireCustomerRole(sql, userId);
+  if (isProvider) await requireProviderRole(sql, userId);
+  if (!isCustomer && !isProvider) return null;
   const [events, locations] = await Promise.all([
     sql.query<{
       id: string; from_status: string | null; to_status: string;
@@ -2536,14 +2536,7 @@ export type ProviderBookingLocationResult = {
 /** Only the owning provider or assigned linked operator may write booking GPS. */
 export async function updateProviderBookingLocationForUser(
   userId: string,
-  input: {
-    bookingId: string;
-    latitude: number;
-    longitude: number;
-    accuracyMeters: number;
-    headingDegrees: number | null;
-    speedMps: number | null;
-  },
+  input: UpdateProviderBookingLocationInput,
 ): Promise<ProviderBookingLocationResult> {
   if (input.accuracyMeters > 200) throw new Error("GPS accuracy is too low. Move to a clear area and try again.");
   const sql = await getSql();
@@ -2582,7 +2575,7 @@ export async function updateProviderBookingLocationForUser(
       [
         input.bookingId,
         booking.business_id,
-        booking.assigned_operator_id,
+        booking.operator_user_id === userId ? booking.assigned_operator_id : null,
         input.latitude,
         input.longitude,
         input.accuracyMeters,
