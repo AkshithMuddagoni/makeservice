@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as DeskRouteImport } from './routes/desk'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as JoinRouteImport } from './routes/join'
 import { Route as BookingsIndexRouteImport } from './routes/bookings.index'
 import { Route as BookingsBookingIdRouteImport } from './routes/bookings.$bookingId'
@@ -33,6 +34,11 @@ const AccountRoute = AccountRouteImport.update({
 const DeskRoute = DeskRouteImport.update({
   id: '/desk',
   path: '/desk',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const JoinRoute = JoinRouteImport.update({
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/desk': typeof DeskRoute
+  '/admin': typeof AdminRoute
   '/join': typeof JoinRoute
   '/bookings/$bookingId': typeof BookingsBookingIdRoute
   '/find/$slug': typeof FindSlugRoute
@@ -87,6 +94,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/desk': typeof DeskRoute
+  '/admin': typeof AdminRoute
   '/join': typeof JoinRoute
   '/bookings/$bookingId': typeof BookingsBookingIdRoute
   '/find/$slug': typeof FindSlugRoute
@@ -100,6 +108,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/desk': typeof DeskRoute
+  '/admin': typeof AdminRoute
   '/join': typeof JoinRoute
   '/bookings/$bookingId': typeof BookingsBookingIdRoute
   '/find/$slug': typeof FindSlugRoute
@@ -114,6 +123,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/desk'
+    | '/admin'
     | '/join'
     | '/bookings/$bookingId'
     | '/find/$slug'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/desk'
+    | '/admin'
     | '/join'
     | '/bookings/$bookingId'
     | '/find/$slug'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/desk'
+    | '/admin'
     | '/join'
     | '/bookings/$bookingId'
     | '/find/$slug'
@@ -151,6 +163,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRoute
   DeskRoute: typeof DeskRoute
+  AdminRoute: typeof AdminRoute
   JoinRoute: typeof JoinRoute
   BookingsBookingIdRoute: typeof BookingsBookingIdRoute
   FindSlugRoute: typeof FindSlugRoute
@@ -181,6 +194,13 @@ declare module '@tanstack/react-router' {
       path: '/desk'
       fullPath: '/desk'
       preLoaderRoute: typeof DeskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/join': {
@@ -239,6 +259,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
   DeskRoute: DeskRoute,
+  AdminRoute: AdminRoute,
   JoinRoute: JoinRoute,
   BookingsBookingIdRoute: BookingsBookingIdRoute,
   FindSlugRoute: FindSlugRoute,

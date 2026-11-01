@@ -6,17 +6,23 @@
  * in ../migrations to DATABASE_URL. Each file is applied in one transaction and
  * recorded in a `_migrations` table, so it runs once and is safe to re-run.
  *
- * The read is non-recursive, so the opt-in auth schema under migrations/auth/
- * is not applied to an app that never asked for sign-in.
+ * The generated Better Auth schema is explicitly read from migrations/auth/;
+ * app-owned marketplace migrations are read from migrations/fieldly/. Both
+ * are applied in basename order so the identity table exists before app FKs.
  *
  * No DATABASE_URL (local / preview builds) -> skip; the PGLite fallback applies
- * the same files at startup instead (see src/lib/db.ts).
+ * the same ordered files at startup instead (see src/lib/db.ts).
  */
 import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import pg from "pg";
-import { pendingMigrations } from "./migration-plan.mjs";
+import {
+  isMigrationFile,
+  legacyMigrationNames,
+  migrationName,
+  pendingMigrations,
+} from "./migration-plan.mjs";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -36,8 +42,30 @@ async function main() {
     console.log("[migrate] no migrations/ directory — nothing to do.");
     return;
   }
+  // The generated Better Auth schema is the identity prerequisite for the
+  // Fieldly tables. Read it explicitly; do not copy or edit the generated file.
+  const authDir = join(migrationsDir, "auth");
+  let authEntries = [];
+  try {
+    authEntries = await readdir(authDir);
+  } catch {
+    throw new Error("Required Better Auth schema folder migrations/auth/ is missing.");
+  }
+  const fieldlyDir = join(migrationsDir, "fieldly");
+  let fieldlyEntries = [];
+  try {
+    fieldlyEntries = await readdir(fieldlyDir);
+  } catch {
+    // An app without Fieldly schema can still use the optional auth migration.
+  }
+  const migrationPaths = [
+    ...authEntries.filter(isMigrationFile).map((name) => join(authDir, name)),
+    ...entries.filter(isMigrationFile).map((name) => join(migrationsDir, name)),
+    ...fieldlyEntries.filter(isMigrationFile).map((name) => join(fieldlyDir, name)),
+  ];
+
   // An app with no schema of its own must not pay for a database connection.
-  if (pendingMigrations(entries, []).length === 0) {
+  if (pendingMigrations(migrationPaths, []).length === 0) {
     console.log("[migrate] no migrations — nothing to do.");
     return;
   }
@@ -48,13 +76,46 @@ async function main() {
     await client.query(
       "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
     );
-    const applied = (await client.query("SELECT name FROM _migrations")).rows.map(
+    const storedNames = (await client.query("SELECT name FROM _migrations")).rows.map(
       (r) => r.name,
     );
 
+    // Early Windows runs stored native absolute paths in _migrations because
+    // path.basename semantics were not portable in migration-plan.mjs. Convert
+    // them to canonical basenames without rerunning their SQL or losing the
+    // original applied_at timestamp. This is safe to run on every deploy.
+    const legacyEntries = legacyMigrationNames(storedNames);
+    if (legacyEntries.length > 0) {
+      await client.query("BEGIN");
+      try {
+        for (const { legacy, canonical } of legacyEntries) {
+          await client.query(
+            `INSERT INTO _migrations (name, applied_at)
+             SELECT $2, applied_at FROM _migrations WHERE name = $1
+             ON CONFLICT (name) DO UPDATE
+               SET applied_at = LEAST(_migrations.applied_at, EXCLUDED.applied_at)`,
+            [legacy, canonical],
+          );
+          await client.query("DELETE FROM _migrations WHERE name = $1", [legacy]);
+        }
+        await client.query("COMMIT");
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      }
+      console.log(
+        `[migrate] normalized ${legacyEntries.length} legacy migration ledger entr${legacyEntries.length === 1 ? "y" : "ies"}.`,
+      );
+    }
+
+    const applied = storedNames.map(migrationName);
+    for (const { canonical } of legacyEntries) {
+      if (!applied.includes(canonical)) applied.push(canonical);
+    }
+
     let count = 0;
-    for (const { name } of pendingMigrations(entries, applied)) {
-      const text = await readFile(join(migrationsDir, name), "utf8");
+    for (const { name, path } of pendingMigrations(migrationPaths, applied)) {
+      const text = await readFile(path, "utf8");
       try {
         await client.query("BEGIN");
         // pg's simple-query protocol runs a whole multi-statement file at once.

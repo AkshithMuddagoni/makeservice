@@ -30,7 +30,7 @@
  * a verified id via `@/lib/auth/middleware`.
  */
 import { betterAuth } from "better-auth";
-import { bearer, genericOAuth } from "better-auth/plugins";
+import { bearer, genericOAuth, phoneNumber } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
@@ -40,6 +40,11 @@ import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
 import { GROK_PROVIDERS } from "./providers";
 import { pgliteDialect } from "./pglite-dialect";
+import {
+  sendOtpWithMsg91,
+  temporaryEmailForIndiaPhone,
+  isValidIndiaE164Phone,
+} from "./msg91.server";
 import {
   GROK_ISSUER_DEFAULT,
   PREVIEW_ALLOWED_HOSTS,
@@ -70,20 +75,84 @@ const env = (key: string): string | undefined => {
   return value ? value : undefined;
 };
 
-// Explicit off-switch. The deployer sets `VITE_AUTH_ENABLED=true` when it
-// provisions auth; set it to "false" to force auth off everywhere (dev user).
+// Explicit off-switch. The local prototype sets VITE_AUTH_ENABLED=false.
+// Production must set it to true only after provisioning this app's own auth
+// broker client and BETTER_AUTH_SECRET.
 const authDisabled = env("VITE_AUTH_ENABLED") === "false";
+const isProduction = env("NODE_ENV") === "production";
+const configuredBetterAuthSecret = env("BETTER_AUTH_SECRET");
 
-// Broker federation creds: the deployer injects a per-app client when deployed;
-// otherwise fall back to the shared live-preview client, which the broker accepts
-// for any `*.grok-sandbox.com` callback (see `./preview`).
+// Shared preview credentials are allowed only outside production and only for
+// the sandbox hosts accepted by the preview broker. A Render/public production
+// deployment must never silently inherit preview credentials.
 const grokIssuer = env("GROK_AUTH_ISSUER") ?? GROK_ISSUER_DEFAULT;
-const grokClientId = env("GROK_AUTH_CLIENT_ID") ?? PREVIEW_CLIENT_ID;
-const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PREVIEW_CLIENT_SECRET;
+const grokClientId =
+  env("GROK_AUTH_CLIENT_ID") ?? (isProduction ? undefined : PREVIEW_CLIENT_ID);
+const grokClientSecret =
+  env("GROK_AUTH_CLIENT_SECRET") ?? (isProduction ? undefined : PREVIEW_CLIENT_SECRET);
 
-/** True when federated sign-in is active (real auth is enforced). */
-export const authConfigured =
-  !authDisabled && Boolean(grokClientId && grokClientSecret);
+/** OAuth is optional when the app supports phone-only sign-in. */
+const oauthConfigured = Boolean(
+  !authDisabled &&
+  grokClientId &&
+  grokClientSecret &&
+  (!isProduction || configuredBetterAuthSecret),
+);
+
+const msg91AuthKey = env("MSG91_AUTH_KEY");
+const msg91TemplateId = env("MSG91_FLOW_TEMPLATE_ID");
+const msg91OtpVariable = env("MSG91_OTP_VARIABLE") ?? "VAR1";
+export const phoneOtpConfigured = Boolean(
+  !authDisabled && configuredBetterAuthSecret && msg91AuthKey && msg91TemplateId,
+);
+
+/** Used by request middleware: either configured auth method is sufficient. */
+export const authConfigured = oauthConfigured || phoneOtpConfigured;
+
+if (isProduction && !authDisabled && !authConfigured) {
+  console.error(
+    "[auth] Production sign-in is disabled until either app-specific OAuth " +
+      "credentials or Better Auth + MSG91 phone OTP credentials are configured.",
+  );
+}
+
+const phoneNumberAuthPlugin = phoneOtpConfigured
+  ? phoneNumber({
+      otpLength: 6,
+      expiresIn: 300,
+      allowedAttempts: 3,
+      requireVerification: true,
+      phoneNumberValidator: isValidIndiaE164Phone,
+      signUpOnVerification: {
+        getTempEmail: temporaryEmailForIndiaPhone,
+        getTempName: () => "MakeService customer",
+      },
+      // Better Auth owns OTP generation and verification. MSG91 only delivers
+      // that code through our pre-approved DLT transactional template.
+      // The send operation is intentionally fire-and-forget per Better Auth's
+      // timing guidance; failures are logged without exposing phone or OTP.
+      sendOTP: ({ phoneNumber: recipient, code }) => {
+        void sendOtpWithMsg91({
+          settings: {
+            authKey: msg91AuthKey!,
+            templateId: msg91TemplateId!,
+            otpVariable: msg91OtpVariable,
+          },
+          phoneNumber: recipient,
+          code,
+        }).catch(() => {
+          console.error("[auth] MSG91 OTP delivery failed; request a new code.");
+        });
+      },
+    })
+  : null;
+
+if (isProduction && !authDisabled && !phoneOtpConfigured) {
+  console.warn(
+    "[auth] Phone OTP is unavailable until BETTER_AUTH_SECRET, MSG91_AUTH_KEY " +
+      "and MSG91_FLOW_TEMPLATE_ID are configured.",
+  );
+}
 
 // This app's own Better Auth origin. When deployed the deployer injects the
 // public URL. In the sandbox live preview there's no fixed URL (each preview gets
@@ -142,7 +211,12 @@ const grokUserInfoUrl = `${issuerBase}/api/auth/oauth2/userinfo`;
 // schema from `migrations/auth/0001_auth.sql`, copied into `migrations/` when
 // the app turns sign-in on.
 const database = databaseUrl
-  ? new Pool({ connectionString: databaseUrl })
+  ? new Pool({
+      connectionString: databaseUrl,
+      max: 5,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 10_000,
+    })
   : { dialect: pgliteDialect(() => getPglite()), type: "postgres" as const };
 
 /** Session token cookie name — also read by the live-preview popup completion page. */
@@ -150,7 +224,7 @@ export const SESSION_TOKEN_COOKIE = "__Host-grok-auth.session_token";
 
 // Built separately so the `betterAuth({...})` call stays easy to edit without
 // breaking brackets (models often trip on the conditional plugin spread).
-const grokOAuthPlugin = authConfigured
+const grokOAuthPlugin = oauthConfigured
   ? genericOAuth({
       config: GROK_PROVIDERS.map(({ providerId, idp }) => ({
         providerId,
@@ -176,7 +250,7 @@ export const auth = betterAuth({
   baseURL,
   // Deployed apps inject BETTER_AUTH_SECRET. Preview: process-stable secret on
   // globalThis so HMR doesn't invalidate PGLite-backed sessions (see above).
-  secret: env("BETTER_AUTH_SECRET") ?? previewAuthSecret(),
+  secret: configuredBetterAuthSecret ?? previewAuthSecret(),
   database,
 
   // CSRF / origin check for credentialed auth POSTs (email sign-up/sign-in, …).
@@ -201,6 +275,21 @@ export const auth = betterAuth({
       // X's synthetic email is never "verified", so don't gate linking on the
       // local user's email-verified state.
       requireLocalEmailVerified: false,
+    },
+  },
+
+  // Apply conservative per-IP limits to SMS issuance and OTP verification.
+  // Better Auth's Phone Number plugin separately caps wrong guesses per code.
+  rateLimit: {
+    enabled: isProduction,
+    // Persist counters in the same PostgreSQL database as Better Auth.
+    // This survives Render restarts and is shared by all app instances.
+    storage: "database",
+    window: 60,
+    max: 20,
+    customRules: {
+      "/phone-number/send-otp": { window: 60, max: 3 },
+      "/phone-number/verify": { window: 60, max: 5 },
     },
   },
 
@@ -233,6 +322,8 @@ export const auth = betterAuth({
 
   plugins: [
     gateIdentitySessions(),
+
+    ...(phoneNumberAuthPlugin ? [phoneNumberAuthPlugin] : []),
 
     // One genericOAuth provider per upstream (when auth is on), all federating
     // to the broker with the SAME client and differing only by the `idp` hint.

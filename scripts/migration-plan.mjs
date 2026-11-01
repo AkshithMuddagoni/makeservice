@@ -3,13 +3,11 @@
  * Migration bookkeeping shared by the two appliers — `scripts/migrate.mjs`
  * (deploy, `readdir`) and `src/lib/db.ts` (PGLite preview, `import.meta.glob`).
  *
- * Applied files are keyed by BASENAME, so the same file applies once no matter
- * which directory it is globbed from. That is what makes the auth schema safe to
- * copy from `migrations/auth/` into `migrations/` when an app turns sign-in on:
- * a database that already has `0001_auth.sql` will not re-run it.
- *
- * Neither applier descends into subdirectories, so `migrations/auth/*.sql` is
- * out of scope for both until it is copied up.
+ * Applied files are keyed by BASENAME across the explicitly included
+ * `migrations/auth/`, `migrations/fieldly/`, and root migration folders.
+ * Both the deploy migrator and PGLite glob include the auth and Fieldly folders.
+ * Keep migration basenames unique across all included folders: the migration
+ * ledger stores only the basename, not its directory.
  */
 
 /**
@@ -18,7 +16,21 @@
  * @returns {string}
  */
 export function migrationName(path) {
-  return path.split("/").pop() ?? path;
+  // Node returns native path separators from readdir/join. Windows uses \\,
+  // while Vite import.meta.glob paths use /. Normalize both before extracting
+  // the basename so the migration ledger is portable across dev and Render.
+  return path.split(/[\\\\/]/).pop() ?? path;
+}
+
+/**
+ * Find legacy ledger entries that were stored as full Windows/POSIX paths.
+ * @param {Iterable<string>} applied
+ * @returns {Array<{ legacy: string, canonical: string }>}
+ */
+export function legacyMigrationNames(applied) {
+  return [...applied]
+    .map((legacy) => ({ legacy, canonical: migrationName(legacy) }))
+    .filter(({ legacy, canonical }) => legacy !== canonical);
 }
 
 /**
