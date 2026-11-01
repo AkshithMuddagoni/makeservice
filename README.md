@@ -12,7 +12,7 @@ The PR branch connects authenticated Better Auth server sessions to PostgreSQL-b
 
 The private `fieldly-private` Storage bucket is provisioned and private. The server-side upload flow includes owner-bound upload sessions, file type/signature checks, fail-closed ClamAV scanning and administrator-only short-lived downloads, but `PROVIDER_DOCUMENT_UPLOADS_ENABLED` remains **false** until a private scanner and retention/deletion controls are deployed and tested. Secure identity/PAN verification still requires a specialist KYC provider.
 
-The Supabase database is provisioned through migration 0014. All 29 public application tables have RLS enabled; browser `anon` and `authenticated` roles have no table grants. No public Storage access is configured. Do not add broad RLS policies or expose the service-role/secret key.
+The Supabase database is provisioned through migration 0014. All 30 public application tables have RLS enabled; browser `anon` and `authenticated` roles have no table grants. No public Storage access is configured. Do not add broad RLS policies or expose the service-role/secret key.
 
 **Not production-ready yet:** real phone OTP delivery (MSG91 + approved Indian DLT template), provider KYC, transactional notifications, payment checkout/webhooks/refunds/reconciliation/vendor payouts, production Render environment variables, backup/restore, monitoring, external security review and live-device/load acceptance tests are not complete. No real payment is collected. Do not accept live work or payments until these gates are closed.
 
