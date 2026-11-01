@@ -360,6 +360,7 @@ export function getProviderDocumentRequirements(input: {
       label: "Operator / driver roster",
       description: "Add each driver or machine operator in the provider desk and assign them to the machine(s) they operate. Each machine must have at least one named operator before the business application can be approved; operators are reviewed separately.",
       requiredForApproval: true,
+      secureOnly: true,
     });
     add({
       key: "OPERATOR_COMPETENCE_CERTIFICATE",
