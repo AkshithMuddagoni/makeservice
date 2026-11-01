@@ -10,7 +10,7 @@ import { inr, timeAgo } from "@/lib/fieldly/format";
 import { formatKm, kmBetween } from "@/lib/fieldly/geo";
 import { useFieldly, useProviders } from "@/lib/fieldly/store";
 import { authEnabled } from "@/lib/auth/client";
-import { getCurrentJobRequestDetail } from "@/lib/fieldly/account.functions";
+import { acceptCurrentProviderQuote, getCurrentJobRequestDetail } from "@/lib/fieldly/account.functions";
 
 export const Route = createFileRoute("/requests/$requestId")({ component: RequestPage });
 
@@ -25,6 +25,28 @@ type LiveRequestDetail = {
   site: { label: string; area: string; city: string; district?: string; state: string; pincode?: string; address?: string; landmark?: string; lat: number; lng: number };
   provider: { businessId: string; name: string; area: string; city: string; state: string; latitude: number; longitude: number; yearsExperience: number };
   distanceKm: number;
+  quotes: Array<{
+    id: string;
+    businessId: string;
+    providerName: string;
+    amountPaise: number;
+    currency: string;
+    note: string;
+    inclusions: string[];
+    exclusions: string[];
+    extraCharges: Array<{ label: string; amountPaise: number }>;
+    cancellationTerms: string;
+    etaMinutes: number | null;
+    status: "pending" | "accepted" | "declined" | "withdrawn" | "expired";
+    createdAt: string;
+    expiresAt: string | null;
+  }>;
+  booking: {
+    id: string;
+    publicReference: string;
+    amountPaise: number;
+    status: string;
+  } | null;
 };
 
 function RequestPage() {
@@ -48,6 +70,10 @@ function RequestPage() {
   const [liveRequest, setLiveRequest] = useState<LiveRequestDetail | null>(null);
   const [liveRequestLoading, setLiveRequestLoading] = useState(authEnabled);
   const [liveRequestError, setLiveRequestError] = useState("");
+  const [liveQuoteConsent, setLiveQuoteConsent] = useState<Record<string, boolean>>({});
+  const [acceptingLiveQuoteId, setAcceptingLiveQuoteId] = useState<string | null>(null);
+  const [refreshingLiveRequest, setRefreshingLiveRequest] = useState(false);
+  const [liveRefreshKey, setLiveRefreshKey] = useState(0);
   const [shown, setShown] = useState(1);
   const [quoteConsent, setQuoteConsent] = useState<Record<string, boolean>>({});
 
@@ -67,7 +93,7 @@ function RequestPage() {
         if (!cancelled) setLiveRequestLoading(false);
       });
     return () => { cancelled = true; };
-  }, [requestId]);
+  }, [requestId, liveRefreshKey]);
 
   useEffect(() => {
     if (!request) return;
@@ -96,25 +122,87 @@ function RequestPage() {
       );
     }
     const liveService = getService(liveRequest.serviceId);
+
+    async function refreshLiveRequest() {
+      setRefreshingLiveRequest(true);
+      setLiveRequestError("");
+      try {
+        const result = await getCurrentJobRequestDetail({ data: { requestId } });
+        setLiveRequest(result);
+      } catch (error) {
+        setLiveRequestError(error instanceof Error ? error.message : "Could not refresh request updates.");
+      } finally {
+        setRefreshingLiveRequest(false);
+      }
+    }
+
+    async function acceptLiveQuote(quoteId: string) {
+      if (!liveQuoteConsent[quoteId]) {
+        toast.error("Review the quotation and accept the terms before confirming.");
+        return;
+      }
+      setAcceptingLiveQuoteId(quoteId);
+      try {
+        const result = await acceptCurrentProviderQuote({
+          data: { quoteId, termsAccepted: true },
+        });
+        await refreshLiveRequest();
+        toast.success("Booking " + result.publicReference + " is confirmed. No payment has been taken.");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "The quote could not be accepted.");
+      } finally {
+        setAcceptingLiveQuoteId(null);
+      }
+    }
+
     return (
       <main className="mx-auto max-w-3xl px-4 py-8">
-        <p className="text-xs font-semibold uppercase tracking-widest text-field">Saved service request</p>
-        <h1 className="mt-1 font-display text-3xl font-bold">{liveService?.name ?? liveRequest.serviceId}</h1>
-        <p className="mt-2 text-sm text-muted">{liveRequest.site.label}, {liveRequest.site.area} · {liveRequest.whenLabel}</p>
-        <section className="mt-5 rounded-2xl border border-line bg-card p-5">
-          <div className="flex items-center gap-2 text-sm font-bold text-field">
-            <BadgeCheck className="size-5" /> Request saved successfully
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-field">Saved service request</p>
+            <h1 className="mt-1 font-display text-3xl font-bold">{liveService?.name ?? liveRequest.serviceId}</h1>
+            <p className="mt-2 text-sm text-muted">{liveRequest.site.label}, {liveRequest.site.area} · {liveRequest.whenLabel}</p>
           </div>
-          <p className="mt-2 text-sm leading-6 text-muted">
-            Reference: <span className="font-mono font-semibold">{liveRequest.id}</span><br />
-            Status: {liveRequest.status}<br />
-            Sent to: {liveRequest.provider.name}<br />
-            Provider base location: {formatKm(liveRequest.distanceKm)} away
-          </p>
-          <p className="mt-3 rounded-xl bg-paper p-3 text-sm leading-5">
-            Your request is waiting for this provider to respond with a quote. No booking is confirmed and no payment has been taken.
-          </p>
+          {liveRequest.status === "open" && (
+            <Button variant="outline" disabled={refreshingLiveRequest} onClick={() => void refreshLiveRequest()}>
+              {refreshingLiveRequest ? "Checking…" : "Check for quote updates"}
+            </Button>
+          )}
+        </div>
+
+        <section className="mt-5 rounded-2xl border border-line bg-card p-5">
+          {liveRequest.booking ? (
+            <>
+              <div className="flex items-center gap-2 text-sm font-bold text-field">
+                <BadgeCheck className="size-5" /> Booking confirmed
+              </div>
+              <h2 className="mt-2 font-display text-2xl font-bold">{liveRequest.booking.publicReference}</h2>
+              <p className="mt-2 text-sm leading-6 text-muted">
+                Agreed amount: <span className="font-semibold">{inr(liveRequest.booking.amountPaise / 100)}</span><br />
+                Booking status: {liveRequest.booking.status.replaceAll("_", " ")}
+              </p>
+              <p className="mt-3 rounded-xl bg-paper p-3 text-sm leading-5">
+                Your quote acceptance and booking are saved. Payment has not been collected or recorded. Do not pay outside the MakeService payment flow.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 text-sm font-bold text-field">
+                <BadgeCheck className="size-5" /> Service request saved
+              </div>
+              <p className="mt-2 text-sm leading-6 text-muted">
+                Reference: <span className="font-mono font-semibold">{liveRequest.id}</span><br />
+                Status: {liveRequest.status}<br />
+                Sent to: {liveRequest.provider.name}<br />
+                Provider base location: {formatKm(liveRequest.distanceKm)} away
+              </p>
+              <p className="mt-3 rounded-xl bg-paper p-3 text-sm leading-5">
+                Your request is saved. Review a provider's quote before accepting it. No booking is confirmed and no payment has been taken yet.
+              </p>
+            </>
+          )}
         </section>
+
         <section className="mt-4 rounded-2xl border border-line bg-card p-5">
           <h2 className="font-display text-lg font-bold">Work site</h2>
           <p className="mt-2 text-sm text-muted">{liveRequest.site.address || liveRequest.site.label}, {liveRequest.site.area}, {liveRequest.site.city}, {liveRequest.site.state}</p>
@@ -128,8 +216,12 @@ function RequestPage() {
           </div>
           <p className="mt-2 text-xs text-muted">The provider marker is the registered business base, not a live vehicle GPS location.</p>
         </section>
+
         <section className="mt-4 rounded-2xl border border-line bg-card p-5">
-          <h2 className="font-display text-lg font-bold">Service requirements</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-display text-lg font-bold">Service requirements</h2>
+            <span className="text-xs text-muted">{Object.keys(liveRequest.requirements).length} item(s)</span>
+          </div>
           <ul className="mt-2 grid gap-2 text-sm">
             {Object.entries(liveRequest.requirements).map(([key, value]) => (
               <li key={key} className="flex justify-between gap-4 border-b border-line pb-2">
@@ -140,7 +232,87 @@ function RequestPage() {
           </ul>
           {liveRequest.notes && <p className="mt-3 text-sm text-muted">Note: {liveRequest.notes}</p>}
         </section>
-        <Button asChild className="mt-5"><Link to="/">Back to home</Link></Button>
+
+        <section className="mt-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-display text-xl font-bold">Provider quotations</h2>
+            <span className="text-xs text-muted">{liveRequest.quotes.length} quote(s)</span>
+          </div>
+          {liveRequest.quotes.length === 0 ? (
+            <div className="mt-3 rounded-2xl border border-line bg-card p-4">
+              <p className="font-semibold">Waiting for the provider's response.</p>
+              <p className="mt-1 text-sm leading-5 text-muted">Use “Check for quote updates” to refresh. You are not booked or charged while no quote is accepted.</p>
+            </div>
+          ) : (
+            <div className="mt-3 grid gap-3">
+              {liveRequest.quotes.map((quote) => (
+                <article key={quote.id} className="rounded-2xl border border-line bg-card p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-display text-xl font-bold">{quote.providerName}</h3>
+                      <p className="mt-1 text-xs text-muted">
+                        {quote.etaMinutes === null ? "Arrival estimate not provided" : "Estimated arrival: " + quote.etaMinutes + " minutes"}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-display text-2xl font-bold">{inr(quote.amountPaise / 100)}</p>
+                      <p className="text-xs text-muted">{quote.status.replaceAll("_", " ")}</p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-sm leading-5">{quote.note}</p>
+                  {quote.inclusions.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted">Included</p>
+                      <ul className="mt-1 grid gap-1 text-sm">{quote.inclusions.map((item, i) => <li key={i}>• {item}</li>)}</ul>
+                    </div>
+                  )}
+                  {quote.exclusions.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted">Excluded</p>
+                      <ul className="mt-1 grid gap-1 text-sm text-muted">{quote.exclusions.map((item, i) => <li key={i}>• {item}</li>)}</ul>
+                    </div>
+                  )}
+                  {quote.extraCharges.length > 0 && (
+                    <div className="mt-3 rounded-xl bg-paper p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted">Additional charges</p>
+                      {quote.extraCharges.map((item, i) => (
+                        <p key={i} className="mt-1 flex justify-between gap-3 text-sm"><span>{item.label}</span><span className="font-semibold">{inr(item.amountPaise / 100)}</span></p>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-3 rounded-xl bg-paper p-3 text-sm leading-5">
+                    <p className="font-semibold">Cancellation & rescheduling</p>
+                    <p className="mt-1">{quote.cancellationTerms}</p>
+                  </div>
+                  {quote.status === "pending" && liveRequest.status === "open" && (
+                    <>
+                      <label className="mt-4 flex items-start gap-3 rounded-xl border border-line bg-white p-3 text-sm leading-5">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(liveQuoteConsent[quote.id])}
+                          onChange={(event) => setLiveQuoteConsent((current) => ({ ...current, [quote.id]: event.target.checked }))}
+                          className="mt-1 size-4 shrink-0 accent-emerald-600"
+                        />
+                        <span>I reviewed the total price, inclusions, exclusions, additional charges and cancellation terms. I agree to confirm the booking on this quotation. Any changes must be agreed before extra work starts.</span>
+                      </label>
+                      <Button
+                        className="mt-3"
+                        disabled={!liveQuoteConsent[quote.id] || acceptingLiveQuoteId !== null}
+                        onClick={() => void acceptLiveQuote(quote.id)}
+                      >
+                        {acceptingLiveQuoteId === quote.id ? "Confirming…" : "Accept quote & confirm booking"}
+                      </Button>
+                    </>
+                  )}
+                  {quote.status === "accepted" && <p className="mt-3 text-sm font-semibold text-field">Accepted for this booking</p>}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {liveRequestError && <p role="alert" className="mt-3 rounded-xl bg-danger-soft p-3 text-sm text-danger">{liveRequestError}</p>}
+        <Button asChild variant="outline" className="mt-5"><Link to="/">Back to home</Link></Button>
       </main>
     );
   }
