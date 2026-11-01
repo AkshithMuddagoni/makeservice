@@ -41,3 +41,29 @@ export const createJobRequestInputSchema = z.object({
 
 export type DiscoverProvidersInput = z.infer<typeof discoverProvidersInputSchema>;
 export type CreateJobRequestInput = z.infer<typeof createJobRequestInputSchema>;
+
+
+export const setProviderPresenceInputSchema = z.object({
+  businessId: z.string().uuid(),
+  isOnline: z.boolean(),
+}).strict();
+
+const quoteLineSchema = z.object({
+  label: z.string().trim().min(2).max(160),
+  amountRupees: z.number().int().min(0).max(100000000),
+}).strict();
+
+export const submitProviderQuoteInputSchema = z.object({
+  requestId: z.string().uuid(),
+  businessId: z.string().uuid(),
+  amountRupees: z.number().int().min(1).max(100000000),
+  note: z.string().trim().min(8).max(2000),
+  inclusions: z.array(z.string().trim().min(1).max(240)).max(25),
+  exclusions: z.array(z.string().trim().min(1).max(240)).max(25),
+  extraCharges: z.array(quoteLineSchema).max(20),
+  cancellationTerms: z.string().trim().min(8).max(1200),
+  etaMinutes: z.number().int().min(0).max(10080).nullable(),
+}).strict();
+
+export type SetProviderPresenceInput = z.infer<typeof setProviderPresenceInputSchema>;
+export type SubmitProviderQuoteInput = z.infer<typeof submitProviderQuoteInputSchema>;
