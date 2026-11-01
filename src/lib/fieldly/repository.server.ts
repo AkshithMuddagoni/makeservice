@@ -1891,6 +1891,24 @@ export async function acceptProviderQuoteForCustomer(
 }
 
 
+/** Automatically stop new requests when a business has no remaining eligible service/machine pair. */
+async function pausePresenceIfNoEligibleService(sql: Sql, businessId: string): Promise<void> {
+  const rows = await sql.query<{ count: number }>(
+    "select count(*)::int as count from public.provider_services ps " +
+    "where ps.business_id=$1::uuid and ps.verification_status='approved' and ps.is_listed=true and ps.is_available=true " +
+    "and exists (select 1 from public.provider_asset_services pas " +
+    "join public.provider_assets pa on pa.id=pas.asset_id and pa.business_id=ps.business_id " +
+    "where pas.provider_service_id=ps.id and pa.verification_status='approved' and pa.is_available=true)",
+    [businessId],
+  );
+  if (Number(rows[0]?.count ?? 0) === 0) {
+    await sql.query(
+      "update public.provider_presence set is_online=false,last_seen_at=null,updated_at=now() where business_id=$1::uuid",
+      [businessId],
+    );
+  }
+}
+
 /** Enable/pause one approved service for an owned approved business. */
 export async function setProviderServiceAvailabilityForUser(
   userId: string,
@@ -1935,6 +1953,7 @@ export async function setProviderServiceAvailabilityForUser(
     );
     const row = updated[0];
     if (!row) throw new Error("Service availability could not be saved.");
+    if (!input.isAvailable) await pausePresenceIfNoEligibleService(tx, input.businessId);
     return { providerServiceId: row.id, isAvailable: row.is_available, isListed: row.is_listed };
   });
 }
@@ -1982,6 +2001,7 @@ export async function setProviderAssetAvailabilityForUser(
     );
     const row = updated[0];
     if (!row) throw new Error("Machine availability could not be saved.");
+    if (!input.isAvailable) await pausePresenceIfNoEligibleService(tx, input.businessId);
     return { assetId: row.id, isAvailable: row.is_available };
   });
 }
