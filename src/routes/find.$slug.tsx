@@ -5,6 +5,7 @@ import { MapCanvas } from "@/components/fieldly/map-canvas";
 import { Stars } from "@/components/fieldly/bits";
 import { CustomerSignInDialog } from "@/components/fieldly/customer-sign-in-dialog";
 import { Button } from "@/components/ui/button";
+import { authEnabled } from "@/lib/auth/client";
 import { getService, isAvailableForService } from "@/lib/fieldly/catalog";
 import { formatKm, kmBetween, travelMinutes } from "@/lib/fieldly/geo";
 import { inr } from "@/lib/fieldly/format";
@@ -100,6 +101,23 @@ function FindPage() {
       kind: "vehicle" as const,
     })),
   ];
+
+  if (authEnabled) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-16">
+        <section className="rounded-3xl border border-line bg-card p-6 sm:p-9">
+          <p className="text-xs font-bold uppercase tracking-widest text-field">Verified provider network</p>
+          <h1 className="mt-2 font-display text-3xl font-bold">Live service bookings are not open yet.</h1>
+          <p className="mt-3 text-sm leading-6 text-muted">
+            We are connecting verified providers, secure work-site requests and real booking updates.
+            Sample provider profiles and simulated quotes are hidden on this deployment. No booking or
+            payment can be made here yet.
+          </p>
+          <Button asChild className="mt-5"><Link to="/">Back to home</Link></Button>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <div className="mx-auto grid max-w-6xl lg:min-h-screen lg:grid-cols-2">
