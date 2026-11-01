@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Check, Star } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { ChatBox, StatusPill, requirementLines } from "@/components/fieldly/bits";
 import { MapCanvas, type MapMarker } from "@/components/fieldly/map-canvas";
@@ -13,7 +13,7 @@ import { useFieldly, useProviders } from "@/lib/fieldly/store";
 import type { BookingStatus } from "@/lib/fieldly/types";
 import { cn } from "@/lib/utils";
 import { authEnabled } from "@/lib/auth/client";
-import { getCurrentBookingDetail, issueCurrentBookingStartCode, updateCurrentBookingParticipantAction, updateCurrentProviderBookingStatus, verifyCurrentBookingStartCode } from "@/lib/fieldly/account.functions";
+import { getCurrentBookingDetail, issueCurrentBookingStartCode, stopCurrentProviderBookingLocation, updateCurrentBookingParticipantAction, updateCurrentProviderBookingLocation, updateCurrentProviderBookingStatus, verifyCurrentBookingStartCode } from "@/lib/fieldly/account.functions";
 
 export const Route = createFileRoute("/bookings/$bookingId")({ component: BookingPage });
 
@@ -107,6 +107,31 @@ function BookingPage() {
   const [liveBusy, setLiveBusy] = useState(false);
   const [issuedCode, setIssuedCode] = useState<IssuedCode | null>(null);
   const [verificationAttemptsLeft, setVerificationAttemptsLeft] = useState<number | null>(null);
+  const [sharingLiveLocation, setSharingLiveLocation] = useState(false);
+  const [liveLocationError, setLiveLocationError] = useState("");
+  const watchIdRef = useRef<number | null>(null);
+  const lastLocationSentAtRef = useRef(0);
+
+  useEffect(() => {
+    if (!authEnabled || !liveBooking?.permissions.isCustomer) return;
+    if (!["on_the_way", "arrived", "service_started"].includes(liveBooking.status)) return;
+    const interval = window.setInterval(() => {
+      setLiveRefreshKey((value) => value + 1);
+    }, 15_000);
+    return () => window.clearInterval(interval);
+  }, [liveBooking?.permissions.isCustomer, liveBooking?.status]);
+
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null && typeof navigator !== "undefined" && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+      watchIdRef.current = null;
+      if (authEnabled) {
+        void stopCurrentProviderBookingLocation({ data: { bookingId } }).catch(() => undefined);
+      }
+    };
+  }, [bookingId]);
 
   useEffect(() => {
     if (!authEnabled) return;
@@ -130,6 +155,74 @@ function BookingPage() {
     setLiveError("");
     const result = await getCurrentBookingDetail({ data: { bookingId } });
     setLiveBooking(result);
+  }
+
+  function stopBrowserLocationWatch() {
+    if (watchIdRef.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+    }
+    watchIdRef.current = null;
+    setSharingLiveLocation(false);
+  }
+
+  async function stopLiveLocationSharing() {
+    setLiveLocationError("");
+    stopBrowserLocationWatch();
+    try {
+      await stopCurrentProviderBookingLocation({ data: { bookingId } });
+      setLiveRefreshKey((value) => value + 1);
+    } catch (error) {
+      setLiveLocationError(error instanceof Error ? error.message : "Could not stop location sharing on the server.");
+    }
+  }
+
+  function startLiveLocationSharing() {
+    setLiveLocationError("");
+    if (!navigator.geolocation) {
+      setLiveLocationError("This browser does not provide GPS location. Try a modern browser on a secure HTTPS connection.");
+      return;
+    }
+    if (watchIdRef.current !== null) return;
+    try {
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (position) => {
+          const now = Date.now();
+          if (now - lastLocationSentAtRef.current < 10_000) return;
+          lastLocationSentAtRef.current = now;
+          const { latitude, longitude, accuracy, heading, speed } = position.coords;
+          if (!Number.isFinite(accuracy) || accuracy > 200) {
+            setLiveLocationError("GPS accuracy is currently too low. Move outdoors or to a clearer area.");
+            return;
+          }
+          void updateCurrentProviderBookingLocation({
+            data: {
+              bookingId,
+              latitude,
+              longitude,
+              accuracyMeters: accuracy,
+              headingDegrees: heading,
+              speedMps: speed,
+            },
+          }).then(() => {
+            setLiveLocationError("");
+            setSharingLiveLocation(true);
+          }).catch((error: unknown) => {
+            setLiveLocationError(error instanceof Error ? error.message : "The GPS point could not be saved.");
+          });
+        },
+        (error) => {
+          setLiveLocationError(
+            error.code === error.PERMISSION_DENIED
+              ? "Location permission was denied. Enable location permission in your browser to share live tracking."
+              : "Could not read your GPS location. Check device location settings and try again.",
+          );
+          stopBrowserLocationWatch();
+        },
+        { enableHighAccuracy: true, maximumAge: 5_000, timeout: 15_000 },
+      );
+    } catch {
+      setLiveLocationError("The browser could not start live location sharing.");
+    }
   }
 
   async function issueLiveStartCode() {
@@ -292,7 +385,7 @@ function BookingPage() {
             </div>
             <p className="mt-2 rounded-xl bg-paper p-3 text-xs leading-5 text-muted">
               {liveBooking.liveLocation
-                ? "The vehicle marker is the most recent provider GPS update. GPS expires automatically if updates stop."
+                ? "The vehicle marker is the most recent provider GPS update. GPS expires automatically if updates stop. Last received: " + new Date(liveBooking.liveLocation.recordedAt).toLocaleTimeString("en-IN") + "."
                 : "No live GPS update is available. The provider marker, when shown, is only the registered business base location."}
             </p>
 
@@ -360,6 +453,31 @@ function BookingPage() {
                   {verificationAttemptsLeft !== null && <p className="text-xs text-muted">{verificationAttemptsLeft} attempt(s) remaining.</p>}
                   <Button type="submit" disabled={liveBusy || code.length !== 4}>{liveBusy ? "Verifying…" : "Verify code & start work"}</Button>
                 </form>
+              </section>
+            )}
+
+            {isLiveProvider && ["on_the_way", "arrived", "service_started"].includes(liveBooking.status) && (
+              <section className="rounded-2xl border border-line bg-card p-5">
+                <h2 className="font-display text-xl font-bold">Live GPS sharing</h2>
+                <p className="mt-2 text-sm leading-5 text-muted">
+                  Sharing sends your device's current GPS point for this booking only. Points expire automatically after two minutes if updates stop.
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className={cn("rounded-full px-3 py-1.5 text-xs font-semibold", sharingLiveLocation ? "bg-field-soft text-field" : "bg-paper text-muted")}>
+                    {sharingLiveLocation ? "This device is sharing location" : liveBooking.liveLocation ? "A recent GPS point is available" : "No active GPS point"}
+                  </span>
+                  {sharingLiveLocation ? (
+                    <Button variant="outline" disabled={liveBusy} onClick={() => void stopLiveLocationSharing()}>Stop sharing</Button>
+                  ) : (
+                    <Button disabled={liveBusy} onClick={startLiveLocationSharing}>Start sharing location</Button>
+                  )}
+                </div>
+                {liveLocationError && <p role="alert" className="mt-3 rounded-xl bg-danger-soft p-3 text-sm text-danger">{liveLocationError}</p>}
+                {liveBooking.liveLocation && (
+                  <p className="mt-3 text-xs text-muted">
+                    Last GPS point: {new Date(liveBooking.liveLocation.recordedAt).toLocaleTimeString("en-IN")} · accuracy ±{Math.round(liveBooking.liveLocation.accuracyMeters ?? 0)} m
+                  </p>
+                )}
               </section>
             )}
 
