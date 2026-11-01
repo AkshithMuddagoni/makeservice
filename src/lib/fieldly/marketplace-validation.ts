@@ -152,3 +152,42 @@ export const sendBookingMessageInputSchema = z.object({
 }).strict();
 
 export type SendBookingMessageInput = z.infer<typeof sendBookingMessageInputSchema>;
+
+
+const providerDocumentMimeSchema = z.enum([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+const isoDateSchema = z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/).nullable().optional();
+
+export const createProviderDocumentUploadInputSchema = z.object({
+  businessId: z.string().uuid(),
+  documentType: z.string().regex(/^[A-Z0-9_]{2,80}$/),
+  fileName: z.string().trim().min(1).max(240),
+  mimeType: providerDocumentMimeSchema,
+  sizeBytes: z.number().int().min(1).max(10 * 1024 * 1024),
+}).strict();
+
+export const confirmProviderDocumentUploadInputSchema =
+  createProviderDocumentUploadInputSchema.extend({
+    documentId: z.string().uuid(),
+    issuedOn: isoDateSchema,
+    expiresOn: isoDateSchema,
+  }).strict();
+
+export const getAdminProviderDocumentInputSchema = z.object({
+  documentId: z.string().uuid(),
+}).strict();
+
+export const reviewAdminProviderDocumentInputSchema = z.object({
+  documentId: z.string().uuid(),
+  decision: z.enum(["verified", "rejected"]),
+  note: z.string().trim().max(2000).default(""),
+}).strict();
+
+export type CreateProviderDocumentUploadInput = z.infer<typeof createProviderDocumentUploadInputSchema>;
+export type ConfirmProviderDocumentUploadInput = z.infer<typeof confirmProviderDocumentUploadInputSchema>;
+export type ReviewAdminProviderDocumentInput = z.infer<typeof reviewAdminProviderDocumentInputSchema>;
