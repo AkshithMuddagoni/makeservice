@@ -19,6 +19,7 @@ import type {
   ConfirmProviderDocumentUploadInput,
   CreateProviderDocumentUploadInput,
   ReviewAdminProviderDocumentInput,
+  SaveProviderOperatorInput,
 } from "./marketplace-validation";
 import type { CreateJobRequestInput, DiscoverProvidersInput, SendBookingMessageInput, SetProviderAssetAvailabilityInput, SetProviderServiceAvailabilityInput, SubmitProviderQuoteInput, UpdateProviderBookingLocationInput } from "./marketplace-validation";
 
@@ -473,6 +474,92 @@ export async function submitProviderApplicationForUser(
   }
 }
 
+
+
+/** Create or update an owner-scoped operator and the machines they may operate. */
+export async function saveProviderOperatorForUser(
+  userId: string,
+  input: SaveProviderOperatorInput,
+): Promise<{ operatorId: string; verificationStatus: string }> {
+  assertProductionIdentity(userId);
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireProviderRole(tx, userId);
+    const businesses = await tx.query<{ id: string; verification_status: string }>(
+      `select id::text as id, verification_status::text as verification_status
+       from public.provider_businesses
+       where id = $1::uuid and owner_user_id = $2 and is_suspended = false
+       for update`,
+      [input.businessId, userId],
+    );
+    const business = businesses[0];
+    if (!business || ["rejected", "suspended"].includes(business.verification_status)) {
+      throw new Error("This provider business cannot manage its operator roster.");
+    }
+
+    const assets = await tx.query<{ id: string }>(
+      `select id::text as id
+       from public.provider_assets
+       where business_id = $1::uuid and id = any($2::uuid[])
+       order by id`,
+      [input.businessId, input.assetIds],
+    );
+    if (assets.length !== input.assetIds.length) {
+      throw new Error("Every selected machine must belong to this provider business.");
+    }
+
+    let operatorId = input.operatorId;
+    if (operatorId) {
+      const existing = await tx.query<{ id: string }>(
+        `select id::text as id from public.provider_operators
+         where id = $1::uuid and business_id = $2::uuid
+         for update`,
+        [operatorId, input.businessId],
+      );
+      if (!existing[0]) throw new Error("The selected operator does not belong to this provider business.");
+      await tx.query(
+        `update public.provider_operators
+         set full_name = $3, phone_e164 = $4, role_title = $5,
+             experience_years = $6, verification_status = 'submitted',
+             reviewer_note = null, reviewed_by = null, reviewed_at = null,
+             updated_at = now()
+         where id = $1::uuid and business_id = $2::uuid`,
+        [operatorId, input.businessId, input.fullName, input.phoneE164 ?? null, input.roleTitle, input.experienceYears],
+      );
+      await tx.query(
+        "delete from public.provider_operator_assets where operator_id = $1::uuid and business_id = $2::uuid",
+        [operatorId, input.businessId],
+      );
+    } else {
+      const created = await tx.query<{ id: string }>(
+        `insert into public.provider_operators (
+           business_id, full_name, phone_e164, role_title, experience_years, verification_status
+         ) values ($1::uuid, $2, $3, $4, $5, 'submitted')
+         returning id::text as id`,
+        [input.businessId, input.fullName, input.phoneE164 ?? null, input.roleTitle, input.experienceYears],
+      );
+      operatorId = created[0]?.id;
+      if (!operatorId) throw new Error("The operator record could not be created.");
+    }
+
+    for (const assetId of input.assetIds) {
+      await tx.query(
+        `insert into public.provider_operator_assets (business_id, operator_id, asset_id)
+         values ($1::uuid, $2::uuid, $3::uuid)`,
+        [input.businessId, operatorId, assetId],
+      );
+    }
+
+    await tx.query(
+      `update public.provider_document_requirements
+       set status = 'submitted', updated_at = now()
+       where business_id = $1::uuid and requirement_key = 'OPERATOR_ROSTER'`,
+      [input.businessId],
+    );
+    return { operatorId, verificationStatus: "submitted" };
+  });
+}
+
 /** List provider applications owned by the authenticated account only. */
 export async function getProviderApplicationsForUser(userId: string) {
   assertProductionIdentity(userId);
@@ -552,6 +639,17 @@ export type ProviderDashboardApplication = {
     reviewedAt: string | null;
     serviceIds: string[];
   }>;
+  operators: Array<{
+    id: string;
+    fullName: string;
+    phoneLast4: string | null;
+    roleTitle: string;
+    experienceYears: number;
+    verificationStatus: string;
+    reviewerNote: string | null;
+    reviewedAt: string | null;
+    assetIds: string[];
+  }>;
   documentRequirements: Array<{
     key: string;
     label: string;
@@ -615,7 +713,7 @@ export async function getProviderDashboardForUser(
 
   const applications: ProviderDashboardApplication[] = [];
   for (const business of businesses) {
-    const [services, assets, requirements, payouts, presence] = await Promise.all([
+    const [services, assets, operators, requirements, payouts, presence] = await Promise.all([
       sql.query<{
         id: string;
         service_id: string;
@@ -668,6 +766,31 @@ export async function getProviderDashboardForUser(
          where pa.business_id = $1
          group by pa.id
          order by pa.created_at asc`,
+        [business.id],
+      ),
+      sql.query<{
+        id: string;
+        full_name: string;
+        phone_last4: string | null;
+        role_title: string;
+        experience_years: number | string | null;
+        verification_status: string;
+        reviewer_note: string | null;
+        reviewed_at: string | null;
+        asset_ids: string[] | null;
+      }>(
+        `select po.id::text as id, po.full_name,
+                right(po.phone_e164, 4) as phone_last4,
+                po.role_title, po.experience_years,
+                po.verification_status::text as verification_status,
+                po.reviewer_note, po.reviewed_at::text as reviewed_at,
+                coalesce(array_agg(poa.asset_id::text) filter (where poa.asset_id is not null), '{}') as asset_ids
+         from public.provider_operators po
+         left join public.provider_operator_assets poa
+           on poa.operator_id = po.id and poa.business_id = po.business_id
+         where po.business_id = $1
+         group by po.id
+         order by po.created_at asc`,
         [business.id],
       ),
       sql.query<{
@@ -756,6 +879,17 @@ export async function getProviderDashboardForUser(
         reviewerNote: asset.reviewer_note,
         reviewedAt: asset.reviewed_at,
         serviceIds: asset.service_ids ?? [],
+      })),
+      operators: operators.map((operator) => ({
+        id: operator.id,
+        fullName: operator.full_name,
+        phoneLast4: operator.phone_last4,
+        roleTitle: operator.role_title,
+        experienceYears: Number(operator.experience_years ?? 0),
+        verificationStatus: operator.verification_status,
+        reviewerNote: operator.reviewer_note,
+        reviewedAt: operator.reviewed_at,
+        assetIds: operator.asset_ids ?? [],
       })),
       documentRequirements: requirements.map((requirement) => ({
         key: requirement.requirement_key,
