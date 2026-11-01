@@ -91,3 +91,36 @@ export const setProviderAssetAvailabilityInputSchema = z.object({
 
 export type SetProviderServiceAvailabilityInput = z.infer<typeof setProviderServiceAvailabilityInputSchema>;
 export type SetProviderAssetAvailabilityInput = z.infer<typeof setProviderAssetAvailabilityInputSchema>;
+
+
+const bookingIdSchema = z.string().uuid();
+
+export const getBookingDetailInputSchema = z.object({
+  bookingId: bookingIdSchema,
+}).strict();
+
+export const updateProviderBookingStatusInputSchema = z.object({
+  bookingId: bookingIdSchema,
+  status: z.enum(["on_the_way", "arrived", "service_completed"]),
+  note: z.string().trim().max(500).optional(),
+}).strict();
+
+export const issueBookingStartCodeInputSchema = z.object({
+  bookingId: bookingIdSchema,
+}).strict();
+
+export const verifyBookingStartCodeInputSchema = z.object({
+  bookingId: bookingIdSchema,
+  code: z.string().regex(/^\d{4}$/, "Enter the four-digit customer start code."),
+}).strict();
+
+export const updateBookingParticipantInputSchema = z.object({
+  bookingId: bookingIdSchema,
+  reason: z.string().trim().min(5).max(1000),
+}).strict();
+
+export type GetBookingDetailInput = z.infer<typeof getBookingDetailInputSchema>;
+export type UpdateProviderBookingStatusInput = z.infer<typeof updateProviderBookingStatusInputSchema>;
+export type IssueBookingStartCodeInput = z.infer<typeof issueBookingStartCodeInputSchema>;
+export type VerifyBookingStartCodeInput = z.infer<typeof verifyBookingStartCodeInputSchema>;
+export type UpdateBookingParticipantInput = z.infer<typeof updateBookingParticipantInputSchema>;
