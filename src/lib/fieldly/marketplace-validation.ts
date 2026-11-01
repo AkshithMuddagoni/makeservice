@@ -75,3 +75,19 @@ export const acceptProviderQuoteInputSchema = z.object({
 }).strict();
 
 export type AcceptProviderQuoteInput = z.infer<typeof acceptProviderQuoteInputSchema>;
+
+
+export const setProviderServiceAvailabilityInputSchema = z.object({
+  businessId: z.string().uuid(),
+  providerServiceId: z.string().uuid(),
+  isAvailable: z.boolean(),
+}).strict();
+
+export const setProviderAssetAvailabilityInputSchema = z.object({
+  businessId: z.string().uuid(),
+  assetId: z.string().uuid(),
+  isAvailable: z.boolean(),
+}).strict();
+
+export type SetProviderServiceAvailabilityInput = z.infer<typeof setProviderServiceAvailabilityInputSchema>;
+export type SetProviderAssetAvailabilityInput = z.infer<typeof setProviderAssetAvailabilityInputSchema>;
