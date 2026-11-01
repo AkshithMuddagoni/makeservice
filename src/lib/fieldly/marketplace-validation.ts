@@ -161,7 +161,19 @@ const providerDocumentMimeSchema = z.enum([
   "image/webp",
 ]);
 
-const isoDateSchema = z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/).nullable().optional();
+function isCalendarDate(value: string): boolean {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+const isoDateSchema = z.string().refine(isCalendarDate, "Enter a valid YYYY-MM-DD date.").nullable().optional();
+
+const providerDocumentScopeSchema = {
+  providerServiceId: z.string().uuid().optional(),
+  assetId: z.string().uuid().optional(),
+  operatorId: z.string().uuid().optional(),
+};
 
 export const createProviderDocumentUploadInputSchema = z.object({
   businessId: z.string().uuid(),
@@ -169,14 +181,24 @@ export const createProviderDocumentUploadInputSchema = z.object({
   fileName: z.string().trim().min(1).max(240),
   mimeType: providerDocumentMimeSchema,
   sizeBytes: z.number().int().min(1).max(10 * 1024 * 1024),
-}).strict();
+  ...providerDocumentScopeSchema,
+}).strict().refine(
+  (value) => [value.providerServiceId, value.assetId, value.operatorId].filter(Boolean).length <= 1,
+  "Attach a document to only one service, machine or operator at a time.",
+);
 
 export const confirmProviderDocumentUploadInputSchema =
   createProviderDocumentUploadInputSchema.extend({
     documentId: z.string().uuid(),
     issuedOn: isoDateSchema,
     expiresOn: isoDateSchema,
-  }).strict();
+  }).strict().refine(
+    (value) => [value.providerServiceId, value.assetId, value.operatorId].filter(Boolean).length <= 1,
+    "Attach a document to only one service, machine or operator at a time.",
+  ).refine(
+    (value) => !value.issuedOn || !value.expiresOn || value.expiresOn >= value.issuedOn,
+    "Expiry date cannot be earlier than issue date.",
+  );
 
 export const getAdminProviderDocumentInputSchema = z.object({
   documentId: z.string().uuid(),
