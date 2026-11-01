@@ -6,6 +6,8 @@ import {
   setProviderPresenceInputSchema,
   submitProviderQuoteInputSchema,
   acceptProviderQuoteInputSchema,
+  setProviderServiceAvailabilityInputSchema,
+  setProviderAssetAvailabilityInputSchema,
 } from "./marketplace-validation.ts";
 
 const site = {
@@ -130,4 +132,25 @@ test("customer quote acceptance requires a UUID and explicit terms consent", () 
   assert.throws(() => acceptProviderQuoteInputSchema.parse({ quoteId, termsAccepted: false }));
   assert.throws(() => acceptProviderQuoteInputSchema.parse({ quoteId: "not-a-uuid", termsAccepted: true }));
   assert.throws(() => acceptProviderQuoteInputSchema.parse({ quoteId, termsAccepted: true, customerUserId: "spoofed" }));
+});
+
+
+test("provider service and machine availability require their own UUIDs and boolean state", () => {
+  const businessId = "c6e7a92f-73c4-44d1-9846-6b93f03e0acc";
+  const providerServiceId = "d7f8a30f-84d2-4b3a-9c4a-c4e1d4e2f103";
+  const assetId = "e8a9b41f-95e3-4c4b-8d5b-d5f2e5f30414";
+  assert.deepEqual(
+    setProviderServiceAvailabilityInputSchema.parse({ businessId, providerServiceId, isAvailable: true }),
+    { businessId, providerServiceId, isAvailable: true },
+  );
+  assert.deepEqual(
+    setProviderAssetAvailabilityInputSchema.parse({ businessId, assetId, isAvailable: false }),
+    { businessId, assetId, isAvailable: false },
+  );
+  assert.throws(() => setProviderServiceAvailabilityInputSchema.parse({
+    businessId, providerServiceId, isAvailable: "true",
+  }));
+  assert.throws(() => setProviderAssetAvailabilityInputSchema.parse({
+    businessId, assetId, isAvailable: true, ownerUserId: "spoofed",
+  }));
 });
