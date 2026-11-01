@@ -1364,6 +1364,12 @@ export type CustomerJobRequestDetail = {
     createdAt: string;
     expiresAt: string | null;
   }>;
+  booking: {
+    id: string;
+    publicReference: string;
+    amountPaise: number;
+    status: string;
+  } | null;
 };
 
 /** Read a request only for its verified customer owner. */
@@ -1381,17 +1387,21 @@ export async function getCustomerJobRequestForUser(
     pincode: string | null; landmark: string | null; latitude: number; longitude: number;
     business_id: string; provider_name: string; provider_area: string; provider_city: string;
     provider_state: string; provider_latitude: number; provider_longitude: number;
-    years_experience: number;
+    years_experience: number; booking_id: string | null; public_reference: string | null;
+    booking_amount_paise: string | number | null; booking_status: string | null;
   }>(
     "select jr.id::text as id, jr.service_id, jr.status::text as status, jr.created_at::text as created_at, " +
     "jr.scheduling_note, jr.customer_notes, jr.requirements, jr.site_label, jr.site_address, jr.area, " +
     "jr.city, jr.district, jr.state, jr.pincode, jr.landmark, jr.latitude, jr.longitude, " +
     "pb.id::text as business_id, pb.trading_name as provider_name, coalesce(pb.area,'') as provider_area, " +
     "coalesce(pb.city,pb.district,'') as provider_city, pb.state as provider_state, pb.latitude as provider_latitude, " +
-    "pb.longitude as provider_longitude, pb.years_experience " +
+    "pb.longitude as provider_longitude, pb.years_experience, " +
+    "b.id::text as booking_id, b.public_reference, b.amount_paise::text as booking_amount_paise, " +
+    "b.status::text as booking_status " +
     "from public.job_requests jr " +
     "join public.job_request_targets jrt on jrt.request_id = jr.id " +
     "join public.provider_businesses pb on pb.id = jrt.business_id " +
+    "left join public.bookings b on b.request_id = jr.id " +
     "where jr.id = $1::uuid and jr.customer_user_id = $2 limit 1",
     [requestId, userId],
   );
@@ -1478,6 +1488,12 @@ export async function getCustomerJobRequestForUser(
       createdAt: quote.created_at,
       expiresAt: quote.expires_at,
     })),
+    booking: row.booking_id ? {
+      id: row.booking_id,
+      publicReference: row.public_reference ?? "",
+      amountPaise: Number(row.booking_amount_paise ?? 0),
+      status: row.booking_status ?? "confirmed",
+    } : null,
   };
 }
 
