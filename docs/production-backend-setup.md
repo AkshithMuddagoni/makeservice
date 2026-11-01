@@ -263,6 +263,12 @@ Configure these in the Render service's **Environment** settings:
   `https://makeservice.onrender.com`.
 - `BETTER_AUTH_SECRET` — strong random value of at least 32 bytes.
 - `MSG91_AUTH_KEY` — server-only MSG91 API auth key.
+- `SUPABASE_URL` — Supabase project origin used by the server-side Storage adapter.
+- `SUPABASE_SECRET_KEY` — preferred server-only key for private Storage operations; never expose it to Vite.
+- `SUPABASE_SERVICE_ROLE_KEY` — legacy server-only fallback where Storage still needs the JWT-based service key.
+- `VITE_SUPABASE_PUBLISHABLE_KEY` — public key used only by the browser for requests to a server-issued signed upload URL.
+- `PROVIDER_DOCUMENT_UPLOADS_ENABLED=false` — leave disabled until the private malware scanner is deployed and tested.
+- `CLAMAV_HOST` and optional `CLAMAV_PORT=3310` — private network address of the ClamAV daemon; do not expose it publicly.
 - `MSG91_FLOW_TEMPLATE_ID` — server-side ID of the approved transactional
   Flow template that sends the 6-digit code.
 - `MSG91_OTP_VARIABLE=VAR1` — the placeholder variable in that Flow template.
@@ -273,7 +279,7 @@ Configure these in the Render service's **Environment** settings:
   depend on the Grok OAuth broker.
 
 Keep `MSG91_AUTH_KEY`, `BETTER_AUTH_SECRET`, and `DATABASE_URL` server-side;
-only the two `VITE_*` feature flags are intentionally exposed to the frontend.
+only `VITE_AUTH_ENABLED`, `VITE_PHONE_OTP_ENABLED`, and `VITE_SUPABASE_PUBLISHABLE_KEY` are intentionally exposed to the frontend. Never prefix database, Storage secret, MSG91 or ClamAV credentials with `VITE_`.
 Production auth no longer falls back to shared preview OAuth credentials.
 
 Local demo preview can continue with `VITE_AUTH_ENABLED=false` and no
@@ -432,7 +438,7 @@ No database migration is required for this admin milestone: the role, audit
 table, foreign keys and RLS already exist in the eight migrations in the deployment sequence.
 ## Private provider-document bucket
 
-Migration 0008 provisions `fieldly-private` as a non-public bucket with a 10 MiB file-size limit and an allowlist of PDF, JPEG, PNG and WebP. Migration 0011 adds server-only upload sessions that bind a signed upload to the provider owner and its specific document requirement. No browser Storage policies are created. The bucket is infrastructure only: **uploads are feature-gated by `PROVIDER_DOCUMENT_UPLOADS_ENABLED=true` and require a healthy private ClamAV scanner configured with `CLAMAV_HOST` (and optional `CLAMAV_PORT`). The application rejects uploaded files if the scan cannot complete or reports a threat. A separate retention/deletion job and external security audit are still required**. Do not ask providers to submit KYC files until those authenticated server workflows exist.
+Migration 0008 provisions `fieldly-private` as a non-public bucket with a 10 MiB file-size limit and an allowlist of PDF, JPEG, PNG and WebP. Migration 0011 adds server-only upload sessions that bind a signed upload to the provider owner and its specific document requirement. No browser Storage policies are created. Uploads are feature-gated by `PROVIDER_DOCUMENT_UPLOADS_ENABLED=true` and require a healthy private ClamAV scanner configured with `CLAMAV_HOST` (and optional `CLAMAV_PORT`). The server creates a one-time signed upload URL, then verifies the owner-bound upload session, size, file magic and ClamAV result before creating the document record. Administrator viewing uses a five-minute forced-download URL; only an administrator session can request it. Failed, mismatched or infected files are rejected and deletion is attempted. The scanner must be on a private network and health-monitored. A separate retention/deletion job, scan-evasion testing and external security audit are still required.
 
 ## Sensitive data rules
 
