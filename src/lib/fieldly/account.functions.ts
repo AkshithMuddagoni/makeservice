@@ -4,6 +4,7 @@ import { authMiddleware } from "../auth/middleware";
 import { isValidIndiaPincode } from "../india-validation";
 import {
   acceptProviderQuoteInputSchema,
+  adminItemReviewInputSchema,
   confirmProviderDocumentUploadInputSchema,
   createJobRequestInputSchema,
   createProviderDocumentUploadInputSchema,
@@ -356,4 +357,23 @@ export const reviewAdminProviderDocument = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { reviewAdminProviderDocumentForUser } = await import("./repository.server");
     return reviewAdminProviderDocumentForUser(context.userId, data);
+  });
+
+
+/** Administrator review of one service registration, separate from business approval. */
+export const reviewAdminProviderService = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(adminItemReviewInputSchema)
+  .handler(async ({ context, data }) => {
+    const { applyAdminProviderServiceReviewDecision } = await import("./repository.server");
+    return applyAdminProviderServiceReviewDecision(context.userId, data);
+  });
+
+/** Administrator review of one physical machine, separate from business approval. */
+export const reviewAdminProviderAsset = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(adminItemReviewInputSchema)
+  .handler(async ({ context, data }) => {
+    const { applyAdminProviderAssetReviewDecision } = await import("./repository.server");
+    return applyAdminProviderAssetReviewDecision(context.userId, data);
   });
