@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "../auth/middleware";
+import { isValidIndiaPincode } from "../india-validation";
 
 /**
  * These functions are safe to call from React. Database access is dynamically
@@ -36,7 +37,7 @@ const providerApplicationSchema = z.object({
     city: z.string().trim().min(2).max(100),
     area: z.string().trim().min(2).max(160),
     state: z.string().trim().min(2).max(100),
-    pincode: z.string().regex(/^\\d{6}$/),
+    pincode: z.string().refine(isValidIndiaPincode, "Enter a valid six-digit Indian PIN code."),
     gstStatus: z.enum(["REGISTERED", "NOT_REGISTERED", "NOT_SURE"]),
     aggregateTurnoverBand: z.enum(["UNDER_20_LAKH", "20_LAKH_OR_MORE", "NOT_SURE"]),
     udyamProvided: z.boolean(),
