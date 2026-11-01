@@ -431,7 +431,7 @@ function OperatorRosterManager({
             const assignedAssets = application.assets.filter((asset) => operator.assetIds.includes(asset.id));
             const competence = operator.documents.find((doc) => doc.documentType === "OPERATOR_COMPETENCE_CERTIFICATE");
             const licence = operator.documents.find((doc) => doc.documentType === "OPERATOR_DL");
-            const needsLicence = hasRoadUseAsset || /driver/i.test(operator.roleTitle);
+            const needsLicence = (hasRoadUseAsset && assignedAssets.some((asset) => ["public_road", "commercial_transport"].includes(asset.roadUse.toLowerCase()))) || /driver/i.test(operator.roleTitle);
             return (
               <div key={operator.id} className="rounded-2xl border border-line p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
