@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "../auth/middleware";
 import { isValidIndiaPincode } from "../india-validation";
-import { acceptProviderQuoteInputSchema, createJobRequestInputSchema, discoverProvidersInputSchema, getBookingDetailInputSchema, issueBookingStartCodeInputSchema, setProviderAssetAvailabilityInputSchema, setProviderPresenceInputSchema, setProviderServiceAvailabilityInputSchema, submitProviderQuoteInputSchema, updateBookingParticipantInputSchema, updateProviderBookingStatusInputSchema, verifyBookingStartCodeInputSchema } from "./marketplace-validation";
+import { acceptProviderQuoteInputSchema, createJobRequestInputSchema, discoverProvidersInputSchema, getBookingDetailInputSchema, issueBookingStartCodeInputSchema, setProviderAssetAvailabilityInputSchema, setProviderPresenceInputSchema, setProviderServiceAvailabilityInputSchema, stopProviderBookingLocationInputSchema, submitProviderQuoteInputSchema, updateBookingParticipantInputSchema, updateProviderBookingLocationInputSchema, updateProviderBookingStatusInputSchema, verifyBookingStartCodeInputSchema } from "./marketplace-validation";
 
 /**
  * These functions are safe to call from React. Database access is dynamically
@@ -270,4 +270,23 @@ export const getCurrentProviderBookings = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { getProviderBookingsForUser } = await import("./repository.server");
     return getProviderBookingsForUser(context.userId);
+  });
+
+
+/** Save a short-lived GPS point for an assigned active booking. */
+export const updateCurrentProviderBookingLocation = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(updateProviderBookingLocationInputSchema)
+  .handler(async ({ context, data }) => {
+    const { updateProviderBookingLocationForUser } = await import("./repository.server");
+    return updateProviderBookingLocationForUser(context.userId, data);
+  });
+
+/** Expire provider GPS sharing for an assigned booking. */
+export const stopCurrentProviderBookingLocation = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(stopProviderBookingLocationInputSchema)
+  .handler(async ({ context, data }) => {
+    const { stopProviderBookingLocationForUser } = await import("./repository.server");
+    return stopProviderBookingLocationForUser(context.userId, data.bookingId);
   });
