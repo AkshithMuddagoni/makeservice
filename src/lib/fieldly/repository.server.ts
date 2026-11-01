@@ -1410,3 +1410,239 @@ export async function getCustomerJobRequestForUser(
     distanceKm,
   };
 }
+
+
+async function requireProviderRole(sql: Sql, userId: string): Promise<void> {
+  assertProductionIdentity(userId);
+  const roles = await sql.query<{ role: FieldlyRole }>(
+    "select role::text as role from public.fieldly_user_roles where user_id = $1",
+    [userId],
+  );
+  if (!roles.some((row) => row.role === "provider")) {
+    throw new Error("A provider account is required for provider operations.");
+  }
+}
+
+export type ProviderPresenceResult = {
+  businessId: string;
+  isOnline: boolean;
+  updatedAt: string;
+};
+
+/** Provider may change availability only on an approved business they own. */
+export async function setProviderPresenceForUser(
+  userId: string,
+  input: { businessId: string; isOnline: boolean },
+): Promise<ProviderPresenceResult> {
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireProviderRole(tx, userId);
+    const businesses = await tx.query<{ id: string }>(
+      "select id::text as id from public.provider_businesses " +
+      "where id = $1::uuid and owner_user_id = $2 and verification_status = 'approved' and is_suspended = false " +
+      "for update",
+      [input.businessId, userId],
+    );
+    if (!businesses[0]) {
+      throw new Error("Only an approved business owned by your signed-in account can change availability.");
+    }
+
+    if (input.isOnline) {
+      const eligible = await tx.query<{ count: number }>(
+        "select count(*)::int as count from public.provider_services ps " +
+        "where ps.business_id = $1::uuid and ps.verification_status = 'approved' and ps.is_listed = true and ps.is_available = true " +
+        "and exists (select 1 from public.provider_asset_services pas " +
+        "join public.provider_assets pa on pa.id = pas.asset_id and pa.business_id = ps.business_id " +
+        "where pas.provider_service_id = ps.id and pa.verification_status = 'approved' and pa.is_available = true)",
+        [input.businessId],
+      );
+      if (Number(eligible[0]?.count ?? 0) < 1) {
+        throw new Error("Your business has no approved, listed service with approved available equipment yet.");
+      }
+    }
+
+    const rows = await tx.query<{ business_id: string; is_online: boolean; updated_at: string }>(
+      "insert into public.provider_presence (business_id, is_online, last_seen_at, updated_at) " +
+      "values ($1::uuid, $2, case when $2 then now() else null end, now()) " +
+      "on conflict (business_id) do update set is_online = excluded.is_online, " +
+      "last_seen_at = case when excluded.is_online then now() else null end, updated_at = now() " +
+      "returning business_id::text as business_id, is_online, updated_at::text as updated_at",
+      [input.businessId, input.isOnline],
+    );
+    const row = rows[0];
+    if (!row) throw new Error("Provider availability could not be saved.");
+    return { businessId: row.business_id, isOnline: row.is_online, updatedAt: row.updated_at };
+  });
+}
+
+export type ProviderOpenRequest = {
+  requestId: string;
+  businessId: string;
+  serviceId: string;
+  site: {
+    label: string; area: string; city: string; district: string | null; state: string;
+    pincode: string | null; address: string; landmark: string | null;
+    latitude: number; longitude: number;
+  };
+  requirements: Record<string, string>;
+  whenLabel: string;
+  notes: string;
+  createdAt: string;
+  distanceKm: number;
+};
+
+/** Requests are returned only for active, eligible businesses owned by this provider. */
+export async function getProviderOpenRequestsForUser(userId: string): Promise<ProviderOpenRequest[]> {
+  const sql = await getSql();
+  await requireProviderRole(sql, userId);
+  const rows = await sql.query<{
+    request_id: string; business_id: string; service_id: string; site_label: string;
+    area: string | null; city: string; district: string | null; state: string;
+    pincode: string | null; site_address: string; landmark: string | null;
+    latitude: number; longitude: number; requirements: Record<string, string>;
+    scheduling_note: string; customer_notes: string; created_at: string;
+    provider_latitude: number; provider_longitude: number;
+  }>(
+    "select jr.id::text as request_id, pb.id::text as business_id, jr.service_id, jr.site_label, " +
+    "jr.area, jr.city, jr.district, jr.state, jr.pincode, jr.site_address, jr.landmark, " +
+    "jr.latitude, jr.longitude, jr.requirements, jr.scheduling_note, jr.customer_notes, " +
+    "jr.created_at::text as created_at, pb.latitude as provider_latitude, pb.longitude as provider_longitude " +
+    "from public.provider_businesses pb " +
+    "join public.provider_presence presence on presence.business_id = pb.id and presence.is_online = true " +
+    "and coalesce(presence.last_seen_at,presence.updated_at) >= now() - interval '10 minutes' " +
+    "join public.job_request_targets jrt on jrt.business_id = pb.id and jrt.status in ('sent','viewed') " +
+    "join public.job_requests jr on jr.id = jrt.request_id and jr.status = 'open' " +
+    "join public.provider_services ps on ps.id = jrt.provider_service_id and ps.business_id = pb.id " +
+    "where pb.owner_user_id = $1 and pb.verification_status = 'approved' and pb.is_suspended = false " +
+    "and ps.verification_status = 'approved' and ps.is_listed = true and ps.is_available = true " +
+    "and exists (select 1 from public.provider_asset_services pas " +
+    "join public.provider_assets pa on pa.id = pas.asset_id and pa.business_id = pb.id " +
+    "where pas.provider_service_id = ps.id and pa.verification_status = 'approved' and pa.is_available = true) " +
+    "order by jr.created_at asc limit 50",
+    [userId],
+  );
+  return rows.map((row) => {
+    const radians = (degrees: number) => (degrees * Math.PI) / 180;
+    const lat1 = radians(Number(row.latitude));
+    const lat2 = radians(Number(row.provider_latitude));
+    const dLat = lat2 - lat1;
+    const dLng = radians(Number(row.longitude) - Number(row.provider_longitude));
+    const a = Math.sin(dLat / 2) ** 2
+      + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    return {
+      requestId: row.request_id,
+      businessId: row.business_id,
+      serviceId: row.service_id,
+      site: {
+        label: row.site_label,
+        area: row.area ?? "",
+        city: row.city,
+        district: row.district,
+        state: row.state,
+        pincode: row.pincode,
+        address: row.site_address,
+        landmark: row.landmark,
+        latitude: Number(row.latitude),
+        longitude: Number(row.longitude),
+      },
+      requirements: row.requirements ?? {},
+      whenLabel: row.scheduling_note,
+      notes: row.customer_notes,
+      createdAt: row.created_at,
+      distanceKm: 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a))),
+    };
+  });
+}
+
+export type ProviderQuoteResult = {
+  quoteId: string;
+  requestId: string;
+  businessId: string;
+  amountPaise: number;
+  status: "pending";
+};
+
+/** Submit or revise a pending quote only for a request assigned to an owned, eligible business. */
+export async function submitProviderQuoteForUser(
+  userId: string,
+  input: SubmitProviderQuoteInput,
+): Promise<ProviderQuoteResult> {
+  assertProductionIdentity(userId);
+  const amountPaise = input.amountRupees * 100;
+  if (!Number.isSafeInteger(amountPaise)) throw new Error("Enter a valid quote amount.");
+
+  const extraCharges = input.extraCharges.map((item) => {
+    const amount = item.amountRupees * 100;
+    if (!Number.isSafeInteger(amount)) throw new Error("An extra charge is too large.");
+    return { label: item.label, amountPaise: amount };
+  });
+
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireProviderRole(tx, userId);
+    const targets = await tx.query<{
+      request_id: string; business_id: string; service_id: string; provider_service_id: string;
+      target_status: string; existing_quote_id: string | null; existing_quote_status: string | null;
+    }>(
+      "select jr.id::text as request_id, pb.id::text as business_id, jr.service_id, ps.id::text as provider_service_id, " +
+      "jrt.status as target_status, pq.id::text as existing_quote_id, pq.status::text as existing_quote_status " +
+      "from public.job_requests jr " +
+      "join public.job_request_targets jrt on jrt.request_id = jr.id and jrt.business_id = $2::uuid " +
+      "join public.provider_businesses pb on pb.id = jrt.business_id and pb.owner_user_id = $1 " +
+      "join public.provider_services ps on ps.id = jrt.provider_service_id and ps.business_id = pb.id " +
+      "left join public.provider_quotes pq on pq.request_id = jr.id and pq.business_id = pb.id " +
+      "where jr.id = $3::uuid and jr.status = 'open' and jrt.status in ('sent','viewed','quoted') " +
+      "and pb.verification_status = 'approved' and pb.is_suspended = false " +
+      "and ps.verification_status = 'approved' and ps.is_listed = true and ps.is_available = true " +
+      "and exists (select 1 from public.provider_asset_services pas " +
+      "join public.provider_assets pa on pa.id = pas.asset_id and pa.business_id = pb.id " +
+      "where pas.provider_service_id = ps.id and pa.verification_status = 'approved' and pa.is_available = true) " +
+      "and exists (select 1 from public.provider_presence presence where presence.business_id = pb.id " +
+      "and presence.is_online = true and coalesce(presence.last_seen_at,presence.updated_at) >= now() - interval '10 minutes') " +
+      "for update of jr, jrt",
+      [userId, input.businessId, input.requestId],
+    );
+    const target = targets[0];
+    if (!target) {
+      throw new Error("This request is not assigned to your approved, online business or its service/equipment is no longer eligible.");
+    }
+    if (target.existing_quote_id && target.existing_quote_status !== "pending") {
+      throw new Error("You have already responded to this request and that quote is no longer editable.");
+    }
+
+    const quoteRows = target.existing_quote_id
+      ? await tx.query<{ id: string }>(
+          "update public.provider_quotes set amount_paise = $2, note = $3, inclusions = $4::jsonb, " +
+          "exclusions = $5::jsonb, extra_charges = $6::jsonb, cancellation_terms = $7, eta_minutes = $8, updated_at = now() " +
+          "where id = $1::uuid and status = 'pending' returning id::text as id",
+          [
+            target.existing_quote_id, amountPaise, input.note.trim(),
+            JSON.stringify(input.inclusions), JSON.stringify(input.exclusions),
+            JSON.stringify(extraCharges), input.cancellationTerms.trim(), input.etaMinutes,
+          ],
+        )
+      : await tx.query<{ id: string }>(
+          "insert into public.provider_quotes (request_id, business_id, amount_paise, note, inclusions, exclusions, extra_charges, cancellation_terms, eta_minutes, status) " +
+          "values ($1::uuid, $2::uuid, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, 'pending') " +
+          "returning id::text as id",
+          [
+            input.requestId, input.businessId, amountPaise, input.note.trim(),
+            JSON.stringify(input.inclusions), JSON.stringify(input.exclusions),
+            JSON.stringify(extraCharges), input.cancellationTerms.trim(), input.etaMinutes,
+          ],
+        );
+    const quote = quoteRows[0];
+    if (!quote) throw new Error("The provider quote could not be saved.");
+    await tx.query(
+      "update public.job_request_targets set status = 'quoted' where request_id = $1::uuid and business_id = $2::uuid",
+      [input.requestId, input.businessId],
+    );
+    return {
+      quoteId: quote.id,
+      requestId: input.requestId,
+      businessId: input.businessId,
+      amountPaise,
+      status: "pending",
+    };
+  });
+}
