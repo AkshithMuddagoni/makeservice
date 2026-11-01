@@ -218,3 +218,19 @@ export const adminItemReviewInputSchema = z.object({
 }).strict();
 
 export type AdminItemReviewInput = z.infer<typeof adminItemReviewInputSchema>;
+
+
+export const saveProviderOperatorInputSchema = z.object({
+  businessId: z.string().uuid(),
+  operatorId: z.string().uuid().optional(),
+  fullName: z.string().trim().min(2).max(120),
+  phoneE164: z.string().regex(/^\\+91[6-9]\\d{9}$/).nullable().optional(),
+  roleTitle: z.string().trim().min(2).max(80),
+  experienceYears: z.number().min(0).max(80),
+  assetIds: z.array(z.string().uuid()).min(1).max(30),
+}).strict().refine(
+  (value) => new Set(value.assetIds).size === value.assetIds.length,
+  "Select each assigned machine only once.",
+);
+
+export type SaveProviderOperatorInput = z.infer<typeof saveProviderOperatorInputSchema>;
