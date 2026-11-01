@@ -362,7 +362,7 @@ function ProductionProviderOperations({ applications, onRefresh }: { application
     const ping = () => {
       void setCurrentProviderPresence({
         data: { businessId: selectedBusinessId, isOnline: true },
-      }).catch(() => {
+      }).then(() => loadRequests(true)).catch(() => {
         setOnlineByBusiness((current) => ({ ...current, [selectedBusinessId]: false }));
         setError("Your online heartbeat could not be renewed. Go online again before accepting new requests.");
       });
@@ -370,7 +370,7 @@ function ProductionProviderOperations({ applications, onRefresh }: { application
     ping();
     const interval = window.setInterval(ping, 4 * 60 * 1000);
     return () => window.clearInterval(interval);
-  }, [online, selectedBusinessId]);
+  }, [online, selectedBusinessId, loadRequests]);
 
   async function toggleServiceAvailability(service: ProductionApplication["services"][number]) {
     if (!selectedBusinessId) return;
@@ -568,7 +568,7 @@ function ProductionProviderOperations({ applications, onRefresh }: { application
               <h3 className="font-display text-xl font-bold">Assigned requests</h3>
               <p className="text-xs text-muted">Customer contact details stay private until a booking is confirmed.</p>
             </div>
-            <Button variant="outline" size="sm" disabled={refreshing || !online} onClick={() => void updatePresence(true, true).then(() => loadRequests(true))}>
+            <Button variant="outline" size="sm" disabled={refreshing || !online} onClick={() => void updatePresence(true, true)}>
               <Activity className="mr-2 size-4" />{refreshing ? "Refreshing…" : "Refresh inbox"}
             </Button>
           </div>
