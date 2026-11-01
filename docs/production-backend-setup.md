@@ -40,6 +40,7 @@ The canonical migration sequence is:
 9. `migrations/fieldly/0007_index_foreign_keys.sql` — add supporting indexes for foreign keys and remove a confirmed duplicate provider-owner index.
 10. `migrations/fieldly/0008_create_private_documents_bucket.sql` — provision a non-public 10 MiB provider-document bucket with PDF/JPEG/PNG/WebP allowlisting and no browser policies.
 11. `migrations/fieldly/0011_provider_document_upload_sessions.sql` — bind one-time upload sessions to the verified provider, business and document scope; final document rows are created only after server-side inspection.
+12. `migrations/fieldly/0012_provider_operator_roster.sql` — add private operator-to-machine assignments and administrator review metadata.
 11. `migrations/fieldly/0009_booking_start_code_issuance.sql` — record the last service-start code issuance time to enforce a regeneration cooldown without storing plaintext codes.
 12. `migrations/fieldly/0010_booking_start_code_issue_limit.sql` — cap customer start-code issuance at five attempts per booking.
 
@@ -150,14 +151,14 @@ If the local branch already exists, use `git switch
 feat/production-backend-foundation` instead of creating it again. Only use the current `makeservice` project after reviewing the full public
 table inventory and confirming it is dedicated to MakeService.
 
-Your database should finish with thirteen migration ledger records:
+Your database should finish with fourteen migration ledger records:
 `0001_auth.sql`, `0002_phone_number_fields.sql`,
 `0003_rate_limit.sql`, `0004_lock_down_auth_data_access.sql`,
 `0001_fieldly_core.sql`, `0002_lock_down_browser_data_access.sql`,
 `0005_provider_onboarding.sql`, `0006_lock_down_migration_ledger.sql`,
 `0007_index_foreign_keys.sql`, `0008_create_private_documents_bucket.sql`,
 `0009_booking_start_code_issuance.sql`, `0010_booking_start_code_issue_limit.sql`,
-and `0011_provider_document_upload_sessions.sql`.
+`0011_provider_document_upload_sessions.sql`, and `0012_provider_operator_roster.sql`.
 On the current makeservice project, migrations 0006, 0007 and 0008 are already applied; migration 0011 is the new upload-session table migration.
 If the runner reports any SQL or connection error, stop and share only the
 error text with credentials and hostnames removed. Do not retry against
