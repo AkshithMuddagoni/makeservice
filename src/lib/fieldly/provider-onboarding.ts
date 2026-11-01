@@ -348,9 +348,12 @@ export function getProviderDocumentRequirements(input: {
     add({ key: "POTABLE_WATER_FBO_LICENSE", label: "FSSAI registration / licence (where the activity is a food business)", description: "FSSAI licensing applies to Food Business Operators. Fieldly must classify the exact potable / packaged water supply activity before making this mandatory for a bulk tanker-only provider.", requiredForApproval: false });
   }
 
-  if (input.assets.some((asset) => asset.roadUse === "PUBLIC_ROAD" || asset.roadUse === "COMMERCIAL_TRANSPORT")) {
-    add({ key: "OPERATOR_DL", label: "Driving licence for road-driving operators", description: "Upload the driver’s current licence to their individual operator record. Review validity, vehicle class and name against the assigned machine. Only provider owners and authorised administrators can request access to this private file.", requiredForApproval: true });
-  }
+  add({
+    key: "OPERATOR_DL",
+    label: "Driving licence for road-driving operators",
+    description: "Upload any applicable driver licence against the individual operator record. For road-use and commercial-transport machines this is required; review validity, vehicle class and name against the assigned machine.",
+    requiredForApproval: input.assets.some((asset) => asset.roadUse === "PUBLIC_ROAD" || asset.roadUse === "COMMERCIAL_TRANSPORT"),
+  });
   if (input.services.length > 0) {
     add({
       key: "OPERATOR_ROSTER",
