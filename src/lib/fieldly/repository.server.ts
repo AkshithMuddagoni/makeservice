@@ -15,6 +15,7 @@ import {
 } from "./storage.server";
 import type { Sql } from "../db";
 import type {
+  AdminItemReviewInput,
   ConfirmProviderDocumentUploadInput,
   CreateProviderDocumentUploadInput,
   ReviewAdminProviderDocumentInput,
@@ -772,6 +773,7 @@ export async function getProviderDashboardForUser(
 
 
 import {
+  assertAdminItemReviewAllowed,
   assertAdminReviewDecisionAllowed,
   assertAdminReviewReason,
   type AdminReviewDecision,
@@ -841,6 +843,7 @@ export type AdminProviderApplicationDetail = {
     isListed: boolean;
     isAvailable: boolean;
     reviewerNote: string | null;
+    reviewedAt: string | null;
   }>;
   assets: Array<{
     id: string;
@@ -856,6 +859,7 @@ export type AdminProviderApplicationDetail = {
     verificationStatus: string;
     isAvailable: boolean;
     reviewerNote: string | null;
+    reviewedAt: string | null;
     serviceIds: string[];
   }>;
   documentRequirements: Array<{
@@ -871,6 +875,9 @@ export type AdminProviderApplicationDetail = {
     id: string;
     documentType: string;
     originalFilename: string;
+    providerServiceId: string | null;
+    assetId: string | null;
+    operatorId: string | null;
     mimeType: string;
     sizeBytes: number;
     status: string;
@@ -977,11 +984,11 @@ export async function getAdminProviderApplicationDetail(
     sql.query<{
       id: string; service_id: string; selected_tasks: string[];
       specifications: Record<string, string>; verification_status: string;
-      is_listed: boolean; is_available: boolean; reviewer_note: string | null;
+      is_listed: boolean; is_available: boolean; reviewer_note: string | null; reviewed_at: string | null;
     }>(
       `select id, service_id, selected_tasks, specifications,
               verification_status::text as verification_status,
-              is_listed, is_available, reviewer_note
+              is_listed, is_available, reviewer_note, reviewed_at::text as reviewed_at
        from public.provider_services
        where business_id = $1 order by created_at asc`,
       [businessId],
@@ -991,12 +998,12 @@ export async function getAdminProviderApplicationDetail(
       year_of_manufacture: number | null; ownership: string; road_use: string;
       vehicle_class: string | null; registration_last4: string | null;
       serial_last4: string | null; verification_status: string;
-      is_available: boolean; reviewer_note: string | null; service_ids: string[] | null;
+      is_available: boolean; reviewer_note: string | null; reviewed_at: string | null; service_ids: string[] | null;
     }>(
       `select pa.id, pa.asset_type, pa.make, pa.model, pa.year_of_manufacture,
               pa.ownership, pa.road_use, pa.vehicle_class, pa.registration_last4,
               pa.serial_last4, pa.verification_status::text as verification_status,
-              pa.is_available, pa.reviewer_note,
+              pa.is_available, pa.reviewer_note, pa.reviewed_at::text as reviewed_at,
               coalesce(array_agg(ps.service_id) filter (where ps.service_id is not null), '{}') as service_ids
        from public.provider_assets pa
        left join public.provider_asset_services pas on pas.asset_id = pa.id
@@ -1018,10 +1025,14 @@ export async function getAdminProviderApplicationDetail(
       [businessId],
     ),
     sql.query<{
-      id: string; document_type: string; original_filename: string; mime_type: string;
-      size_bytes: string; status: string; expires_on: string | null; created_at: string;
+      id: string; document_type: string; original_filename: string;
+      provider_service_id: string | null; asset_id: string | null; operator_id: string | null;
+      mime_type: string; size_bytes: string; status: string; expires_on: string | null; created_at: string;
     }>(
-      `select id, document_type, original_filename, mime_type, size_bytes::text as size_bytes,
+      `select id, document_type, original_filename,
+              provider_service_id::text as provider_service_id,
+              asset_id::text as asset_id, operator_id::text as operator_id,
+              mime_type, size_bytes::text as size_bytes,
               status::text as status, expires_on::text as expires_on, created_at::text as created_at
        from public.provider_documents
        where business_id = $1
@@ -1038,6 +1049,12 @@ export async function getAdminProviderApplicationDetail(
        where (a.target_type = 'provider_business' and a.target_id = $1)
           or (a.target_type = 'provider_document' and a.target_id in (
             select d.id::text from public.provider_documents d where d.business_id = $1::uuid
+          ))
+          or (a.target_type = 'provider_service' and a.target_id in (
+            select s.id::text from public.provider_services s where s.business_id = $1::uuid
+          ))
+          or (a.target_type = 'provider_asset' and a.target_id in (
+            select pa.id::text from public.provider_assets pa where pa.business_id = $1::uuid
           ))
        order by a.created_at desc
        limit 20`,
@@ -1071,6 +1088,7 @@ export async function getAdminProviderApplicationDetail(
       id: item.id, serviceId: item.service_id, selectedTasks: item.selected_tasks ?? [],
       specifications: item.specifications ?? {}, verificationStatus: item.verification_status,
       isListed: item.is_listed, isAvailable: item.is_available, reviewerNote: item.reviewer_note,
+      reviewedAt: item.reviewed_at,
     })),
     assets: assets.map((item) => ({
       id: item.id, assetType: item.asset_type, make: item.make, model: item.model,
@@ -1078,7 +1096,7 @@ export async function getAdminProviderApplicationDetail(
       roadUse: item.road_use, vehicleClass: item.vehicle_class,
       registrationLast4: item.registration_last4, serialLast4: item.serial_last4,
       verificationStatus: item.verification_status, isAvailable: item.is_available,
-      reviewerNote: item.reviewer_note, serviceIds: item.service_ids ?? [],
+      reviewerNote: item.reviewer_note, reviewedAt: item.reviewed_at, serviceIds: item.service_ids ?? [],
     })),
     documentRequirements: requirements.map((item) => ({
       key: item.requirement_key, label: item.label, description: item.description,
@@ -1087,6 +1105,7 @@ export async function getAdminProviderApplicationDetail(
     })),
     uploadedDocuments: uploadedDocuments.map((item) => ({
       id: item.id, documentType: item.document_type, originalFilename: item.original_filename,
+      providerServiceId: item.provider_service_id, assetId: item.asset_id, operatorId: item.operator_id,
       mimeType: item.mime_type, sizeBytes: Number(item.size_bytes), status: item.status,
       expiresOn: item.expires_on, createdAt: item.created_at,
     })),
@@ -1095,6 +1114,229 @@ export async function getAdminProviderApplicationDetail(
       adminName: item.admin_name, createdAt: item.created_at,
     })),
   };
+}
+
+
+
+function requiredServiceDocumentKeys(serviceId: string, selectedTasks: string[]): string[] {
+  const keys = new Set<string>();
+  if (serviceId === "borewell" && selectedTasks.some((task) => /new borewell drilling|deepening/i.test(task))) {
+    keys.add("WALTA_ACKNOWLEDGEMENT");
+  }
+  if (serviceId === "crane") {
+    keys.add("CRANE_LOAD_CHART");
+    keys.add("CRANE_INSPECTION");
+  }
+  if (serviceId === "tanker") {
+    keys.add("WATER_SOURCE_EVIDENCE");
+    if (selectedTasks.some((task) => /potable/i.test(task))) keys.add("POTABLE_WATER_QUALITY");
+  }
+  return [...keys];
+}
+
+function requiredAssetDocumentKeys(input: {
+  state: string;
+  assetType: string;
+  ownership: string;
+  roadUse: string;
+  vehicleClass: string | null;
+  linkedServiceIds: string[];
+}): string[] {
+  const keys = new Set<string>(["ASSET_OWNERSHIP_PROOF"]);
+  if (input.ownership !== "owned") keys.add("ASSET_OWNER_NOC");
+  if (input.roadUse === "public_road" || input.roadUse === "commercial_transport") {
+    keys.add("VEHICLE_RC");
+    keys.add("THIRD_PARTY_INSURANCE");
+  }
+  if (input.roadUse === "commercial_transport" || input.vehicleClass === "TRANSPORT") {
+    keys.add("FITNESS_CERTIFICATE");
+    keys.add("TRANSPORT_PERMIT");
+  }
+  if (
+    input.state.trim().toLowerCase() === "telangana" &&
+    input.linkedServiceIds.includes("borewell") &&
+    /drilling rig/i.test(input.assetType)
+  ) keys.add("WALTA_FORM16");
+  return [...keys];
+}
+
+async function countMissingScopedDocuments(
+  tx: Sql,
+  input: {
+    businessId: string;
+    itemId: string;
+    scopeColumn: "provider_service_id" | "asset_id";
+    documentKeys: string[];
+  },
+): Promise<number> {
+  if (!input.documentKeys.length) return 0;
+  const rows = await tx.query<{ count: number }>(
+    `select count(*)::int as count
+     from unnest($1::text[]) as required(document_type)
+     where not exists (
+       select 1 from public.provider_documents d
+       where d.business_id = $2::uuid
+         and d.document_type = required.document_type
+         and d.${input.scopeColumn} = $3::uuid
+         and d.status = 'verified'
+         and (d.expires_on is null or d.expires_on >= current_date)
+     )`,
+    [input.documentKeys, input.businessId, input.itemId],
+  );
+  return Number(rows[0]?.count ?? 0);
+}
+
+/** Review one provider service independently from its parent business. */
+export async function applyAdminProviderServiceReviewDecision(
+  adminUserId: string,
+  input: AdminItemReviewInput,
+): Promise<{ itemId: string; status: ProviderReviewStatus; pendingRequiredDocuments: number; approvedLinkedAssets: number }> {
+  assertProductionIdentity(adminUserId);
+  assertAdminReviewReason(input.decision as AdminReviewDecision, input.note);
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireFieldlyAdmin(tx, adminUserId);
+    const rows = await tx.query<{
+      id: string; business_id: string; business_status: ProviderReviewStatus;
+      service_id: string; selected_tasks: string[]; verification_status: ProviderReviewStatus;
+    }>(
+      `select ps.id::text as id, ps.business_id::text as business_id,
+              pb.verification_status::text as business_status, ps.service_id,
+              ps.selected_tasks, ps.verification_status::text as verification_status
+       from public.provider_services ps
+       join public.provider_businesses pb on pb.id = ps.business_id
+       where ps.id = $1::uuid and pb.is_suspended = false
+       for update of ps, pb`,
+      [input.itemId],
+    );
+    const item = rows[0];
+    if (!item) throw new Error("Provider service not found.");
+    const pendingRequiredDocuments = await countMissingScopedDocuments(tx, {
+      businessId: item.business_id,
+      itemId: item.id,
+      scopeColumn: "provider_service_id",
+      documentKeys: requiredServiceDocumentKeys(item.service_id, item.selected_tasks ?? []),
+    });
+    const assets = await tx.query<{ count: number }>(
+      `select count(*)::int as count
+       from public.provider_asset_services pas
+       join public.provider_assets pa on pa.id = pas.asset_id
+       where pas.provider_service_id = $1::uuid
+         and pa.business_id = $2::uuid
+         and pa.verification_status = 'approved'`,
+      [item.id, item.business_id],
+    );
+    const approvedLinkedAssets = Number(assets[0]?.count ?? 0);
+    assertAdminItemReviewAllowed({
+      currentStatus: item.verification_status,
+      decision: input.decision,
+      businessStatus: item.business_status,
+      pendingRequiredDocuments,
+      approvedLinkedAssets,
+      requiresApprovedAsset: true,
+    });
+
+    const updated = await tx.query<{ verification_status: ProviderReviewStatus }>(
+      `update public.provider_services
+       set verification_status = $2::fieldly_review_status,
+           reviewer_note = nullif($3, ''),
+           reviewed_by = $4,
+           reviewed_at = now(),
+           is_listed = case when $2 = 'approved' then is_listed else false end,
+           is_available = case when $2 = 'approved' then is_available else false end,
+           updated_at = now()
+       where id = $1::uuid
+       returning verification_status::text as verification_status`,
+      [item.id, input.decision, input.note.trim(), adminUserId],
+    );
+    const status = updated[0]?.verification_status;
+    if (!status) throw new Error("Service review decision could not be saved.");
+    await tx.query(
+      `insert into public.fieldly_admin_audit
+         (admin_user_id, action, target_type, target_id, reason, metadata)
+       values ($1, $2, 'provider_service', $3, nullif($4, ''), $5::jsonb)`,
+      [adminUserId, `provider_service.${input.decision}`, item.id, input.note.trim(),
+       JSON.stringify({ businessId: item.business_id, serviceId: item.service_id, pendingRequiredDocuments, approvedLinkedAssets })],
+    );
+    return { itemId: item.id, status, pendingRequiredDocuments, approvedLinkedAssets };
+  });
+}
+
+/** Review one machine independently; verified documents must be scoped to that machine. */
+export async function applyAdminProviderAssetReviewDecision(
+  adminUserId: string,
+  input: AdminItemReviewInput,
+): Promise<{ itemId: string; status: ProviderReviewStatus; pendingRequiredDocuments: number }> {
+  assertProductionIdentity(adminUserId);
+  assertAdminReviewReason(input.decision as AdminReviewDecision, input.note);
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireFieldlyAdmin(tx, adminUserId);
+    const rows = await tx.query<{
+      id: string; business_id: string; business_status: ProviderReviewStatus; state: string;
+      asset_type: string; ownership: string; road_use: string; vehicle_class: string | null;
+      verification_status: ProviderReviewStatus; linked_service_ids: string[] | null;
+    }>(
+      `select pa.id::text as id, pa.business_id::text as business_id,
+              pb.verification_status::text as business_status, pb.state,
+              pa.asset_type, pa.ownership, pa.road_use, pa.vehicle_class,
+              pa.verification_status::text as verification_status,
+              coalesce(array_agg(ps.service_id) filter (where ps.service_id is not null), '{}') as linked_service_ids
+       from public.provider_assets pa
+       join public.provider_businesses pb on pb.id = pa.business_id
+       left join public.provider_asset_services pas on pas.asset_id = pa.id
+       left join public.provider_services ps
+         on ps.id = pas.provider_service_id and ps.business_id = pa.business_id
+       where pa.id = $1::uuid and pb.is_suspended = false
+       group by pa.id, pb.id
+       for update of pa, pb`,
+      [input.itemId],
+    );
+    const item = rows[0];
+    if (!item) throw new Error("Provider machine not found.");
+    const pendingRequiredDocuments = await countMissingScopedDocuments(tx, {
+      businessId: item.business_id,
+      itemId: item.id,
+      scopeColumn: "asset_id",
+      documentKeys: requiredAssetDocumentKeys({
+        state: item.state,
+        assetType: item.asset_type,
+        ownership: item.ownership,
+        roadUse: item.road_use,
+        vehicleClass: item.vehicle_class,
+        linkedServiceIds: item.linked_service_ids ?? [],
+      }),
+    });
+    assertAdminItemReviewAllowed({
+      currentStatus: item.verification_status,
+      decision: input.decision,
+      businessStatus: item.business_status,
+      pendingRequiredDocuments,
+    });
+
+    const updated = await tx.query<{ verification_status: ProviderReviewStatus }>(
+      `update public.provider_assets
+       set verification_status = $2::fieldly_review_status,
+           reviewer_note = nullif($3, ''),
+           reviewed_by = $4,
+           reviewed_at = now(),
+           is_available = case when $2 = 'approved' then is_available else false end,
+           updated_at = now()
+       where id = $1::uuid
+       returning verification_status::text as verification_status`,
+      [item.id, input.decision, input.note.trim(), adminUserId],
+    );
+    const status = updated[0]?.verification_status;
+    if (!status) throw new Error("Machine review decision could not be saved.");
+    await tx.query(
+      `insert into public.fieldly_admin_audit
+         (admin_user_id, action, target_type, target_id, reason, metadata)
+       values ($1, $2, 'provider_asset', $3, nullif($4, ''), $5::jsonb)`,
+      [adminUserId, `provider_asset.${input.decision}`, item.id, input.note.trim(),
+       JSON.stringify({ businessId: item.business_id, pendingRequiredDocuments })],
+    );
+    return { itemId: item.id, status, pendingRequiredDocuments };
+  });
 }
 
 export async function applyAdminProviderReviewDecision(input: {
