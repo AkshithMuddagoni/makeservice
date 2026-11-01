@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "../auth/middleware";
 import { isValidIndiaPincode } from "../india-validation";
+import { createJobRequestInputSchema, discoverProvidersInputSchema } from "./marketplace-validation";
 
 /**
  * These functions are safe to call from React. Database access is dynamically
@@ -127,4 +128,23 @@ export const applyAdminProviderReviewDecision = createServerFn({ method: "POST" 
       decision: data.decision,
       note: data.note,
     });
+  });
+
+ 
+/** Discover currently verified, online providers within the service radius. */
+export const discoverCurrentProviders = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(discoverProvidersInputSchema)
+  .handler(async ({ context, data }) => {
+    const { discoverProvidersForCustomer } = await import("./repository.server");
+    return discoverProvidersForCustomer(context.userId, data);
+  });
+
+/** Create a customer-owned request and target one eligible provider atomically. */
+export const createCurrentJobRequest = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(createJobRequestInputSchema)
+  .handler(async ({ context, data }) => {
+    const { createJobRequestForCustomer } = await import("./repository.server");
+    return createJobRequestForCustomer(context.userId, data);
   });
