@@ -226,6 +226,13 @@ function BookingPage() {
     }
   }
 
+  useEffect(() => {
+    const canShare = liveBooking && ["on_the_way", "arrived", "service_started"].includes(liveBooking.status);
+    if (!canShare && watchIdRef.current !== null) {
+      void stopLiveLocationSharing();
+    }
+  }, [liveBooking?.status]);
+
   async function issueLiveStartCode() {
     setLiveBusy(true);
     setLiveError("");
