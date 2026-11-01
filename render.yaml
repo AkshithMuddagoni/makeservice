@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: fieldly-marketplace
+    name: makeservice
     runtime: node
     # Keep the service on Free during development and backend validation.
     # Upgrade the existing Render service before customer-facing production.
