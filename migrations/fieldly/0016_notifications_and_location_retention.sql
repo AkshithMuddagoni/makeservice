@@ -118,8 +118,9 @@ BEGIN
     v_title := 'Booking confirmed';
     v_body := format('Your booking %s is confirmed.', NEW.public_reference);
     FOR v_recipient IN
-      SELECT DISTINCT unnest(ARRAY[NEW.customer_user_id, v_provider_user_id])
-      WHERE unnest IS NOT NULL
+      SELECT DISTINCT recipients.recipient
+      FROM unnest(ARRAY[NEW.customer_user_id, v_provider_user_id]) AS recipients(recipient)
+      WHERE recipients.recipient IS NOT NULL
     LOOP
       INSERT INTO public.fieldly_notifications
         (recipient_user_id, notification_type, title, body, target_type, target_id, event_key)
@@ -145,8 +146,9 @@ BEGIN
     v_body := format('Booking %s is now %s.', NEW.public_reference, replace(NEW.status::text, '_', ' '));
     v_key := 'booking_status:' || NEW.id::text || ':' || NEW.status::text;
     FOR v_recipient IN
-      SELECT DISTINCT unnest(ARRAY[NEW.customer_user_id, v_provider_user_id])
-      WHERE unnest IS NOT NULL
+      SELECT DISTINCT recipients.recipient
+      FROM unnest(ARRAY[NEW.customer_user_id, v_provider_user_id]) AS recipients(recipient)
+      WHERE recipients.recipient IS NOT NULL
     LOOP
       INSERT INTO public.fieldly_notifications
         (recipient_user_id, notification_type, title, body, target_type, target_id, event_key)
@@ -191,14 +193,15 @@ BEGIN
 
   IF NEW.sender_user_id = v_customer_user_id THEN
     FOR v_recipient IN
-      SELECT DISTINCT unnest(ARRAY[v_provider_user_id, v_operator_user_id])
-      WHERE unnest IS NOT NULL AND unnest <> NEW.sender_user_id
+      SELECT DISTINCT recipients.recipient
+      FROM unnest(ARRAY[v_provider_user_id, v_operator_user_id]) AS recipients(recipient)
+      WHERE recipients.recipient IS NOT NULL AND recipients.recipient <> NEW.sender_user_id
     LOOP
       INSERT INTO public.fieldly_notifications
         (recipient_user_id, notification_type, title, body, target_type, target_id, event_key)
       VALUES
         (v_recipient, 'booking_message', 'New booking message',
-         'You have a new message about booking ' || NEW.booking_id::text || '.',
+         format('You have a new message about booking %s.', coalesce(v_public_reference, '')),
          'booking', NEW.booking_id,
          'booking_message:' || NEW.id::text || ':' || v_recipient)
       ON CONFLICT (event_key) DO NOTHING;
@@ -208,7 +211,7 @@ BEGIN
       (recipient_user_id, notification_type, title, body, target_type, target_id, event_key)
     VALUES
       (v_customer_user_id, 'booking_message', 'New booking message',
-       'You have a new message about booking ' || NEW.booking_id::text || '.',
+       format('You have a new message about booking %s.', coalesce(v_public_reference, '')),
        'booking', NEW.booking_id,
        'booking_message:' || NEW.id::text || ':' || v_customer_user_id)
     ON CONFLICT (event_key) DO NOTHING;
@@ -227,7 +230,7 @@ LANGUAGE plpgsql
 SET search_path = public
 AS $$
 BEGIN
-  IF NEW.verification_status IS DISTINCT FROM OLD.verification_status THEN
+  IF TG_OP = 'INSERT' OR NEW.verification_status IS DISTINCT FROM OLD.verification_status THEN
     INSERT INTO public.fieldly_notifications
       (recipient_user_id, notification_type, title, body, target_type, target_id, event_key)
     VALUES
@@ -242,7 +245,7 @@ END;
 $$;
 
 CREATE TRIGGER fieldly_notify_provider_application
-AFTER UPDATE OF verification_status ON public.provider_businesses
+AFTER INSERT OR UPDATE OF verification_status ON public.provider_businesses
 FOR EACH ROW EXECUTE FUNCTION public.fieldly_notify_provider_application_status();
 
 -- Keep live coordinates short-lived even if the provider never reopens the app.
