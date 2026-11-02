@@ -177,7 +177,7 @@ CREATE OR REPLACE FUNCTION public.fieldly_notify_dispute_status()
 RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = public
-AS $
+AS $$
 DECLARE
   v_provider_user_id text;
   v_recipient text;
@@ -218,7 +218,7 @@ BEGIN
   END LOOP;
   RETURN NEW;
 END;
-$;
+$$;
 
 CREATE TRIGGER fieldly_notify_booking_dispute_status
 AFTER UPDATE OF dispute_status ON public.bookings
@@ -236,9 +236,10 @@ DECLARE
   v_provider_user_id text;
   v_operator_user_id text;
   v_recipient text;
+  v_public_reference text;
 BEGIN
-  SELECT b.customer_user_id, pb.owner_user_id, po.linked_user_id
-    INTO v_customer_user_id, v_provider_user_id, v_operator_user_id
+  SELECT b.customer_user_id, pb.owner_user_id, po.linked_user_id, b.public_reference
+    INTO v_customer_user_id, v_provider_user_id, v_operator_user_id, v_public_reference
   FROM public.bookings b
   JOIN public.provider_businesses pb ON pb.id = b.business_id
   LEFT JOIN public.provider_operators po ON po.id = b.assigned_operator_id
@@ -283,16 +284,19 @@ LANGUAGE plpgsql
 SET search_path = public
 AS $$
 BEGIN
-  IF TG_OP = 'INSERT' OR NEW.verification_status IS DISTINCT FROM OLD.verification_status THEN
-    INSERT INTO public.fieldly_notifications
-      (recipient_user_id, notification_type, title, body, target_type, target_id, event_key)
-    VALUES
-      (NEW.owner_user_id, 'provider_application', 'Provider application updated',
-       format('Your %s application is now %s.', NEW.trading_name, replace(NEW.verification_status::text, '_', ' ')),
-       'provider_application', NEW.id,
-       'provider_application:' || NEW.id::text || ':' || NEW.verification_status::text || ':' || NEW.updated_at::text)
-    ON CONFLICT (event_key) DO NOTHING;
+  IF TG_OP = 'UPDATE' AND NEW.verification_status IS NOT DISTINCT FROM OLD.verification_status THEN
+    RETURN NEW;
   END IF;
+
+  INSERT INTO public.fieldly_notifications
+    (recipient_user_id, notification_type, title, body, target_type, target_id, event_key)
+  VALUES
+    (NEW.owner_user_id, 'provider_application', 'Provider application updated',
+     format('Your %s application is now %s.', NEW.trading_name, replace(NEW.verification_status::text, '_', ' ')),
+     'provider_application', NEW.id,
+     'provider_application:' || NEW.id::text || ':' || NEW.verification_status::text || ':' || NEW.updated_at::text)
+  ON CONFLICT (event_key) DO NOTHING;
+
   RETURN NEW;
 END;
 $$;
