@@ -21,7 +21,7 @@ import type {
   ReviewAdminProviderDocumentInput,
   SaveProviderOperatorInput,
 } from "./marketplace-validation";
-import type { CreateJobRequestInput, DiscoverProvidersInput, SendBookingMessageInput, SetProviderAssetAvailabilityInput, SetProviderServiceAvailabilityInput, SubmitProviderQuoteInput, UpdateProviderBookingLocationInput } from "./marketplace-validation";
+import type { CreateJobRequestInput, DiscoverProvidersInput, SendBookingMessageInput, SetProviderAssetAvailabilityInput, SetProviderServiceAvailabilityInput, SubmitProviderQuoteInput, SubmitProviderReviewInput, UpdateProviderBookingLocationInput } from "./marketplace-validation";
 
 export type FieldlyProfile = {
   user_id: string;
