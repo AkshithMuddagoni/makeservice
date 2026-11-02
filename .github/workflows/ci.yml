@@ -25,6 +25,9 @@ jobs:
       - name: Install dependencies (same install path as Render)
         run: npm install
 
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
       - name: Type-check
         run: npm run typecheck
 

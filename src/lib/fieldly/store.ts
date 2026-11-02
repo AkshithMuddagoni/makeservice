@@ -122,6 +122,18 @@ function issueCode(booking: Booking): Booking {
   };
 }
 
+// In production, account identity lives in the HttpOnly Better Auth session
+// and PostgreSQL, never in this browser-persisted prototype store.
+const persistLocalIdentity = import.meta.env.VITE_AUTH_ENABLED === "false";
+const MARKETPLACE_BACKEND_DISABLED_MESSAGE =
+  "Live marketplace operations are not connected on this deployment yet. No request, quote, booking, message or payment was saved. Please check back after verified providers and backend services are enabled.";
+
+function previewOnlyResult(): Result | null {
+  return persistLocalIdentity
+    ? null
+    : { ok: false, error: MARKETPLACE_BACKEND_DISABLED_MESSAGE };
+}
+
 const memoryStorage: Storage = {
   getItem: () => null,
   setItem: () => undefined,
@@ -168,6 +180,7 @@ export const useFieldly = create<State>()(
       },
       signOut: () => set({ session: null, customer: null }),
       allProviders: () => {
+        if (!persistLocalIdentity) return [];
         const extraIds = new Set(get().extras.map((p) => p.id));
         return [...CATALOG_PROVIDERS.filter((p) => !extraIds.has(p.id)), ...get().extras];
       },
@@ -178,6 +191,7 @@ export const useFieldly = create<State>()(
         return get().providerById(id)?.online ?? false;
       },
       setOnline: (id, online) => {
+        if (!persistLocalIdentity) return;
         const session = get().session;
         if (session?.role !== "provider" || session.providerId !== id) return;
         const provider = get().providerById(id);
@@ -198,6 +212,8 @@ export const useFieldly = create<State>()(
         }));
       },
       setServiceAvailability: (id, serviceId, available) => {
+        const disabled = previewOnlyResult();
+        if (disabled) return disabled;
         const session = get().session;
         if (session?.role !== "provider" || session.providerId !== id) {
           return { ok: false, error: "Only this provider account can change its service availability." };
@@ -225,6 +241,8 @@ export const useFieldly = create<State>()(
         return { ok: true };
       },
       setAssetAvailability: (id, assetId, available) => {
+        const disabled = previewOnlyResult();
+        if (disabled) return disabled;
         const session = get().session;
         if (session?.role !== "provider" || session.providerId !== id) {
           return { ok: false, error: "Only this provider account can change its machine availability." };
@@ -248,7 +266,8 @@ export const useFieldly = create<State>()(
         }));
         return { ok: true };
       },
-      addProvider: (incoming) =>
+      addProvider: (incoming) => {
+        if (!persistLocalIdentity) return;
         set((s) => {
           const existing = s.extras.find((p) => p.id === incoming.id);
           if (!existing?.onboarding || !incoming.onboarding) {
@@ -355,8 +374,11 @@ export const useFieldly = create<State>()(
               },
             ],
           };
-        }),
+        });
+      },
       createRequest: ({ serviceId, providerId, detailsConsent }) => {
+        const disabled = previewOnlyResult();
+        if (disabled) return disabled;
         const { site, draft, session } = get();
         const who = session?.role === "customer" ? session : null;
         if (!who) return { ok: false, error: "Sign in with your mobile number before requesting this service." };
@@ -406,6 +428,8 @@ export const useFieldly = create<State>()(
         return { ok: true, id };
       },
       sendQuote: (requestId, amount, note) => {
+        const disabled = previewOnlyResult();
+        if (disabled) return disabled;
         const session = get().session;
         if (!session?.providerId) return { ok: false, error: "Open the operator desk first." };
         const request = get().requests.find((r) => r.id === requestId);
@@ -464,6 +488,8 @@ export const useFieldly = create<State>()(
         return { ok: true, id: next.id };
       },
       declineRequest: (requestId) => {
+        const disabled = previewOnlyResult();
+        if (disabled) return disabled;
         const session = get().session;
         const pid = session?.role === "provider" ? session.providerId : undefined;
         if (!pid) return { ok: false, error: "Open the operator desk first." };
@@ -495,6 +521,8 @@ export const useFieldly = create<State>()(
         return { ok: true };
       },
       acceptQuote: (quoteId, termsAccepted) => {
+        const disabled = previewOnlyResult();
+        if (disabled) return disabled;
         if (!termsAccepted) return { ok: false, error: "Review the provider's price and terms before accepting." };
         const quote = get().quotes.find((q) => q.id === quoteId);
         if (!quote || quote.status !== "pending") return { ok: false, error: "That quote is no longer open." };
@@ -576,6 +604,8 @@ export const useFieldly = create<State>()(
         return { ok: true, id: bookingId };
       },
       cancelRequest: (requestId) => {
+        const disabled = previewOnlyResult();
+        if (disabled) return disabled;
         const request = get().requests.find((r) => r.id === requestId);
         if (!request || request.status !== "open") return { ok: false, error: "Nothing open to cancel." };
         const session = get().session;
@@ -591,6 +621,8 @@ export const useFieldly = create<State>()(
         return { ok: true };
       },
       transition: (bookingId, to, note) => {
+        const disabled = previewOnlyResult();
+        if (disabled) return disabled;
         const booking = get().bookings.find((b) => b.id === bookingId);
         if (!booking) return { ok: false, error: "Booking not found." };
         const allowed = ALLOWED[booking.status];
@@ -646,6 +678,8 @@ export const useFieldly = create<State>()(
         return { ok: true };
       },
       verifyCode: (bookingId, code) => {
+        const disabled = previewOnlyResult();
+        if (disabled) return disabled;
         const booking = get().bookings.find((b) => b.id === bookingId);
         if (!booking) return { ok: false, error: "Booking not found." };
         if (booking.status !== "ARRIVED") return { ok: false, error: "The code works only after the operator has arrived." };
@@ -698,6 +732,8 @@ export const useFieldly = create<State>()(
         return { ok: true };
       },
       regenerateCode: (bookingId) => {
+        const disabled = previewOnlyResult();
+        if (disabled) return disabled;
         const booking = get().bookings.find((b) => b.id === bookingId);
         if (!booking) return { ok: false, error: "Booking not found." };
         if (booking.status !== "ARRIVED") return { ok: false, error: "A code is issued when the operator arrives." };
@@ -721,6 +757,8 @@ export const useFieldly = create<State>()(
         return { ok: true };
       },
       pay: (bookingId, method) => {
+        const disabled = previewOnlyResult();
+        if (disabled) return disabled;
         const booking = get().bookings.find((b) => b.id === bookingId);
         if (!booking) return { ok: false, error: "Booking not found." };
         if (booking.status !== "SERVICE_COMPLETED") {
@@ -750,6 +788,8 @@ export const useFieldly = create<State>()(
         return { ok: true };
       },
       review: (bookingId, stars, text) => {
+        const disabled = previewOnlyResult();
+        if (disabled) return disabled;
         const booking = get().bookings.find((b) => b.id === bookingId);
         if (!booking || (booking.status !== "SERVICE_COMPLETED" && booking.status !== "PAID")) {
           return { ok: false, error: "Rate the job after the service is marked complete." };
@@ -788,6 +828,8 @@ export const useFieldly = create<State>()(
         return { ok: true };
       },
       sendMessage: (kind, id, text) => {
+        const disabled = previewOnlyResult();
+        if (disabled) return disabled;
         const body = text.trim();
         if (!body) return { ok: false, error: "Write a message first." };
         const session = get().session;
@@ -822,7 +864,7 @@ export const useFieldly = create<State>()(
     }),
     {
       name: "fieldly-preview-v1",
-      version: 2,
+      version: 4,
       migrate: (persistedState, version) => {
         const state = persistedState as Partial<State>;
         const oldWarangalPresets = new Set([
@@ -839,24 +881,40 @@ export const useFieldly = create<State>()(
         const oldLocalPin =
           state.site && kmBetween(state.site, { lat: 17.978, lng: 79.575 }) < 35;
         if (version < 2 && ((selectedLabel && oldWarangalPresets.has(selectedLabel)) || oldLocalPin)) {
-          return { ...state, site: null } as State;
+          state.site = null;
+        }
+        if (!persistLocalIdentity) {
+          // Production must never hydrate work-site coordinates, uploaded photos,
+          // contact data, seeded providers or simulated job/payment records from
+          // a previous local preview session.
+          state.site = null;
+          state.draft = null;
+          state.customer = null;
+          state.session = null;
+          state.extras = [];
+          state.availability = {};
+          state.requests = [];
+          state.quotes = [];
+          state.bookings = [];
         }
         return state as State;
       },
       skipHydration: true,
       storage: createJSONStorage(() => (typeof window === "undefined" ? memoryStorage : localStorage)),
-      partialize: (s) => ({
-        lang: s.lang,
-        site: s.site,
-        draft: s.draft,
-        customer: s.customer,
-        session: s.session,
-        extras: s.extras,
-        availability: s.availability,
-        requests: s.requests,
-        quotes: s.quotes,
-        bookings: s.bookings,
-      }),
+      partialize: (s) => persistLocalIdentity
+        ? {
+            lang: s.lang,
+            site: s.site,
+            draft: s.draft,
+            customer: s.customer,
+            session: s.session,
+            extras: s.extras,
+            availability: s.availability,
+            requests: s.requests,
+            quotes: s.quotes,
+            bookings: s.bookings,
+          }
+        : { lang: s.lang },
     },
   ),
 );
@@ -865,6 +923,7 @@ export function useProviders() {
   const extras = useFieldly((s) => s.extras);
   const availability = useFieldly((s) => s.availability);
   return useMemo(() => {
+    if (!persistLocalIdentity) return [];
     const ids = new Set(extras.map((p) => p.id));
     return [...CATALOG_PROVIDERS.filter((p) => !ids.has(p.id)), ...extras].map((p) => ({
       ...p,

@@ -1,7 +1,9 @@
 services:
   - type: web
-    name: fieldly-marketplace
+    name: makeservice
     runtime: node
+    # Keep the service on Free during development and backend validation.
+    # Upgrade the existing Render service before customer-facing production.
     plan: free
     buildCommand: npm install && npm run build
     startCommand: npm run start
@@ -11,3 +13,28 @@ services:
         value: 22
       - key: NODE_ENV
         value: production
+
+      # Required by the production database adapter. Render prompts for this
+      # value during initial Blueprint creation; existing services must set it
+      # manually in Dashboard > Environment before deploying this backend.
+      - key: DATABASE_URL
+        sync: false
+
+      # Supabase CA certificate (PEM file encoded as one Base64 string).
+      # Required to verify TLS for app/auth pools and deploy-time migrations.
+      - key: DATABASE_SSL_CA_BASE64
+        sync: false
+
+      # Generate the server-side session secret in Render. Never commit it.
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: BETTER_AUTH_URL
+        value: https://makeservice.onrender.com
+
+      # Keep these off until the MSG91/DLT and secure KYC/scanner gates pass.
+      - key: VITE_AUTH_ENABLED
+        value: "false"
+      - key: VITE_PHONE_OTP_ENABLED
+        value: "false"
+      - key: PROVIDER_DOCUMENT_UPLOADS_ENABLED
+        value: "false"

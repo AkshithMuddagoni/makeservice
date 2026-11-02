@@ -1,8 +1,22 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Activity, ArrowUpRight, Banknote, BriefcaseBusiness, CalendarClock, CheckCircle2, ClipboardList, FileCheck2, History, LifeBuoy, MapPin, PauseCircle, PlayCircle, Plus, Settings2, ShieldCheck, Truck, UserRound, Wallet, Wrench } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { StatusPill, requirementLines } from "@/components/fieldly/bits";
+import { authClient, authEnabled } from "@/lib/auth/client";
+import {
+  confirmCurrentProviderDocumentUpload,
+  createCurrentProviderDocumentUpload,
+  getCurrentProviderBookings,
+  getCurrentProviderDashboard,
+  getCurrentProviderOpenRequests,
+  saveCurrentProviderOperator,
+  setCurrentProviderAssetAvailability,
+  setCurrentProviderPresence,
+  setCurrentProviderServiceAvailability,
+  submitCurrentProviderQuote,
+} from "@/lib/fieldly/account.functions";
+import { SERVICE_ONBOARDING } from "@/lib/fieldly/provider-onboarding";
 import { Button } from "@/components/ui/button";
 import { getService, isAvailableForService, isEligible, isServiceOperational } from "@/lib/fieldly/catalog";
 import { inr } from "@/lib/fieldly/format";
@@ -27,6 +41,7 @@ function DeskPage() {
   const providers = useProviders();
   const signInProvider = useFieldly((s) => s.signInProvider);
   const hydrated = useFieldly((s) => s.hydrated);
+  const { data: authSession, isPending: authSessionPending } = authClient.useSession();
   const [phone, setPhone] = useState("9000000001");
   const [code, setCode] = useState("");
 
@@ -37,6 +52,38 @@ function DeskPage() {
     const match = providers.find((p) => p.phone === phone);
     if (!match) return toast.error("No machine is listed on that number. Join first.");
     signInProvider(match.id);
+  }
+
+  if (authEnabled) {
+    if (authSessionPending) {
+      return <div className="mx-auto max-w-5xl px-4 py-14 text-sm text-muted">Checking your secure provider session…</div>;
+    }
+    if (!authSession?.user) {
+      return (
+        <div className="mx-auto max-w-lg px-4 py-12">
+          <p className="text-xs font-semibold uppercase tracking-widest text-field">Provider workspace</p>
+          <h1 className="mt-1 font-display text-4xl font-bold">Your provider desk</h1>
+          <p className="mt-3 text-sm leading-6 text-muted">Sign in with your verified MakeService mobile account to view your submitted businesses, machinery and verification progress.</p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Button asChild><Link to="/account">Sign in to MakeService</Link></Button>
+            <Button asChild variant="secondary"><Link to="/join">Register your business</Link></Button>
+          </div>
+        </div>
+      );
+    }
+    const phone = authSession.user.phoneNumber ?? "";
+    const phoneVerified = Boolean(authSession.user.phoneNumberVerified && /^\\+91[6-9]\\d{9}$/.test(phone));
+    if (!phoneVerified) {
+      return (
+        <div className="mx-auto max-w-lg px-4 py-12">
+          <p className="text-xs font-semibold uppercase tracking-widest text-field">Provider workspace</p>
+          <h1 className="mt-1 font-display text-4xl font-bold">Verify your mobile</h1>
+          <p className="mt-3 text-sm leading-6 text-muted">Provider access requires a verified Indian mobile number. MSG91/DLT setup is still pending, so real phone verification is not active yet. The preview code is not accepted in production.</p>
+          <Button asChild className="mt-5"><Link to="/account">Go to account</Link></Button>
+        </div>
+      );
+    }
+    return <ProductionDeskHome />;
   }
 
   if (session?.role !== "provider" || !session.providerId) {
@@ -60,6 +107,873 @@ function DeskPage() {
     );
   }
   return <DeskHome providerId={session.providerId} />;
+}
+
+type ProductionApplication = Awaited<ReturnType<typeof getCurrentProviderDashboard>>[number];
+
+const reviewLabel = (status: string) => status.replaceAll("_", " ").replace(/\\b\\w/g, (letter) => letter.toUpperCase());
+const reviewTone = (status: string) => {
+  const value = status.toLowerCase();
+  if (value === "approved" || value === "verified") return "bg-field-soft text-field";
+  if (value === "rejected" || value === "suspended") return "bg-red-50 text-red-700";
+  if (value === "needs_information") return "bg-amber-50 text-amber-800";
+  return "bg-paper text-muted";
+};
+
+function ProductionDeskHome() {
+  const { data: authSession } = authClient.useSession();
+  const [applications, setApplications] = useState<ProductionApplication[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadApplications = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError("");
+    try {
+      const data = await getCurrentProviderDashboard();
+      setApplications(data);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "We couldn't load your provider applications.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadApplications();
+  }, [loadApplications]);
+
+  const userName = authSession?.user?.name || "Provider";
+  const totalServices = applications.reduce((sum, app) => sum + app.services.length, 0);
+  const totalAssets = applications.reduce((sum, app) => sum + app.assets.length, 0);
+  const pendingDocs = applications.reduce((sum, app) => {
+    return sum + app.documentRequirements.filter((doc) => {
+      if (!doc.requiredForApproval || doc.status === "not_applicable") return false;
+      if (doc.key === "OPERATOR_ROSTER") {
+        return !app.assets.length || app.assets.some((asset) =>
+          !app.operators.some((operator) => operator.assetIds.includes(asset.id)),
+        );
+      }
+      if (doc.key === "OPERATOR_DL") {
+        return app.operators.some((operator) => {
+          const assignedAssets = app.assets.filter((asset) => operator.assetIds.includes(asset.id));
+          const requiresLicence = assignedAssets.some((asset) =>
+            ["public_road", "commercial_transport"].includes(asset.roadUse.toLowerCase()),
+          ) || /driver/i.test(operator.roleTitle);
+          return requiresLicence && !operator.documents.some((file) =>
+            file.documentType === "OPERATOR_DL" &&
+            file.status === "verified" &&
+            (!file.expiresOn || file.expiresOn >= new Date().toISOString().slice(0, 10)),
+          );
+        });
+      }
+      return !["verified", "not_applicable"].includes(doc.status);
+    }).length;
+  }, 0);
+
+  if (loading) {
+    return <div className="mx-auto max-w-5xl px-4 py-14 text-sm text-muted">Loading your provider applications from Supabase…</div>;
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-8 pb-16">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-field">MakeService provider workspace</p>
+          <h1 className="mt-1 font-display text-3xl font-bold sm:text-4xl">Welcome, {userName}</h1>
+          <p className="mt-2 text-sm text-muted">Your provider applications and verification progress, securely loaded from your account.</p>
+        </div>
+        <Button variant="secondary" onClick={() => void loadApplications(true)} disabled={refreshing}>
+          <Activity className="mr-2 size-4" />{refreshing ? "Refreshing…" : "Refresh"}
+        </Button>
+      </header>
+
+      {error && (
+        <div role="alert" className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          {error}
+          <button type="button" className="ml-2 font-semibold underline" onClick={() => void loadApplications(true)}>Try again</button>
+        </div>
+      )}
+
+      <section className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Metric icon={BriefcaseBusiness} label="Businesses" value={String(applications.length)} note="Owned by your account" />
+        <Metric icon={Wrench} label="Registered services" value={String(totalServices)} note="Across your businesses" />
+        <Metric icon={Truck} label="Machines & assets" value={String(totalAssets)} note="Registered equipment" />
+        <Metric icon={FileCheck2} label="Documents pending" value={String(pendingDocs)} note="Required checklist items" />
+      </section>
+
+      {!applications.length && !error && (
+        <section className="mt-6 rounded-3xl border border-line bg-card p-6 sm:p-8">
+          <div className="flex size-12 items-center justify-center rounded-2xl bg-paper"><BriefcaseBusiness className="size-6" /></div>
+          <h2 className="mt-4 font-display text-2xl font-bold">No provider application yet</h2>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-muted">Register your business, services and machines. Your application will be stored under your verified account and will remain unavailable to customers until the required checks and admin approval are complete.</p>
+          <Button asChild className="mt-5"><Link to="/join"><Plus className="mr-2 size-4" />Register a business or machine</Link></Button>
+        </section>
+      )}
+
+      <div className="mt-6 grid gap-5">
+        {applications.map((application) => (
+          <article key={application.id} className="overflow-hidden rounded-3xl border border-line bg-card">
+            <div className="border-b border-line p-5 sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-field">Business application</p>
+                  <h2 className="mt-1 break-words font-display text-2xl font-bold">{application.tradeName}</h2>
+                  <p className="mt-1 text-sm text-muted">{application.legalName} · {application.businessType.replaceAll("_", " ")}</p>
+                  <p className="mt-2 flex items-center gap-1 text-xs text-muted"><MapPin className="size-3.5" />{application.area}, {application.city ?? application.district}, {application.state} · {application.pincode}</p>
+                </div>
+                <span className={cn("rounded-full px-3 py-1.5 text-xs font-bold", reviewTone(application.verificationStatus))}>
+                  {reviewLabel(application.verificationStatus)}
+                </span>
+              </div>
+              {application.reviewerNote && (
+                <div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+                  <span className="font-semibold">Reviewer note:</span> {application.reviewerNote}
+                </div>
+              )}
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <InfoMini label="Owner" value={application.ownerFullName} />
+                <InfoMini label="Experience" value={application.yearsExperience + " years"} />
+                <InfoMini label="Payout onboarding" value={reviewLabel(application.payoutStatus)} />
+              </div>
+            </div>
+
+            <section className="p-5 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-display text-lg font-bold">Registered services</h3>
+                <span className="text-xs text-muted">{application.services.length} service(s)</span>
+              </div>
+              {application.services.length ? (
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {application.services.map((service) => (
+                    <div key={service.id} className="rounded-2xl border border-line p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="font-semibold">{SERVICE_ONBOARDING[service.serviceId]?.label ?? service.serviceId}</div>
+                        <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", reviewTone(service.verificationStatus))}>{reviewLabel(service.verificationStatus)}</span>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-muted">{service.selectedTasks.join(" · ") || "No tasks recorded"}</p>
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                        <span className="rounded-full bg-paper px-2.5 py-1">{service.isListed ? "Listed" : "Not listed"}</span>
+                        <span className="rounded-full bg-paper px-2.5 py-1">{service.isAvailable ? "Available" : "Unavailable"}</span>
+                      </div>
+                      {service.reviewerNote && <p className="mt-3 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">{service.reviewerNote}</p>}
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="mt-3 text-sm text-muted">No services on this application.</p>}
+            </section>
+
+            <section className="border-t border-line p-5 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-display text-lg font-bold">Machines & equipment</h3>
+                <span className="text-xs text-muted">{application.assets.length} asset(s)</span>
+              </div>
+              {application.assets.length ? (
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {application.assets.map((asset) => (
+                    <div key={asset.id} className="rounded-2xl border border-line p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div><p className="font-semibold">{asset.make} {asset.model}</p><p className="mt-1 text-xs text-muted">{asset.assetType}{asset.yearOfManufacture ? " · " + asset.yearOfManufacture : ""}</p></div>
+                        <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", reviewTone(asset.verificationStatus))}>{reviewLabel(asset.verificationStatus)}</span>
+                      </div>
+                      <p className="mt-2 text-xs text-muted">{reviewLabel(asset.ownership)} · {reviewLabel(asset.roadUse)}</p>
+                      <p className="mt-1 text-xs text-muted">For: {asset.serviceIds.map((id) => SERVICE_ONBOARDING[id]?.label ?? id).join(", ")}</p>
+                      {asset.registrationLast4 && <p className="mt-1 text-xs text-muted">Registration ending {asset.registrationLast4}</p>}
+                      {asset.reviewerNote && <p className="mt-3 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">{asset.reviewerNote}</p>}
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="mt-3 text-sm text-muted">No machines recorded.</p>}
+            </section>
+
+            <OperatorRosterManager application={application} onRefresh={() => loadApplications(true)} />
+
+            <section className="border-t border-line p-5 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-display text-lg font-bold">Verification checklist</h3>
+                <span className="text-xs text-muted">{application.documentRequirements.filter((item) => item.requiredForApproval).length} required item(s)</span>
+              </div>
+              {application.documentRequirements.length ? (
+                <div className="mt-3 divide-y divide-line rounded-2xl border border-line">
+                  {application.documentRequirements.map((document) => (
+                    <div key={document.key} className="flex flex-wrap items-start justify-between gap-3 p-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">{document.label}{document.requiredForApproval && <span className="ml-1 text-amber-700">*</span>}</p>
+                        <p className="mt-1 text-xs leading-5 text-muted">{document.description}</p>
+                        {document.secureOnly && <p className="mt-1 text-[11px] font-semibold text-muted">Secure verification required</p>}
+                      </div>
+                      <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold", reviewTone(document.status))}>{reviewLabel(document.status)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="mt-3 text-sm text-muted">No verification requirements recorded.</p>}
+              <p className="mt-3 text-xs leading-5 text-muted">This page shows checklist status only. Actual KYC files are not uploaded here. Do not email or message identity documents; secure document upload will be enabled separately.</p>
+            </section>
+          </article>
+        ))}
+      </div>
+
+      {applications.length > 0 && <ProductionProviderOperations applications={applications} onRefresh={() => loadApplications(true)} />}
+    </div>
+  );
+}
+
+type LiveProviderRequest = Awaited<ReturnType<typeof getCurrentProviderOpenRequests>>[number];
+type LiveProviderBooking = Awaited<ReturnType<typeof getCurrentProviderBookings>>[number];
+
+
+
+function OperatorRosterManager({
+  application,
+  onRefresh,
+}: {
+  application: ProductionApplication;
+  onRefresh: () => Promise<void>;
+}) {
+  const [fullName, setFullName] = useState("");
+  const [phoneE164, setPhoneE164] = useState("");
+  const [roleTitle, setRoleTitle] = useState("Machine operator");
+  const [experienceYears, setExperienceYears] = useState("1");
+  const [assetIds, setAssetIds] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState<string | null>(null);
+
+  const hasRoadUseAsset = application.assets.some((asset) =>
+    ["public_road", "commercial_transport"].includes(asset.roadUse.toLowerCase()),
+  );
+
+  async function addOperator(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!fullName.trim() || !roleTitle.trim() || assetIds.length === 0) {
+      toast.error("Enter the operator name and role, then assign at least one machine.");
+      return;
+    }
+    const experience = Number(experienceYears);
+    if (!Number.isFinite(experience) || experience < 0 || experience > 80) {
+      toast.error("Enter valid operator experience between 0 and 80 years.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await saveCurrentProviderOperator({
+        data: {
+          businessId: application.id,
+          fullName: fullName.trim(),
+          phoneE164: phoneE164.trim() || null,
+          roleTitle: roleTitle.trim(),
+          experienceYears: experience,
+          assetIds,
+        },
+      });
+      toast.success("Operator saved and submitted for administrator review.");
+      setFullName("");
+      setPhoneE164("");
+      setRoleTitle("Machine operator");
+      setExperienceYears("1");
+      setAssetIds([]);
+      await onRefresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not save this operator.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function uploadOperatorDocument(
+    operatorId: string,
+    documentType: "OPERATOR_COMPETENCE_CERTIFICATE" | "OPERATOR_DL",
+    file: File | undefined,
+  ) {
+    if (!file) return;
+    if (file.size < 1 || file.size > 10 * 1024 * 1024) {
+      toast.error("Choose a document no larger than 10 MiB.");
+      return;
+    }
+    const allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"] as const;
+    const mimeType = allowedTypes.find((type) => type === file.type);
+    if (!mimeType) {
+      toast.error("Only PDF, JPEG, PNG and WebP files are accepted.");
+      return;
+    }
+    const key = operatorId + ":" + documentType;
+    setUploading(key);
+    try {
+      const upload = await createCurrentProviderDocumentUpload({
+        data: {
+          businessId: application.id,
+          operatorId,
+          documentType,
+          fileName: file.name,
+          mimeType,
+          sizeBytes: file.size,
+        },
+      });
+      const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      if (!publishableKey) throw new Error("Private document storage is not configured on this build.");
+      const response = await fetch(upload.signedUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": mimeType,
+          "x-upsert": "false",
+          apikey: publishableKey,
+        },
+        body: file,
+        credentials: "omit",
+        redirect: "error",
+      });
+      if (!response.ok) throw new Error("Private storage rejected the file. Request a new upload link and retry.");
+      await confirmCurrentProviderDocumentUpload({ data: { uploadId: upload.uploadId } });
+      toast.success("Operator document uploaded, malware-scanned and submitted for review.");
+      await onRefresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not upload this operator document.");
+    } finally {
+      setUploading(null);
+    }
+  }
+
+  return (
+    <section className="border-t border-line p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-display text-lg font-bold">Operator & driver roster</h3>
+        <span className="text-xs text-muted">{application.operators.length} operator(s) recorded</span>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-muted">
+        Add the people who will operate each registered machine. Every machine needs at least one named operator. Operator approval is separate from business and machine approval. Upload competency evidence and, where applicable, a driving licence against the individual operator.
+      </p>
+
+      {application.operators.length > 0 && (
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {application.operators.map((operator) => {
+            const assignedAssets = application.assets.filter((asset) => operator.assetIds.includes(asset.id));
+            const competence = operator.documents.find((doc) => doc.documentType === "OPERATOR_COMPETENCE_CERTIFICATE");
+            const licence = operator.documents.find((doc) => doc.documentType === "OPERATOR_DL");
+            const needsLicence = (hasRoadUseAsset && assignedAssets.some((asset) => ["public_road", "commercial_transport"].includes(asset.roadUse.toLowerCase()))) || /driver/i.test(operator.roleTitle);
+            return (
+              <div key={operator.id} className="rounded-2xl border border-line p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold">{operator.fullName}</p>
+                    <p className="mt-1 text-xs text-muted">{operator.roleTitle} · {operator.experienceYears} years' experience{operator.phoneLast4 ? " · phone ending " + operator.phoneLast4 : ""}</p>
+                  </div>
+                  <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", reviewTone(operator.verificationStatus))}>{reviewLabel(operator.verificationStatus)}</span>
+                </div>
+                <p className="mt-2 text-xs text-muted">Machines: {assignedAssets.map((asset) => asset.make + " " + asset.model).join(", ") || "No machine assigned"}</p>
+                {operator.reviewerNote && <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">{operator.reviewerNote}</p>}
+                <div className="mt-3 grid gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold">Competency / training evidence</span>
+                    <span className="text-[11px] text-muted">{competence ? reviewLabel(competence.status) : "Not uploaded"}</span>
+                  </div>
+                  <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-line px-3 py-2 text-xs font-semibold">
+                    {uploading === operator.id + ":OPERATOR_COMPETENCE_CERTIFICATE" ? "Uploading…" : competence ? "Upload replacement" : "Upload competency file"}
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="sr-only" disabled={uploading !== null} onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; void uploadOperatorDocument(operator.id, "OPERATOR_COMPETENCE_CERTIFICATE", file); }} />
+                  </label>
+                  {needsLicence && (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-semibold">Driving licence</span>
+                        <span className="text-[11px] text-muted">{licence ? reviewLabel(licence.status) : "Not uploaded"}</span>
+                      </div>
+                      <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-line px-3 py-2 text-xs font-semibold">
+                        {uploading === operator.id + ":OPERATOR_DL" ? "Uploading…" : licence ? "Upload replacement" : "Upload driving licence"}
+                        <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="sr-only" disabled={uploading !== null} onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; void uploadOperatorDocument(operator.id, "OPERATOR_DL", file); }} />
+                      </label>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <form onSubmit={(event) => void addOperator(event)} className="mt-5 rounded-2xl bg-paper p-4">
+        <h4 className="font-semibold">Add an operator</h4>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1 text-xs font-semibold">
+            Full name
+            <input value={fullName} onChange={(event) => setFullName(event.target.value)} required minLength={2} maxLength={120} className="rounded-xl border border-line bg-card p-3 text-sm font-normal" placeholder="Operator's legal name" />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold">
+            Mobile number (optional, +91 format)
+            <input value={phoneE164} onChange={(event) => setPhoneE164(event.target.value)} className="rounded-xl border border-line bg-card p-3 text-sm font-normal" placeholder="+919876543210" />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold">
+            Role / machine responsibility
+            <input value={roleTitle} onChange={(event) => setRoleTitle(event.target.value)} required maxLength={80} className="rounded-xl border border-line bg-card p-3 text-sm font-normal" placeholder="e.g. JCB operator, driver, rig operator" />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold">
+            Experience (years)
+            <input type="number" min="0" max="80" step="0.5" value={experienceYears} onChange={(event) => setExperienceYears(event.target.value)} required className="rounded-xl border border-line bg-card p-3 text-sm font-normal" />
+          </label>
+        </div>
+        <fieldset className="mt-4">
+          <legend className="text-xs font-semibold">Assign this operator to machine(s)</legend>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {application.assets.map((asset) => (
+              <label key={asset.id} className="flex items-center gap-2 rounded-xl border border-line bg-card p-3 text-xs">
+                <input type="checkbox" checked={assetIds.includes(asset.id)} onChange={(event) => setAssetIds((current) => event.target.checked ? [...current, asset.id] : current.filter((id) => id !== asset.id))} />
+                <span>{asset.make} {asset.model} · {asset.assetType}</span>
+              </label>
+            ))}
+          </div>
+          {!application.assets.length && <p className="mt-2 text-xs text-muted">Register a machine before adding an operator.</p>}
+        </fieldset>
+        <Button type="submit" className="mt-4" disabled={saving || !application.assets.length || assetIds.length === 0}>
+          {saving ? "Saving operator…" : "Save operator"}
+        </Button>
+      </form>
+    </section>
+  );
+}
+
+function ProductionProviderOperations({ applications, onRefresh }: { applications: ProductionApplication[]; onRefresh: () => Promise<void> }) {
+  const approvedBusinesses = applications.filter((application) => application.verificationStatus === "approved");
+  const [selectedBusinessId, setSelectedBusinessId] = useState(approvedBusinesses[0]?.id ?? "");
+  const [onlineByBusiness, setOnlineByBusiness] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(approvedBusinesses.map((item) => [item.id, item.isOnline])),
+  );
+  const [requests, setRequests] = useState<LiveProviderRequest[]>([]);
+  const [bookings, setBookings] = useState<LiveProviderBooking[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [savingPresence, setSavingPresence] = useState(false);
+  const [savingAvailabilityId, setSavingAvailabilityId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const online = Boolean(onlineByBusiness[selectedBusinessId]);
+  const selectedBusiness = approvedBusinesses.find((item) => item.id === selectedBusinessId);
+  const businessRequests = requests.filter((request) => request.businessId === selectedBusinessId);
+
+  useEffect(() => {
+    setOnlineByBusiness((current) => {
+      const next = { ...current };
+      for (const application of approvedBusinesses) next[application.id] = application.isOnline;
+      return next;
+    });
+    if (!selectedBusinessId && approvedBusinesses[0]) setSelectedBusinessId(approvedBusinesses[0].id);
+  }, [applications, selectedBusinessId]);
+
+  const loadRequests = useCallback(async (showRefresh = false) => {
+    if (showRefresh) setRefreshing(true);
+    else setLoadingRequests(true);
+    setError("");
+    try {
+      const [rows, bookingRows] = await Promise.all([
+        getCurrentProviderOpenRequests(),
+        getCurrentProviderBookings(),
+      ]);
+      setRequests(rows);
+      setBookings(bookingRows);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to load provider requests and bookings.");
+    } finally {
+      setLoadingRequests(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRequests();
+  }, [loadRequests, selectedBusinessId]);
+
+  const updatePresence = useCallback(async (next: boolean, silent = false) => {
+    if (!selectedBusinessId || savingPresence) return;
+    setSavingPresence(true);
+    if (!silent) setError("");
+    try {
+      await setCurrentProviderPresence({
+        data: { businessId: selectedBusinessId, isOnline: next },
+      });
+      setOnlineByBusiness((current) => ({ ...current, [selectedBusinessId]: next }));
+      if (next) await loadRequests(true);
+      else setRequests((current) => current.filter((item) => item.businessId !== selectedBusinessId));
+      if (!silent) toast.success(next ? "This business is now accepting eligible service requests." : "This business is offline for new requests.");
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Availability could not be updated.";
+      setError(message);
+      if (!silent) toast.error(message);
+    } finally {
+      setSavingPresence(false);
+    }
+  }, [selectedBusinessId, savingPresence, loadRequests]);
+
+  // Keep the online heartbeat fresh while this provider desk is open. If the
+  // browser closes, the heartbeat expires and discovery stops showing the unit.
+  useEffect(() => {
+    if (!online || !selectedBusinessId) return;
+    const ping = () => {
+      void setCurrentProviderPresence({
+        data: { businessId: selectedBusinessId, isOnline: true },
+      }).then(() => loadRequests(true)).catch(() => {
+        setOnlineByBusiness((current) => ({ ...current, [selectedBusinessId]: false }));
+        setError("Your online heartbeat could not be renewed. Go online again before accepting new requests.");
+      });
+    };
+    ping();
+    const interval = window.setInterval(ping, 4 * 60 * 1000);
+    return () => window.clearInterval(interval);
+  }, [online, selectedBusinessId, loadRequests]);
+
+  async function toggleServiceAvailability(service: ProductionApplication["services"][number]) {
+    if (!selectedBusinessId) return;
+    setSavingAvailabilityId(service.id);
+    try {
+      await setCurrentProviderServiceAvailability({
+        data: {
+          businessId: selectedBusinessId,
+          providerServiceId: service.id,
+          isAvailable: !service.isAvailable,
+        },
+      });
+      await onRefresh();
+      await loadRequests(true);
+      toast.success(!service.isAvailable ? "Service activated for eligible customer requests." : "Service paused for new requests.");
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Service availability could not be changed.");
+    } finally {
+      setSavingAvailabilityId(null);
+    }
+  }
+
+  async function toggleAssetAvailability(asset: ProductionApplication["assets"][number]) {
+    if (!selectedBusinessId) return;
+    setSavingAvailabilityId(asset.id);
+    try {
+      await setCurrentProviderAssetAvailability({
+        data: {
+          businessId: selectedBusinessId,
+          assetId: asset.id,
+          isAvailable: !asset.isAvailable,
+        },
+      });
+      await onRefresh();
+      await loadRequests(true);
+      toast.success(!asset.isAvailable ? "Machine marked available for eligible services." : "Machine paused for new assignments.");
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Machine availability could not be changed.");
+    } finally {
+      setSavingAvailabilityId(null);
+    }
+  }
+
+  async function sendQuote(
+    request: LiveProviderRequest,
+    data: {
+      amountRupees: number;
+      note: string;
+      inclusions: string[];
+      exclusions: string[];
+      extraCharges: Array<{ label: string; amountRupees: number }>;
+      cancellationTerms: string;
+      etaMinutes: number | null;
+    },
+  ) {
+    try {
+      const result = await submitCurrentProviderQuote({
+        data: {
+          requestId: request.requestId,
+          businessId: request.businessId,
+          ...data,
+        },
+      });
+      toast.success("Quote saved and sent to the customer.");
+      setRequests((current) => current.filter((item) => item.requestId !== request.requestId));
+      return result;
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "The quote could not be saved.";
+      toast.error(message);
+      throw cause;
+    }
+  }
+
+  return (
+    <section className="mt-7 rounded-3xl border border-line bg-card p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-field">Live provider operations</p>
+          <h2 className="mt-1 font-display text-2xl font-bold">Availability & customer requests</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-5 text-muted">
+            Only businesses approved by MakeService can go online. New requests are delivered only to the selected business and approved service/equipment.
+          </p>
+        </div>
+        <span className={cn("rounded-full px-3 py-1.5 text-xs font-bold", online ? "bg-field-soft text-field" : "bg-paper text-muted")}>
+          {online ? "Online · receiving requests" : "Offline · no new requests"}
+        </span>
+      </div>
+
+      {!approvedBusinesses.length ? (
+        <div className="mt-4 rounded-2xl border border-line bg-paper p-4">
+          <p className="font-semibold">Your business is not approved yet.</p>
+          <p className="mt-1 text-sm leading-5 text-muted">
+            You can review your verification checklist above. Online mode and customer requests remain disabled until an administrator approves the business and its services and machinery.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <label className="grid gap-1.5 text-sm font-semibold">
+              Business
+              <select
+                value={selectedBusinessId}
+                onChange={(event) => setSelectedBusinessId(event.target.value)}
+                className="h-11 rounded-xl border border-line bg-white px-3 font-normal"
+              >
+                {approvedBusinesses.map((item) => (
+                  <option key={item.id} value={item.id}>{item.tradeName} · {item.city ?? item.district}</option>
+                ))}
+              </select>
+            </label>
+            <Button
+              disabled={!selectedBusinessId || savingPresence}
+              variant={online ? "secondary" : "primary"}
+              onClick={() => void updatePresence(!online)}
+            >
+              {savingPresence ? "Saving…" : online ? "Go offline" : "Go online"}
+            </Button>
+          </div>
+
+          {selectedBusiness && (
+            <>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
+                <span>{selectedBusiness.services.filter((service) => service.verificationStatus === "approved" && service.isListed && service.isAvailable).length} approved/listed available service(s)</span>
+                <span>·</span>
+                <span>{selectedBusiness.assets.filter((asset) => asset.verificationStatus === "approved" && asset.isAvailable).length} approved available machine(s)</span>
+                <span>·</span>
+                <span>Online signal expires after 10 minutes without a heartbeat</span>
+              </div>
+
+              <div className="mt-5 grid gap-4 rounded-2xl border border-line p-4">
+                <div>
+                  <h3 className="font-display text-lg font-bold">Activate approved services</h3>
+                  <p className="mt-1 text-xs leading-5 text-muted">A service can be listed only after admin approval and at least one approved machine is linked to it.</p>
+                </div>
+                {selectedBusiness.services.map((service) => {
+                  const serviceAssets = selectedBusiness.assets.filter((asset) =>
+                    asset.serviceIds.includes(service.serviceId) && asset.verificationStatus === "approved",
+                  );
+                  const serviceName = getService(service.serviceId)?.name ?? service.serviceId;
+                  const canActivate = service.verificationStatus === "approved" && serviceAssets.length > 0;
+                  return (
+                    <div key={service.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3 last:border-0 last:pb-0">
+                      <div>
+                        <p className="text-sm font-semibold">{serviceName}</p>
+                        <p className="mt-1 text-xs text-muted">{reviewLabel(service.verificationStatus)} · {serviceAssets.length} approved linked machine(s)</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={service.isAvailable ? "secondary" : "secondary"}
+                        disabled={!canActivate || savingAvailabilityId !== null}
+                        onClick={() => void toggleServiceAvailability(service)}
+                      >
+                        {savingAvailabilityId === service.id ? "Saving…" : service.isAvailable ? "Pause service" : "Activate service"}
+                      </Button>
+                    </div>
+                  );
+                })}
+                <div className="border-t border-line pt-4">
+                  <h3 className="font-display text-lg font-bold">Machine availability</h3>
+                  <p className="mt-1 text-xs leading-5 text-muted">A machine must be approved and linked to at least one active approved service.</p>
+                </div>
+                {selectedBusiness.assets.map((asset) => {
+                  const linkedService = selectedBusiness.services.some((service) =>
+                    asset.serviceIds.includes(service.serviceId) &&
+                    service.verificationStatus === "approved" &&
+                    service.isListed &&
+                    service.isAvailable,
+                  );
+                  const canActivate = asset.verificationStatus === "approved" && linkedService;
+                  return (
+                    <div key={asset.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3 last:border-0 last:pb-0">
+                      <div>
+                        <p className="text-sm font-semibold">{[asset.assetType, asset.make, asset.model].filter(Boolean).join(" ")}</p>
+                        <p className="mt-1 text-xs text-muted">{reviewLabel(asset.verificationStatus)} · {asset.serviceIds.length} linked service(s)</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={asset.isAvailable ? "secondary" : "secondary"}
+                        disabled={!canActivate || savingAvailabilityId !== null}
+                        onClick={() => void toggleAssetAvailability(asset)}
+                      >
+                        {savingAvailabilityId === asset.id ? "Saving…" : asset.isAvailable ? "Pause machine" : "Make available"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {error && <p role="alert" className="mt-3 rounded-xl bg-danger-soft p-3 text-sm text-danger">{error}</p>}
+
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
+            <div>
+              <h3 className="font-display text-xl font-bold">Assigned requests</h3>
+              <p className="text-xs text-muted">Customer contact details stay private until a booking is confirmed.</p>
+            </div>
+            <Button variant="secondary" size="sm" disabled={refreshing || !online} onClick={() => void updatePresence(true, true)}>
+              <Activity className="mr-2 size-4" />{refreshing ? "Refreshing…" : "Refresh inbox"}
+            </Button>
+          </div>
+
+          {!online ? (
+            <p className="mt-3 rounded-xl bg-paper p-4 text-sm leading-5 text-muted">
+              Go online to refresh your heartbeat and receive requests assigned to this business.
+            </p>
+          ) : loadingRequests ? (
+            <p className="mt-3 rounded-xl bg-paper p-4 text-sm text-muted">Loading assigned customer requests…</p>
+          ) : !businessRequests.length ? (
+            <p className="mt-3 rounded-xl bg-paper p-4 text-sm leading-5 text-muted">
+              No open requests are assigned to this business right now. Keep the desk open while online; the heartbeat will renew automatically.
+            </p>
+          ) : (
+            <div className="mt-3 grid gap-3">
+              {businessRequests.map((request) => (
+                <ProviderQuoteComposer key={request.requestId} request={request} onSubmit={sendQuote} />
+              ))}
+            </div>
+          )}
+
+          <div className="mt-6 border-t border-line pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="font-display text-xl font-bold">Confirmed & previous bookings</h3>
+                <p className="text-xs text-muted">Booking records for all businesses owned by this provider account.</p>
+              </div>
+              <span className="text-xs text-muted">{bookings.length} booking(s)</span>
+            </div>
+            {bookings.filter((booking) => booking.businessId === selectedBusinessId).length === 0 ? (
+              <p className="mt-3 rounded-xl bg-paper p-4 text-sm text-muted">
+                No bookings have been confirmed for this business yet. Accepted customer quotations appear here.
+              </p>
+            ) : (
+              <div className="mt-3 grid gap-2">
+                {bookings.filter((booking) => booking.businessId === selectedBusinessId).map((booking) => (
+                  <Link
+                    key={booking.bookingId}
+                    to="/bookings/$bookingId"
+                    params={{ bookingId: booking.bookingId }}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white p-3 hover:border-field"
+                  >
+                    <div>
+                      <p className="font-semibold">{booking.publicReference} · {getService(booking.serviceId)?.name ?? booking.serviceId}</p>
+                      <p className="mt-1 text-xs text-muted">{booking.siteLabel}, {booking.area}, {booking.city}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold">{inr(booking.amountPaise / 100)}</p>
+                      <p className="text-xs font-semibold text-field">{booking.status.replaceAll("_", " ")}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function ProviderQuoteComposer({
+  request,
+  onSubmit,
+}: {
+  request: LiveProviderRequest;
+  onSubmit: (
+    request: LiveProviderRequest,
+    data: {
+      amountRupees: number; note: string; inclusions: string[]; exclusions: string[];
+      extraCharges: Array<{ label: string; amountRupees: number }>;
+      cancellationTerms: string; etaMinutes: number | null;
+    },
+  ) => Promise<unknown>;
+}) {
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [inclusions, setInclusions] = useState("");
+  const [exclusions, setExclusions] = useState("");
+  const [cancellationTerms, setCancellationTerms] = useState("Rescheduling must be agreed before dispatch. Cancellation charges apply only after provider dispatch.");
+  const [eta, setEta] = useState("");
+  const [busy, setBusy] = useState(false);
+  const service = getService(request.serviceId);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const amountRupees = Number(amount);
+    if (!Number.isSafeInteger(amountRupees) || amountRupees < 1) {
+      toast.error("Enter a whole-number quote amount in rupees.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await onSubmit(request, {
+        amountRupees,
+        note,
+        inclusions: inclusions.split("\n").map((line) => line.trim()).filter(Boolean),
+        exclusions: exclusions.split("\n").map((line) => line.trim()).filter(Boolean),
+        extraCharges: [],
+        cancellationTerms,
+        etaMinutes: eta.trim() ? Number(eta) : null,
+      });
+    } catch {
+      // onSubmit displays the server error.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <article className="rounded-2xl border border-line p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold">{service?.name ?? request.serviceId}</p>
+          <p className="mt-1 text-xs text-muted">{request.site.label}, {request.site.area}, {request.site.city}, {request.site.state}</p>
+          <p className="mt-1 text-xs text-muted">{formatKm(request.distanceKm)} from your registered business base · {request.whenLabel}</p>
+        </div>
+        <span className="rounded-full bg-field-soft px-2.5 py-1 text-xs font-semibold text-field">New request</span>
+      </div>
+      <div className="mt-3 grid gap-1 text-sm">
+        {Object.entries(request.requirements).map(([key, value]) => (
+          <p key={key}><span className="text-muted">{key.replaceAll("_", " ")}:</span> {value}</p>
+        ))}
+      </div>
+      {request.notes && <p className="mt-2 rounded-xl bg-paper p-3 text-sm">{request.notes}</p>}
+      <form onSubmit={(event) => void submit(event)} className="mt-4 grid gap-3 border-t border-line pt-4">
+        <label className="grid gap-1 text-sm font-semibold">
+          Total quote (₹)
+          <input required type="number" min="1" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 rounded-xl border border-line bg-white px-3 font-normal" />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold">
+          Quote details
+          <textarea required minLength={8} maxLength={2000} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Describe the work scope, price basis and important conditions." className="min-h-20 rounded-xl border border-line bg-white p-3 font-normal" />
+        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1 text-sm font-semibold">
+            Included work (one per line)
+            <textarea maxLength={1200} value={inclusions} onChange={(event) => setInclusions(event.target.value)} placeholder="Rig, operator, standard setup…" className="min-h-20 rounded-xl border border-line bg-white p-3 font-normal" />
+          </label>
+          <label className="grid gap-1 text-sm font-semibold">
+            Exclusions (one per line)
+            <textarea maxLength={1200} value={exclusions} onChange={(event) => setExclusions(event.target.value)} placeholder="Power supply, permits, extra materials…" className="min-h-20 rounded-xl border border-line bg-white p-3 font-normal" />
+          </label>
+        </div>
+        <label className="grid gap-1 text-sm font-semibold">
+          Estimated arrival (minutes, optional)
+          <input type="number" min="0" max="10080" step="1" value={eta} onChange={(event) => setEta(event.target.value)} className="h-11 rounded-xl border border-line bg-white px-3 font-normal" />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold">
+          Cancellation/rescheduling terms
+          <textarea required minLength={8} maxLength={1200} value={cancellationTerms} onChange={(event) => setCancellationTerms(event.target.value)} className="min-h-16 rounded-xl border border-line bg-white p-3 font-normal" />
+        </label>
+        <div className="flex justify-end">
+          <Button type="submit" disabled={busy}>{busy ? "Sending quote…" : "Send quote to customer"}</Button>
+        </div>
+      </form>
+    </article>
+  );
 }
 
 function DeskHome({ providerId }: { providerId: string }) {

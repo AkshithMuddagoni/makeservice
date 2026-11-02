@@ -328,7 +328,7 @@ export function getProviderDocumentRequirements(input: {
     }
   }
   if (input.services.some((service) => service.serviceId === "borewell" && service.selectedTasks.some((task) => /new borewell drilling|deepening/i.test(task)))) {
-    add({ key: "WALTA_ACKNOWLEDGEMENT", label: "WALTA drilling compliance declaration", description: "Confirm that the rig used for drilling/deepening is registered and that job-specific site permissions/feasibility/insurance will be checked before drilling.", requiredForApproval: true, secureOnly: true });
+    add({ key: "WALTA_ACKNOWLEDGEMENT", label: "WALTA drilling compliance declaration", description: "Confirm that the rig used for drilling/deepening is registered and that job-specific site permissions/feasibility/insurance will be checked before drilling.", requiredForApproval: true });
     add({ key: "SITE_PERMISSION_JOB", label: "Site permission / local well approval", description: "Job-specific. Collect and verify against the customer's proposed borewell, land, local authority restrictions and site before drilling; rig registration is not a site permission.", requiredForApproval: false, jobSpecific: true });
     add({ key: "AGRI_IRRIGATION_FEASIBILITY", label: "Groundwater feasibility certificate for agricultural irrigation", description: "Job-specific where drilling is proposed on agricultural land for irrigation; Section 14(3) of Telangana WALTA requires the rig owner/operator to obtain the feasibility certificate for the selected site.", requiredForApproval: false, jobSpecific: true });
     add({ key: "PROPOSED_WELL_INSURANCE", label: "Insurance for the proposed agricultural borewell", description: "Job-specific where drilling is proposed on agricultural land for irrigation; Section 14(3) requires insurance of the proposed borewell before drilling.", requiredForApproval: false, jobSpecific: true });
@@ -348,11 +348,26 @@ export function getProviderDocumentRequirements(input: {
     add({ key: "POTABLE_WATER_FBO_LICENSE", label: "FSSAI registration / licence (where the activity is a food business)", description: "FSSAI licensing applies to Food Business Operators. Fieldly must classify the exact potable / packaged water supply activity before making this mandatory for a bulk tanker-only provider.", requiredForApproval: false });
   }
 
-  if (input.assets.some((asset) => asset.roadUse === "PUBLIC_ROAD" || asset.roadUse === "COMMERCIAL_TRANSPORT")) {
-    add({ key: "OPERATOR_DL", label: "Driving licence for road-driving operators", description: "Verify each driver’s current licence and the correct vehicle class. The driver record and complete licence details belong in the secure production operator onboarding flow.", requiredForApproval: true, secureOnly: true });
-  }
+  add({
+    key: "OPERATOR_DL",
+    label: "Driving licence for road-driving operators",
+    description: "Upload any applicable driver licence against the individual operator record. For road-use and commercial-transport machines this is required; review validity, vehicle class and name against the assigned machine.",
+    requiredForApproval: input.assets.some((asset) => asset.roadUse === "PUBLIC_ROAD" || asset.roadUse === "COMMERCIAL_TRANSPORT"),
+  });
   if (input.services.length > 0) {
-    add({ key: "OPERATOR_ROSTER", label: "Operator / driver roster", description: "In production, add each operator against the machine they operate: legal name, contact, role, experience, competence/training and driving licence where relevant. This is a Fieldly safety and accountability check; statutory requirements vary by equipment and worksite.", requiredForApproval: true, secureOnly: true });
+    add({
+      key: "OPERATOR_ROSTER",
+      label: "Operator / driver roster",
+      description: "Add each driver or machine operator in the provider desk and assign them to the machine(s) they operate. Each machine must have at least one named operator before the business application can be approved; operators are reviewed separately.",
+      requiredForApproval: true,
+      secureOnly: true,
+    });
+    add({
+      key: "OPERATOR_COMPETENCE_CERTIFICATE",
+      label: "Operator competency / training evidence",
+      description: "Attach role-appropriate machine training, competency or experience evidence to the specific operator. Fieldly manually reviews this evidence before enabling that operator for service work.",
+      requiredForApproval: false,
+    });
   }
 
   add({
