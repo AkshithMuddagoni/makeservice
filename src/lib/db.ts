@@ -1,4 +1,5 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
+import { postgresSslOptions } from "./postgres-ssl.mjs";
 import { resolveDbSource } from "./db-config";
 
 /** Which database backend is active. */
@@ -108,6 +109,7 @@ function createPostgresSql(): Promise<Sql> {
     types.setTypeParser(OID_INTERVAL, identity);
     const pool = new Pool({
       connectionString: databaseUrl,
+      ssl: postgresSslOptions(databaseUrl),
       max: 5,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 10_000,
