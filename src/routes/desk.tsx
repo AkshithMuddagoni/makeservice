@@ -580,6 +580,16 @@ function ProductionProviderOperations({ applications, onRefresh }: { application
     void loadRequests();
   }, [loadRequests, selectedBusinessId]);
 
+  // Keep incoming requests and confirmed bookings current for the provider
+  // without requiring repeated manual refreshes. Pause when the tab is hidden.
+  useEffect(() => {
+    if (!selectedBusinessId) return;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadRequests(true);
+    }, 30_000);
+    return () => window.clearInterval(interval);
+  }, [loadRequests, selectedBusinessId]);
+
   const updatePresence = useCallback(async (next: boolean, silent = false) => {
     if (!selectedBusinessId || savingPresence) return;
     setSavingPresence(true);
