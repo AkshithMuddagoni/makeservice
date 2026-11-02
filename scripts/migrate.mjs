@@ -17,6 +17,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import pg from "pg";
+import { postgresSslOptions } from "../src/lib/postgres-ssl.mjs";
 import {
   isMigrationFile,
   legacyMigrationNames,
@@ -70,7 +71,11 @@ async function main() {
     return;
   }
 
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
+  const pool = new pg.Pool({
+    connectionString: databaseUrl,
+    ssl: postgresSslOptions(databaseUrl),
+    max: 1,
+  });
   const client = await pool.connect();
   try {
     await client.query(
