@@ -8,6 +8,7 @@ import { useFieldly } from "@/lib/fieldly/store";
 import type { Lang } from "@/lib/fieldly/types";
 import { cn } from "@/lib/utils";
 import { SitePicker } from "./site-picker";
+import { NotificationsCenter } from "./notifications-center";
 
 export function Shell({ children }: { children: ReactNode }) {
   const lang = useFieldly((s) => s.lang);
@@ -113,6 +114,7 @@ export function Shell({ children }: { children: ReactNode }) {
                 <option value="hi" className="text-ink">हि</option>
               </select>
             </label>
+            <NotificationsCenter enabled={Boolean(authEnabled && authSession?.user)} />
             <Link
               to="/account"
               className="grid h-10 place-items-center rounded-xl bg-ink px-3 text-sm font-semibold text-on-ink transition hover:bg-field sm:h-11"
@@ -131,6 +133,7 @@ export function Shell({ children }: { children: ReactNode }) {
               <span className="truncate">{site ? site.city : "India"}</span>
               <ChevronDown className="size-3 shrink-0 text-muted" />
             </button>
+            <NotificationsCenter enabled={Boolean(authEnabled && authSession?.user)} />
             <Link
               to="/account"
               className="fieldly-mobile-login grid h-9 place-items-center rounded-lg border border-line bg-white px-2.5 text-xs font-semibold text-ink shadow-sm transition hover:border-field"
