@@ -96,7 +96,7 @@ END;
 $$;
 
 CREATE TRIGGER fieldly_notify_customer_provider_quote
-AFTER INSERT OR UPDATE OF amount_paise, note, updated_at ON public.provider_quotes
+AFTER INSERT OR UPDATE ON public.provider_quotes
 FOR EACH ROW EXECUTE FUNCTION public.fieldly_notify_customer_of_quote();
 
 CREATE OR REPLACE FUNCTION public.fieldly_notify_booking_participants()
@@ -173,6 +173,59 @@ FOR EACH ROW
 WHEN (OLD.status IS DISTINCT FROM NEW.status)
 EXECUTE FUNCTION public.fieldly_notify_booking_participants();
 
+CREATE OR REPLACE FUNCTION public.fieldly_notify_dispute_status()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $
+DECLARE
+  v_provider_user_id text;
+  v_recipient text;
+  v_title text;
+  v_body text;
+BEGIN
+  IF NEW.dispute_status IS NOT DISTINCT FROM OLD.dispute_status THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT owner_user_id INTO v_provider_user_id
+  FROM public.provider_businesses WHERE id = NEW.business_id;
+
+  v_title := CASE NEW.dispute_status::text
+    WHEN 'under_review' THEN 'Dispute is under review'
+    WHEN 'awaiting_customer' THEN 'More information is needed from you'
+    WHEN 'awaiting_provider' THEN 'More information is needed from the provider'
+    WHEN 'resolved_customer' THEN 'Dispute resolved in the customer’s favour'
+    WHEN 'resolved_provider' THEN 'Dispute resolved in the provider’s favour'
+    WHEN 'closed_no_action' THEN 'Dispute case closed'
+    ELSE 'Dispute case updated'
+  END;
+  v_body := format('The dispute for booking %s is now %s.', NEW.public_reference,
+    replace(coalesce(NEW.dispute_status::text, 'open'), '_', ' '));
+
+  FOR v_recipient IN
+    SELECT DISTINCT recipients.recipient
+    FROM unnest(ARRAY[NEW.customer_user_id, v_provider_user_id]) AS recipients(recipient)
+    WHERE recipients.recipient IS NOT NULL
+  LOOP
+    INSERT INTO public.fieldly_notifications
+      (recipient_user_id, notification_type, title, body, target_type, target_id, event_key)
+    VALUES
+      (v_recipient, 'booking_status', v_title, v_body, 'booking', NEW.id,
+       'booking_dispute_status:' || NEW.id::text || ':' ||
+       coalesce(NEW.dispute_status::text, 'open') || ':' || v_recipient)
+    ON CONFLICT (event_key) DO NOTHING;
+  END LOOP;
+  RETURN NEW;
+END;
+$;
+
+CREATE TRIGGER fieldly_notify_booking_dispute_status
+AFTER UPDATE OF dispute_status ON public.bookings
+FOR EACH ROW
+WHEN (OLD.dispute_status IS DISTINCT FROM NEW.dispute_status)
+EXECUTE FUNCTION public.fieldly_notify_dispute_status();
+
 CREATE OR REPLACE FUNCTION public.fieldly_notify_booking_message()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -245,7 +298,7 @@ END;
 $$;
 
 CREATE TRIGGER fieldly_notify_provider_application
-AFTER INSERT OR UPDATE OF verification_status ON public.provider_businesses
+AFTER INSERT OR UPDATE ON public.provider_businesses
 FOR EACH ROW EXECUTE FUNCTION public.fieldly_notify_provider_application_status();
 
 -- Keep live coordinates short-lived even if the provider never reopens the app.
