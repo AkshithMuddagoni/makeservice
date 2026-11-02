@@ -13,7 +13,7 @@ import { useFieldly, useProviders } from "@/lib/fieldly/store";
 import type { BookingStatus } from "@/lib/fieldly/types";
 import { cn } from "@/lib/utils";
 import { authEnabled } from "@/lib/auth/client";
-import { getCurrentBookingDetail, issueCurrentBookingStartCode, sendCurrentBookingMessage, stopCurrentProviderBookingLocation, updateCurrentBookingParticipantAction, updateCurrentProviderBookingLocation, updateCurrentProviderBookingStatus, verifyCurrentBookingStartCode } from "@/lib/fieldly/account.functions";
+import { getCurrentBookingDetail, submitCurrentProviderReview, issueCurrentBookingStartCode, sendCurrentBookingMessage, stopCurrentProviderBookingLocation, updateCurrentBookingParticipantAction, updateCurrentProviderBookingLocation, updateCurrentProviderBookingStatus, verifyCurrentBookingStartCode } from "@/lib/fieldly/account.functions";
 
 export const Route = createFileRoute("/bookings/$bookingId")({ component: BookingPage });
 
@@ -42,6 +42,7 @@ type LiveBooking = {
   };
   provider: { businessId: string; name: string; baseLatitude: number | null; baseLongitude: number | null };
   permissions: { isCustomer: boolean; isProvider: boolean };
+  review: { rating: number; reviewText: string; createdAt: string } | null;
   startCode: {
     hasActiveCode: boolean; expiresAt: string | null; attempts: number;
     issueCount: number; maxIssues: number; maxAttempts: number;
@@ -115,6 +116,9 @@ function BookingPage() {
   const [liveLocationError, setLiveLocationError] = useState("");
   const [chatDraft, setChatDraft] = useState("");
   const [sendingChatMessage, setSendingChatMessage] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewText, setReviewText] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
   const watchIdRef = useRef<number | null>(null);
   const lastLocationSentAtRef = useRef(0);
 
@@ -341,6 +345,25 @@ function BookingPage() {
       setLiveError(error instanceof Error ? error.message : "Booking status could not be updated.");
     } finally {
       setLiveBusy(false);
+    }
+  }
+
+  async function submitLiveReview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!liveBooking || !isCustomer) return;
+    setSubmittingReview(true);
+    setLiveError("");
+    try {
+      await submitCurrentProviderReview({
+        data: { bookingId, rating: reviewRating, reviewText: reviewText.trim() },
+      });
+      setReviewText("");
+      await refreshLiveBooking();
+      toast.success("Your provider review has been saved.");
+    } catch (error) {
+      setLiveError(error instanceof Error ? error.message : "Your review could not be saved.");
+    } finally {
+      setSubmittingReview(false);
     }
   }
 
@@ -600,6 +623,55 @@ function BookingPage() {
                   {liveBooking.status === "service_started" && <Button disabled={liveBusy} onClick={() => void updateLiveProviderStatus("service_completed")}>Mark work completed</Button>}
                   {!["confirmed", "on_the_way", "arrived", "service_started"].includes(liveBooking.status) && <p className="text-sm text-muted">No provider status action is available at this stage.</p>}
                 </div>
+              </section>
+            )}
+
+            {isLiveCustomer && (liveBooking.review || ["service_completed", "paid"].includes(liveBooking.status)) && (
+              <section className="rounded-2xl border border-line bg-card p-5">
+                <h2 className="font-display text-xl font-bold">Provider review</h2>
+                {liveBooking.review ? (
+                  <>
+                    <div className="mt-3 flex items-center gap-1" aria-label={`Your rating: ${liveBooking.review.rating} out of 5`}>
+                      {Array.from({ length: 5 }, (_, index) => (
+                        <Star key={index} className="size-5 text-gold" fill={index < liveBooking.review!.rating ? "currentColor" : "none"} />
+                      ))}
+                      <span className="ml-2 text-sm font-semibold">{liveBooking.review.rating}/5</span>
+                    </div>
+                    {liveBooking.review.reviewText && <p className="mt-2 whitespace-pre-wrap text-sm leading-5 text-muted">{liveBooking.review.reviewText}</p>}
+                    <p className="mt-2 text-xs text-muted">Your review has been submitted.</p>
+                  </>
+                ) : (
+                  <form className="mt-3 grid gap-3" onSubmit={(event) => void submitLiveReview(event)}>
+                    <p className="text-sm text-muted">The work is complete. Rate the provider's service and leave a note for future customers.</p>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((rating) => (
+                        <button
+                          key={rating}
+                          type="button"
+                          onClick={() => setReviewRating(rating)}
+                          aria-label={`Rate ${rating} out of 5`}
+                          aria-pressed={reviewRating === rating}
+                          className="rounded-md p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                        >
+                          <Star className="size-7 text-gold" fill={rating <= reviewRating ? "currentColor" : "none"} />
+                        </button>
+                      ))}
+                      <span className="ml-2 text-sm font-semibold">{reviewRating}/5</span>
+                    </div>
+                    <textarea
+                      value={reviewText}
+                      onChange={(event) => setReviewText(event.target.value.slice(0, 1000))}
+                      maxLength={1000}
+                      rows={3}
+                      placeholder="Share your experience (optional)"
+                      aria-label="Provider review"
+                      className="w-full rounded-xl border border-line bg-white p-3 text-sm"
+                    />
+                    <Button type="submit" disabled={submittingReview}>
+                      {submittingReview ? "Submitting review…" : "Submit review"}
+                    </Button>
+                  </form>
+                )}
               </section>
             )}
 
