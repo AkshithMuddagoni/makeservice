@@ -350,7 +350,7 @@ function BookingPage() {
 
   async function submitLiveReview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!liveBooking || !isCustomer) return;
+    if (!liveBooking || !liveBooking.permissions.isCustomer) return;
     setSubmittingReview(true);
     setLiveError("");
     try {
