@@ -78,7 +78,35 @@ identities. Use the ordered migrations above only.
 
 The repository includes `render.yaml` for a Render Node web service (Node.js 22, `npm install && npm run build`, `npm run start`). The Blueprint and existing `makeservice` service remain on **Free** during development and backend validation. Upgrade to Starter only before customer-facing production, after persistent database/auth configuration and launch gates are ready. The Blueprint declares `DATABASE_URL` as a secret prompt, asks Render to generate `BETTER_AUTH_SECRET`, sets `BETTER_AUTH_URL` to the public app origin, and keeps auth/OTP/document-upload feature flags off by default. A custom domain can be added separately later.
 
-For an **existing** Render service, do not assume Blueprint `sync: false` will prompt for a new value: Render only prompts for these variables during initial Blueprint creation. Add `DATABASE_URL` manually in the existing service's Dashboard > Environment before deploying this backend. Configure production secrets only in Render Environment settings; never put database URLs, passwords, OAuth secrets, payment credentials or private keys in frontend variables or GitHub.
+For an **existing** Render service, do not assume Blueprint `sync: false` will prompt for a new value: Render only prompts for these variables during initial Blueprint creation. Add `DATABASE_URL` and `DATABASE_SSL_CA_BASE64` manually in the existing service's Dashboard > Environment before deploying this backend. Configure production secrets only in Render Environment settings; never put database URLs, passwords, OAuth secrets, payment credentials or private keys in frontend variables or GitHub.
+
+### Supabase PostgreSQL TLS
+
+The app data pool, Better Auth pool, and deploy-time migration runner all use `src/lib/postgres-ssl.mjs`. For Supabase PostgreSQL hosts, it requires the project's CA certificate and keeps Node TLS certificate/hostname verification enabled. The certificate is supplied through `DATABASE_SSL_CA_BASE64`: Base64 encoding of the PEM certificate downloaded from Supabase Dashboard > Database > Settings > SSL Configuration. Do not commit the certificate file or the encoded value to the repository.
+
+On Windows, select the downloaded certificate in this PowerShell snippet. It copies only the CA certificate's Base64 text to your clipboard; paste that value into the Render Environment variable named `DATABASE_SSL_CA_BASE64` (not into chat or source code):
+
+```powershell
+Add-Type -AssemblyName System.Windows.Forms
+$picker = New-Object System.Windows.Forms.OpenFileDialog
+$picker.Title = "Select Supabase database CA certificate"
+$picker.Filter = "Certificate files (*.crt;*.pem;*.cer)|*.crt;*.pem;*.cer"
+if ($picker.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+    throw "Certificate selection cancelled."
+}
+$certificateBytes = [System.IO.File]::ReadAllBytes($picker.FileName)
+$certificatePem = [System.Text.Encoding]::UTF8.GetString($certificateBytes)
+if (-not $certificatePem.Contains("-----BEGIN CERTIFICATE-----")) {
+    throw "Selected file is not a PEM certificate."
+}
+$caBase64 = [Convert]::ToBase64String($certificateBytes)
+Set-Clipboard -Value $caBase64
+Write-Host "Base64 CA certificate copied. Length: $($caBase64.Length) characters."
+Remove-Variable certificateBytes, certificatePem, caBase64 -ErrorAction SilentlyContinue
+```
+
+Set `DATABASE_URL` to the Supabase **Session pooler** connection URI from the project's Connect panel (shared pooler, port `5432`, username format `postgres.<project-ref>`). Render's current service is IPv4-based; do not use the direct database host unless Render's outbound IPv6 connectivity has been independently verified. Keep the database password only inside the Render Environment value. Do not include a database URI or password in a commit, issue, or chat. The local direct and session-pooler tests succeeded with certificate verification enabled; Render connectivity still needs a post-configuration smoke test.
+
 
 Do not switch `VITE_AUTH_ENABLED`, `VITE_PHONE_OTP_ENABLED` or `PROVIDER_DOCUMENT_UPLOADS_ENABLED` on until the corresponding MSG91/DLT, KYC and private-scanner gates have passed. The server deliberately fails closed in production if `DATABASE_URL` is missing; do not deploy the backend branch to the public service before the database and auth environment are provisioned.
 
