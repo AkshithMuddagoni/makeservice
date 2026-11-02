@@ -118,14 +118,39 @@ function BookingPage() {
   const watchIdRef = useRef<number | null>(null);
   const lastLocationSentAtRef = useRef(0);
 
+  // Keep both participants' booking timeline, GPS marker and chat current.
+  // The tab polls only while visible and while the booking is still active.
   useEffect(() => {
-    if (!authEnabled || !liveBooking?.permissions.isCustomer) return;
-    if (!["on_the_way", "arrived", "service_started"].includes(liveBooking.status)) return;
-    const interval = window.setInterval(() => {
-      setLiveRefreshKey((value) => value + 1);
-    }, 15_000);
-    return () => window.clearInterval(interval);
-  }, [liveBooking?.permissions.isCustomer, liveBooking?.status]);
+    if (
+      !authEnabled ||
+      (!liveBooking?.permissions.isCustomer && !liveBooking?.permissions.isProvider) ||
+      ["paid", "disputed", "cancelled"].includes(liveBooking.status)
+    ) return;
+    let cancelled = false;
+    let inFlight = false;
+    const poll = async () => {
+      if (cancelled || document.visibilityState !== "visible" || inFlight) return;
+      inFlight = true;
+      try {
+        const result = await getCurrentBookingDetail({ data: { bookingId } });
+        if (!cancelled) setLiveBooking(result);
+      } catch {
+        // Preserve the last saved state during a temporary connection failure.
+      } finally {
+        inFlight = false;
+      }
+    };
+    const interval = window.setInterval(() => { void poll(); }, 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [
+    bookingId,
+    liveBooking?.permissions.isCustomer,
+    liveBooking?.permissions.isProvider,
+    liveBooking?.status,
+  ]);
 
   useEffect(() => {
     return () => {
