@@ -29,7 +29,7 @@ CREATE INDEX IF NOT EXISTS fieldly_notifications_unread_idx
 ALTER TABLE public.fieldly_notifications ENABLE ROW LEVEL SECURITY;
 REVOKE ALL PRIVILEGES ON TABLE public.fieldly_notifications FROM PUBLIC;
 
-DO $
+DO $$
 DECLARE
   role_name text;
 BEGIN
@@ -42,7 +42,23 @@ BEGIN
     END IF;
   END LOOP;
 END
-$;
+$$;
+
+CREATE OR REPLACE FUNCTION public.fieldly_prune_expired_notifications()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  DELETE FROM public.fieldly_notifications
+  WHERE expires_at < now() - interval '7 days';
+  RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER fieldly_prune_expired_notifications
+AFTER INSERT ON public.fieldly_notifications
+FOR EACH STATEMENT EXECUTE FUNCTION public.fieldly_prune_expired_notifications();
 
 -- Notifications are inserted by database triggers so every successful server
 -- transaction has the corresponding in-app event, without a second client call.
