@@ -27,7 +27,22 @@ CREATE INDEX IF NOT EXISTS fieldly_notifications_unread_idx
   WHERE read_at IS NULL;
 
 ALTER TABLE public.fieldly_notifications ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE public.fieldly_notifications FROM anon, authenticated;
+REVOKE ALL PRIVILEGES ON TABLE public.fieldly_notifications FROM PUBLIC;
+
+DO $
+DECLARE
+  role_name text;
+BEGIN
+  FOREACH role_name IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
+      EXECUTE format(
+        'REVOKE ALL PRIVILEGES ON TABLE public.fieldly_notifications FROM %I',
+        role_name
+      );
+    END IF;
+  END LOOP;
+END
+$;
 
 -- Notifications are inserted by database triggers so every successful server
 -- transaction has the corresponding in-app event, without a second client call.
