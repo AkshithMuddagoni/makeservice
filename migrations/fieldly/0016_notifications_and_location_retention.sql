@@ -137,20 +137,24 @@ SET search_path = public
 AS $$
 DECLARE
   v_provider_user_id text;
+  v_operator_user_id text;
   v_recipient text;
   v_title text;
   v_body text;
   v_key text;
 BEGIN
-  SELECT owner_user_id INTO v_provider_user_id
-  FROM public.provider_businesses WHERE id = NEW.business_id;
+  SELECT pb.owner_user_id, po.linked_user_id
+    INTO v_provider_user_id, v_operator_user_id
+  FROM public.provider_businesses pb
+  LEFT JOIN public.provider_operators po ON po.id = NEW.assigned_operator_id
+  WHERE pb.id = NEW.business_id;
 
   IF TG_OP = 'INSERT' THEN
     v_title := 'Booking confirmed';
     v_body := format('Your booking %s is confirmed.', NEW.public_reference);
     FOR v_recipient IN
       SELECT DISTINCT recipients.recipient
-      FROM unnest(ARRAY[NEW.customer_user_id, v_provider_user_id]) AS recipients(recipient)
+      FROM unnest(ARRAY[NEW.customer_user_id, v_provider_user_id, v_operator_user_id]) AS recipients(recipient)
       WHERE recipients.recipient IS NOT NULL
     LOOP
       INSERT INTO public.fieldly_notifications
@@ -178,7 +182,7 @@ BEGIN
     v_key := 'booking_status:' || NEW.id::text || ':' || NEW.status::text;
     FOR v_recipient IN
       SELECT DISTINCT recipients.recipient
-      FROM unnest(ARRAY[NEW.customer_user_id, v_provider_user_id]) AS recipients(recipient)
+      FROM unnest(ARRAY[NEW.customer_user_id, v_provider_user_id, v_operator_user_id]) AS recipients(recipient)
       WHERE recipients.recipient IS NOT NULL
     LOOP
       INSERT INTO public.fieldly_notifications
@@ -211,6 +215,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_provider_user_id text;
+  v_operator_user_id text;
   v_recipient text;
   v_title text;
   v_body text;
@@ -219,8 +224,11 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  SELECT owner_user_id INTO v_provider_user_id
-  FROM public.provider_businesses WHERE id = NEW.business_id;
+  SELECT pb.owner_user_id, po.linked_user_id
+    INTO v_provider_user_id, v_operator_user_id
+  FROM public.provider_businesses pb
+  LEFT JOIN public.provider_operators po ON po.id = NEW.assigned_operator_id
+  WHERE pb.id = NEW.business_id;
 
   v_title := CASE NEW.dispute_status::text
     WHEN 'under_review' THEN 'Dispute is under review'
@@ -236,7 +244,7 @@ BEGIN
 
   FOR v_recipient IN
     SELECT DISTINCT recipients.recipient
-    FROM unnest(ARRAY[NEW.customer_user_id, v_provider_user_id]) AS recipients(recipient)
+    FROM unnest(ARRAY[NEW.customer_user_id, v_provider_user_id, v_operator_user_id]) AS recipients(recipient)
     WHERE recipients.recipient IS NOT NULL
   LOOP
     INSERT INTO public.fieldly_notifications
