@@ -20,6 +20,11 @@ services:
       - key: DATABASE_URL
         sync: false
 
+      # Supabase CA certificate (PEM file encoded as one Base64 string).
+      # Required to verify TLS for app/auth pools and deploy-time migrations.
+      - key: DATABASE_SSL_CA_BASE64
+        sync: false
+
       # Generate the server-side session secret in Render. Never commit it.
       - key: BETTER_AUTH_SECRET
         generateValue: true
