@@ -2732,6 +2732,7 @@ export type LiveBookingDetail = {
     isCustomer: boolean;
     isProvider: boolean;
   };
+  review: { rating: number; reviewText: string; createdAt: string } | null;
   startCode: {
     hasActiveCode: boolean;
     expiresAt: string | null;
@@ -2838,7 +2839,7 @@ export async function getBookingDetailForUser(
   if (isCustomer) await requireCustomerRole(sql, userId);
   if (isProvider) await requireProviderRole(sql, userId);
   if (!isCustomer && !isProvider) return null;
-  const [events, locations, messages] = await Promise.all([
+  const [events, locations, messages, reviewRows] = await Promise.all([
     sql.query<{
       id: string; from_status: string | null; to_status: string;
       event_type: string; note: string | null; created_at: string;
@@ -2864,6 +2865,11 @@ export async function getBookingDetailForUser(
     }>(
       "select id::text as id,sender_user_id,message_text,created_at::text as created_at " +
       "from public.booking_messages where booking_id=$1::uuid order by created_at desc limit 100",
+      [bookingId],
+    ),
+    sql.query<{ rating: number; review_text: string; created_at: string }>(
+      "select rating,review_text,created_at::text as created_at from public.provider_reviews " +
+      "where booking_id=$1::uuid limit 1",
       [bookingId],
     ),
   ]);
@@ -2906,6 +2912,11 @@ export async function getBookingDetailForUser(
       baseLongitude: row.provider_longitude === null ? null : Number(row.provider_longitude),
     },
     permissions: { isCustomer, isProvider },
+    review: reviewRows[0] ? {
+      rating: Number(reviewRows[0].rating),
+      reviewText: reviewRows[0].review_text,
+      createdAt: reviewRows[0].created_at,
+    } : null,
     startCode: {
       hasActiveCode: activeCode,
       expiresAt: activeCode ? expiresAt : null,
@@ -2939,6 +2950,54 @@ export async function getBookingDetailForUser(
       isMine: message.sender_user_id === userId,
     })).reverse(),
   };
+}
+
+/** Accept one customer review after the assigned provider marks the job complete. */
+export async function submitProviderReviewForCustomer(
+  userId: string,
+  input: SubmitProviderReviewInput,
+): Promise<{ id: string; rating: number; reviewText: string; createdAt: string }> {
+  assertProductionIdentity(userId);
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireCustomerRole(tx, userId);
+    const bookings = await tx.query<{
+      business_id: string;
+      status: LiveBookingStatus;
+    }>(
+      "select business_id::text as business_id,status::text as status from public.bookings " +
+      "where id=$1::uuid and customer_user_id=$2 for update",
+      [input.bookingId, userId],
+    );
+    const booking = bookings[0];
+    if (!booking) throw new Error("This completed booking does not belong to your customer account.");
+    if (!["service_completed", "paid"].includes(booking.status)) {
+      throw new Error("You can review the provider after the work has been marked complete.");
+    }
+
+    const inserted = await tx.query<{
+      id: string;
+      rating: number;
+      review_text: string;
+      created_at: string;
+    }>(
+      "insert into public.provider_reviews " +
+      "(booking_id,customer_user_id,business_id,rating,review_text) " +
+      "values ($1::uuid,$2,$3::uuid,$4,$5) " +
+      "on conflict (booking_id) do nothing " +
+      "returning id::text as id,rating,review_text,created_at::text as created_at",
+      [input.bookingId, userId, booking.business_id, input.rating, input.reviewText],
+    );
+    const review = inserted[0];
+    if (!review) throw new Error("A review has already been submitted for this booking.");
+
+    return {
+      id: review.id,
+      rating: Number(review.rating),
+      reviewText: review.review_text,
+      createdAt: review.created_at,
+    };
+  });
 }
 
 export async function updateProviderBookingStatusForUser(
