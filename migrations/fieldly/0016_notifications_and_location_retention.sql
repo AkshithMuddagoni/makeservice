@@ -44,22 +44,6 @@ BEGIN
 END
 $$;
 
-CREATE OR REPLACE FUNCTION public.fieldly_prune_expired_notifications()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-BEGIN
-  DELETE FROM public.fieldly_notifications
-  WHERE expires_at < now() - interval '7 days';
-  RETURN NULL;
-END;
-$$;
-
-CREATE TRIGGER fieldly_prune_expired_notifications
-AFTER INSERT ON public.fieldly_notifications
-FOR EACH STATEMENT EXECUTE FUNCTION public.fieldly_prune_expired_notifications();
-
 -- Notifications are inserted by database triggers so every successful server
 -- transaction has the corresponding in-app event, without a second client call.
 CREATE OR REPLACE FUNCTION public.fieldly_notify_provider_of_request()
@@ -224,6 +208,14 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  -- The booking-status trigger already notifies both participants when a new
+  -- dispute is opened. Avoid sending a second notification for that same event.
+  IF NEW.status = 'disputed'
+     AND NEW.dispute_status = 'open'
+     AND OLD.status IS DISTINCT FROM NEW.status THEN
+    RETURN NEW;
+  END IF;
+
   SELECT pb.owner_user_id, po.linked_user_id
     INTO v_provider_user_id, v_operator_user_id
   FROM public.provider_businesses pb
@@ -344,24 +336,7 @@ CREATE TRIGGER fieldly_notify_provider_application
 AFTER INSERT OR UPDATE ON public.provider_businesses
 FOR EACH ROW EXECUTE FUNCTION public.fieldly_notify_provider_application_status();
 
--- Keep live coordinates short-lived even if the provider never reopens the app.
--- Rows are pruned during GPS writes once they have been expired for 24 hours.
-CREATE OR REPLACE FUNCTION public.fieldly_prune_expired_booking_locations()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-BEGIN
-  DELETE FROM public.booking_live_locations
-  WHERE expires_at < now() - interval '24 hours';
-  RETURN NULL;
-END;
-$$;
-
-CREATE TRIGGER fieldly_prune_expired_booking_locations
-AFTER INSERT OR UPDATE ON public.booking_live_locations
-FOR EACH STATEMENT EXECUTE FUNCTION public.fieldly_prune_expired_booking_locations();
-
+-- The scheduled cleanup below handles expired rows even when no new writes occur.
 -- Stop publishing and remove coordinates as soon as a booking becomes terminal
 -- or disputed, rather than waiting for the two-minute location timeout.
 CREATE OR REPLACE FUNCTION public.fieldly_clear_terminal_booking_location()
@@ -382,3 +357,47 @@ AFTER UPDATE OF status ON public.bookings
 FOR EACH ROW
 WHEN (OLD.status IS DISTINCT FROM NEW.status)
 EXECUTE FUNCTION public.fieldly_clear_terminal_booking_location();
+
+-- Supabase-hosted PostgreSQL supports pg_cron. Enable it as part of this
+-- migration so retention does not depend on a later customer/provider write.
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
+
+CREATE OR REPLACE FUNCTION public.fieldly_cleanup_expired_marketplace_data()
+RETURNS void
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  DELETE FROM public.fieldly_notifications
+  WHERE expires_at < now() - interval '7 days';
+
+  DELETE FROM public.booking_live_locations
+  WHERE expires_at < now() - interval '24 hours';
+END;
+$$;
+
+-- The scheduled command runs as the migration owner (postgres). Do not expose
+-- this maintenance function to PostgREST/browser roles.
+REVOKE ALL ON FUNCTION public.fieldly_cleanup_expired_marketplace_data() FROM PUBLIC;
+
+DO $$
+DECLARE
+  role_name text;
+BEGIN
+  FOREACH role_name IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
+      EXECUTE format(
+        'REVOKE ALL ON FUNCTION public.fieldly_cleanup_expired_marketplace_data() FROM %I',
+        role_name
+      );
+    END IF;
+  END LOOP;
+END
+$$;
+
+SELECT cron.schedule(
+  'fieldly-marketplace-expired-data-cleanup',
+  '17 2 * * *',
+  'SELECT public.fieldly_cleanup_expired_marketplace_data();'
+);
+
