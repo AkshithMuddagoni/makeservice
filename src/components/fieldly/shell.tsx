@@ -114,7 +114,6 @@ export function Shell({ children }: { children: ReactNode }) {
                 <option value="hi" className="text-ink">हि</option>
               </select>
             </label>
-            <NotificationsCenter enabled={Boolean(authEnabled && authSession?.user)} />
             <Link
               to="/account"
               className="grid h-10 place-items-center rounded-xl bg-ink px-3 text-sm font-semibold text-on-ink transition hover:bg-field sm:h-11"
@@ -141,6 +140,7 @@ export function Shell({ children }: { children: ReactNode }) {
               {session ? session.name.split(" ")[0] : "Login"}
             </Link>
           </div>
+          <NotificationsCenter enabled={Boolean(authEnabled && authSession?.user)} />
           <button
             type="button"
             className="fieldly-mobile-menu grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-white text-ink transition hover:border-field lg:hidden"
