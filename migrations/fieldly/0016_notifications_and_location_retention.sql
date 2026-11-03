@@ -358,20 +358,14 @@ FOR EACH ROW
 WHEN (OLD.status IS DISTINCT FROM NEW.status)
 EXECUTE FUNCTION public.fieldly_clear_terminal_booking_location();
 
--- Supabase-hosted PostgreSQL supports pg_cron. Enable it as part of this
--- migration so retention does not depend on a later customer/provider write.
-CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
-
--- Supabase's Cron install guidance grants the postgres role access to the
--- scheduler schema before registering jobs through cron.schedule().
-GRANT USAGE ON SCHEMA cron TO postgres;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA cron TO postgres;
-
+-- Scheduled cleanup is enabled when the target PostgreSQL installation
+-- provides pg_cron. Supabase has it available; local PGLite intentionally does
+-- not, so local development skips only the scheduler registration.
 CREATE OR REPLACE FUNCTION public.fieldly_cleanup_expired_marketplace_data()
 RETURNS void
 LANGUAGE plpgsql
 SET search_path = public
-AS $$
+AS $
 BEGIN
   DELETE FROM public.fieldly_notifications
   WHERE expires_at < now() - interval '7 days';
@@ -379,13 +373,12 @@ BEGIN
   DELETE FROM public.booking_live_locations
   WHERE expires_at < now() - interval '24 hours';
 END;
-$$;
+$;
 
--- The scheduled command runs as the migration owner (postgres). Do not expose
--- this maintenance function to PostgREST/browser roles.
+-- Do not expose this maintenance function to PostgREST/browser roles.
 REVOKE ALL ON FUNCTION public.fieldly_cleanup_expired_marketplace_data() FROM PUBLIC;
 
-DO $$
+DO $function_privileges$
 DECLARE
   role_name text;
 BEGIN
@@ -398,11 +391,43 @@ BEGIN
     END IF;
   END LOOP;
 END
-$$;
+$function_privileges$;
 
-SELECT cron.schedule(
-  'fieldly-marketplace-expired-data-cleanup',
-  '17 2 * * *',
-  'SELECT public.fieldly_cleanup_expired_marketplace_data();'
-);
+DO $cron$
+DECLARE
+  cron_available boolean := false;
+BEGIN
+  BEGIN
+    SELECT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_available_extensions
+      WHERE name = 'pg_cron'
+    ) INTO cron_available;
+  EXCEPTION
+    WHEN undefined_table THEN
+      cron_available := false;
+  END;
+
+  IF cron_available THEN
+    EXECUTE 'CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog';
+
+    -- Supabase's Cron install guidance grants the postgres role access to
+    -- the scheduler schema before registering jobs through cron.schedule().
+    EXECUTE 'GRANT USAGE ON SCHEMA cron TO postgres';
+    EXECUTE 'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA cron TO postgres';
+
+    -- Supabase Cron uses GMT/UTC; the job name is stable and schedule() updates
+    -- an existing job of the same name instead of creating duplicates.
+    EXECUTE $job$
+      SELECT cron.schedule(
+        'fieldly-marketplace-expired-data-cleanup',
+        '17 2 * * *',
+        'SELECT public.fieldly_cleanup_expired_marketplace_data();'
+      )
+    $job$;
+  ELSE
+    RAISE NOTICE 'pg_cron is unavailable; scheduled marketplace cleanup was skipped for this database.';
+  END IF;
+END
+$cron$;
 
