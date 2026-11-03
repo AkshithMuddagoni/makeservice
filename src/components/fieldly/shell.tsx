@@ -132,7 +132,6 @@ export function Shell({ children }: { children: ReactNode }) {
               <span className="truncate">{site ? site.city : "India"}</span>
               <ChevronDown className="size-3 shrink-0 text-muted" />
             </button>
-            <NotificationsCenter enabled={Boolean(authEnabled && authSession?.user)} />
             <Link
               to="/account"
               className="fieldly-mobile-login grid h-9 place-items-center rounded-lg border border-line bg-white px-2.5 text-xs font-semibold text-ink shadow-sm transition hover:border-field"
