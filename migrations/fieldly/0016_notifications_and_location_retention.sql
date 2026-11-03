@@ -362,6 +362,11 @@ EXECUTE FUNCTION public.fieldly_clear_terminal_booking_location();
 -- migration so retention does not depend on a later customer/provider write.
 CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
 
+-- Supabase's Cron install guidance grants the postgres role access to the
+-- scheduler schema before registering jobs through cron.schedule().
+GRANT USAGE ON SCHEMA cron TO postgres;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA cron TO postgres;
+
 CREATE OR REPLACE FUNCTION public.fieldly_cleanup_expired_marketplace_data()
 RETURNS void
 LANGUAGE plpgsql
