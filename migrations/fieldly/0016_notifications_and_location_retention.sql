@@ -365,7 +365,7 @@ CREATE OR REPLACE FUNCTION public.fieldly_cleanup_expired_marketplace_data()
 RETURNS void
 LANGUAGE plpgsql
 SET search_path = public
-AS $
+AS $cleanup_body$
 BEGIN
   DELETE FROM public.fieldly_notifications
   WHERE expires_at < now() - interval '7 days';
@@ -373,7 +373,7 @@ BEGIN
   DELETE FROM public.booking_live_locations
   WHERE expires_at < now() - interval '24 hours';
 END;
-$;
+$cleanup_body$;
 
 -- Do not expose this maintenance function to PostgREST/browser roles.
 REVOKE ALL ON FUNCTION public.fieldly_cleanup_expired_marketplace_data() FROM PUBLIC;
