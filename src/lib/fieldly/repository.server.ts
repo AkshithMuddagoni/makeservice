@@ -3074,6 +3074,7 @@ type BookingRow = {
   assigned_operator_id: string | null;
   assigned_operator_name: string | null;
   assigned_operator_role_title: string | null;
+  assigned_operator_verification_status: string | null;
 };
 
 function participantSiteSnapshot(value: Record<string, unknown>): LiveBookingDetail["site"] {
@@ -3105,14 +3106,16 @@ export async function getBookingDetailForUser(
     "b.customer_user_id,pb.owner_user_id as provider_owner_user_id,po.linked_user_id as assigned_operator_user_id," +
     "b.assigned_asset_id::text as assigned_asset_id,pa.asset_type as assigned_asset_type, " +
     "pa.make as assigned_asset_make,pa.model as assigned_asset_model,b.assigned_operator_id::text as assigned_operator_id, " +
-    "po.full_name as assigned_operator_name,po.role_title as assigned_operator_role_title," +
+    "po.full_name as assigned_operator_name,po.role_title as assigned_operator_role_title, " +
+    "po.verification_status::text as assigned_operator_verification_status," +
     "b.site_snapshot,b.requirements_snapshot,b.terms_snapshot,b.start_code_hash, " +
     "b.start_code_expires_at::text as start_code_expires_at,b.start_code_attempts,b.start_code_issue_count, " +
     "pb.id::text as business_id,pb.trading_name as provider_name,pb.latitude as provider_latitude,pb.longitude as provider_longitude " +
     "from public.bookings b join public.provider_businesses pb on pb.id=b.business_id " +
     "left join public.provider_operators po on po.id=b.assigned_operator_id and po.business_id=b.business_id " +
     "left join public.provider_assets pa on pa.id=b.assigned_asset_id and pa.business_id=b.business_id " +
-    "where b.id=$1::uuid and (b.customer_user_id=$2 or pb.owner_user_id=$2 or po.linked_user_id=$2) limit 1",
+    "where b.id=$1::uuid and (b.customer_user_id=$2 or pb.owner_user_id=$2 " +
+    "or (po.linked_user_id=$2 and po.verification_status='approved')) limit 1",
     [bookingId, userId],
   );
   const row = rows[0];
@@ -3120,7 +3123,8 @@ export async function getBookingDetailForUser(
 
   const isCustomer = row.customer_user_id === userId;
   const isProvider = row.provider_owner_user_id === userId;
-  const isAssignedOperator = row.assigned_operator_user_id === userId;
+  const isAssignedOperator = row.assigned_operator_user_id === userId &&
+    row.assigned_operator_verification_status === "approved";
   if (isCustomer) await requireCustomerRole(sql, userId);
   if (isProvider) await requireProviderRole(sql, userId);
   if (!isCustomer && !isProvider && !isAssignedOperator) return null;
@@ -3717,7 +3721,8 @@ export async function sendBookingMessageForParticipant(
       "po.linked_user_id as assigned_operator_user_id " +
       "from public.bookings b join public.provider_businesses pb on pb.id=b.business_id " +
       "left join public.provider_operators po on po.id=b.assigned_operator_id " +
-      "where b.id=$1::uuid and (b.customer_user_id=$2 or pb.owner_user_id=$2 or po.linked_user_id=$2) " +
+      "where b.id=$1::uuid and (b.customer_user_id=$2 or pb.owner_user_id=$2 " +
+      "or (po.linked_user_id=$2 and po.verification_status='approved')) " +
       "for update of b",
       [input.bookingId, userId],
     );
