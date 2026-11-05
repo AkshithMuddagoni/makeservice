@@ -22,7 +22,7 @@ const migrationFiles = [
   "migrations/fieldly/0012_provider_operator_roster.sql",
   "migrations/fieldly/0013_index_provider_document_upload_session_foreign_keys.sql",
   "migrations/fieldly/0014_index_provider_operator_asset_foreign_keys.sql",
-    "migrations/fieldly/0015_booking_dispute_resolution.sql",
+  "migrations/fieldly/0015_booking_dispute_resolution.sql",
   "migrations/fieldly/0016_notifications_and_location_retention.sql",
   "migrations/fieldly/0017_index_bookings_dispute_resolved_by.sql",
   "migrations/fieldly/0018_booking_resource_assignment.sql",
@@ -163,25 +163,23 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
        where conrelid = 'public.provider_operator_assets'::regclass`,
     );
     const bookingResourceConstraints = await db.query(
-  `select conname
-   from pg_constraint
-   where conrelid = 'public.bookings'::regclass`,
-   );
-
-  const bookingResourceConstraintNames = new Set(
-   bookingResourceConstraints.rows.map((row) => row.conname),
-   );
-
-   for (const name of [
-    "bookings_assigned_resource_pair_check",
-    "bookings_assigned_asset_business_fk",
-    "bookings_assigned_operator_business_fk",
-    "bookings_assigned_operator_asset_pair_fk",
-    ])   {
-    assert.ok(
-    bookingResourceConstraintNames.has(name),
-    `missing booking resource constraint: ${name}`,
-     );
+      `select conname
+       from pg_constraint
+       where conrelid = 'public.bookings'::regclass`,
+    );
+    const bookingResourceConstraintNames = new Set(
+      bookingResourceConstraints.rows.map((row) => row.conname),
+    );
+    for (const name of [
+      "bookings_assigned_resource_pair_check",
+      "bookings_assigned_asset_business_fk",
+      "bookings_assigned_operator_business_fk",
+      "bookings_assigned_operator_asset_pair_fk",
+    ]) {
+      assert.ok(
+        bookingResourceConstraintNames.has(name),
+        `missing booking resource constraint: ${name}`,
+      );
     }
     const operatorConstraintNames = new Set(operatorAssignmentConstraints.rows.map((row) => row.conname));
     assert.ok(operatorConstraintNames.has("provider_operator_assets_operator_business_fk"));
