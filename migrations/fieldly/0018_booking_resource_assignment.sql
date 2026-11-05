@@ -57,7 +57,7 @@ BEGIN
           status = 'disputed'
           AND (
             dispute_status IS NULL
-            OR dispute_status::text NOT IN ('resolved_customer', 'resolved_provider', 'closed_no_action')
+            OR dispute_status NOT IN ('resolved_customer'::public.fieldly_dispute_status, 'resolved_provider'::public.fieldly_dispute_status, 'closed_no_action'::public.fieldly_dispute_status)
           )
         )
       )
@@ -95,7 +95,7 @@ BEGIN
           status = 'disputed'
           AND (
             dispute_status IS NULL
-            OR dispute_status::text NOT IN ('resolved_customer', 'resolved_provider', 'closed_no_action')
+            OR dispute_status NOT IN ('resolved_customer'::public.fieldly_dispute_status, 'resolved_provider'::public.fieldly_dispute_status, 'closed_no_action'::public.fieldly_dispute_status)
           )
         )
       )
@@ -155,7 +155,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS bookings_active_assigned_asset_uidx
           status = 'disputed'
           AND (
             dispute_status IS NULL
-            OR dispute_status::text NOT IN ('resolved_customer', 'resolved_provider', 'closed_no_action')
+            OR dispute_status NOT IN ('resolved_customer'::public.fieldly_dispute_status, 'resolved_provider'::public.fieldly_dispute_status, 'closed_no_action'::public.fieldly_dispute_status)
           )
         )
       );
@@ -169,7 +169,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS bookings_active_assigned_operator_uidx
           status = 'disputed'
           AND (
             dispute_status IS NULL
-            OR dispute_status::text NOT IN ('resolved_customer', 'resolved_provider', 'closed_no_action')
+            OR dispute_status NOT IN ('resolved_customer'::public.fieldly_dispute_status, 'resolved_provider'::public.fieldly_dispute_status, 'closed_no_action'::public.fieldly_dispute_status)
           )
         )
       );
