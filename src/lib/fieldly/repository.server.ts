@@ -2690,9 +2690,13 @@ export async function acceptProviderQuoteForCustomer(
       "po.id::text as operator_id, po.full_name as operator_name, po.role_title as operator_role_title " +
       "from public.provider_asset_services pas " +
       "join public.provider_assets pa on pa.id = pas.asset_id and pa.business_id = $2::uuid " +
+      "join public.provider_services ps on ps.id = pas.provider_service_id and ps.business_id = pa.business_id " +
+      "join public.provider_businesses pb on pb.id = pa.business_id " +
       "join public.provider_operator_assets poa on poa.asset_id = pa.id and poa.business_id = pa.business_id " +
       "join public.provider_operators po on po.id = poa.operator_id and po.business_id = pa.business_id " +
       "where pas.provider_service_id = $1::uuid " +
+      "and pb.verification_status = 'approved' and pb.is_suspended = false " +
+      "and ps.verification_status = 'approved' and ps.is_listed = true and ps.is_available = true " +
       "and pa.verification_status = 'approved' and pa.is_available = true " +
       "and po.verification_status = 'approved' " +
       "and not exists (select 1 from public.bookings busy where busy.assigned_asset_id = pa.id " +
@@ -2700,7 +2704,7 @@ export async function acceptProviderQuoteForCustomer(
       "and not exists (select 1 from public.bookings busy where busy.assigned_operator_id = po.id " +
       "and busy.status = any($3::public.fieldly_booking_status[])) " +
       "order by pa.created_at asc, pa.id asc, po.created_at asc, po.id asc " +
-      "limit 1 for update of pa, po skip locked",
+      "limit 1 for update of pb, ps, pa, po skip locked",
       [quote.provider_service_id, quote.business_id, BOOKING_RESOURCE_RESERVED_STATUSES],
     );
     const assignment = assignments[0];
