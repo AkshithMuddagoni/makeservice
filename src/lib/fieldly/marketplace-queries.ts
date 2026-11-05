@@ -56,6 +56,16 @@ with candidates as (
         where poa.business_id = pa.business_id
           and poa.asset_id = pa.id
           and po.verification_status = 'approved'
+          and not exists (
+            select 1 from public.bookings busy
+            where busy.assigned_asset_id = pa.id
+              and busy.status in ('confirmed', 'on_the_way', 'arrived', 'service_started', 'disputed')
+          )
+          and not exists (
+            select 1 from public.bookings busy
+            where busy.assigned_operator_id = po.id
+              and busy.status in ('confirmed', 'on_the_way', 'arrived', 'service_started', 'disputed')
+          )
       )
   ) assets on true
   left join lateral (
@@ -86,6 +96,16 @@ with candidates as (
           where poa.business_id = pa.business_id
             and poa.asset_id = pa.id
             and po.verification_status = 'approved'
+            and not exists (
+              select 1 from public.bookings busy
+              where busy.assigned_asset_id = pa.id
+                and busy.status in ('confirmed', 'on_the_way', 'arrived', 'service_started', 'disputed')
+            )
+            and not exists (
+              select 1 from public.bookings busy
+              where busy.assigned_operator_id = po.id
+                and busy.status in ('confirmed', 'on_the_way', 'arrived', 'service_started', 'disputed')
+            )
         )
     )
 )
