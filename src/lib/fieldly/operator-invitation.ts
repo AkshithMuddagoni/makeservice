@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 const OPERATOR_INVITATION_TOKEN_BYTES = 32;
 const OPERATOR_INVITATION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
-const INDIA_E164_PATTERN = /^\\+91[6-9]\\d{9}$/;
+const INDIA_E164_PATTERN = /^\+91[6-9]\d{9}$/;
 
 /** Create an unguessable, URL-safe, single-use operator invitation token. */
 export function createOperatorInvitationToken(): string {
