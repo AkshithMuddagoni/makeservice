@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS public.provider_operator_invites (
     REFERENCES public.provider_operators (id, business_id)
     ON DELETE CASCADE,
   CONSTRAINT provider_operator_invites_phone_check
-    CHECK (invited_phone_e164 ~ '^\\+91[6-9][0-9]{9}$'),
+    CHECK (invited_phone_e164 ~ '^\+91[6-9][0-9]{9}$'),
   CONSTRAINT provider_operator_invites_token_hash_check
     CHECK (token_hash ~ '^[a-f0-9]{64}$'),
   CONSTRAINT provider_operator_invites_expiry_check
