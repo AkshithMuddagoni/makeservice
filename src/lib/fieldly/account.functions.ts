@@ -337,6 +337,14 @@ export const getCurrentProviderBookings = createServerFn({ method: "GET" })
   });
 
 
+/** List active and previous bookings assigned to the authenticated operator. */
+export const getCurrentAssignedOperatorBookings = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const { getAssignedOperatorBookingsForUser } = await import("./repository.server");
+    return getAssignedOperatorBookingsForUser(context.userId);
+  });
+
 /** Save a short-lived GPS point for an assigned active booking. */
 export const updateCurrentProviderBookingLocation = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
@@ -421,6 +429,29 @@ export const reviewAdminProviderAsset = createServerFn({ method: "POST" })
     return applyAdminProviderAssetReviewDecision(context.userId, data);
   });
 
+
+/** Provider owner creates a short-lived, single-use invitation for an approved operator. */
+export const createCurrentProviderOperatorInvite = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ operatorId: z.string().uuid() }).strict())
+  .handler(async ({ context, data }) => {
+    const { createProviderOperatorInvitationForUser } = await import("./operator-invitations.server");
+    return createProviderOperatorInvitationForUser(context.userId, data.operatorId);
+  });
+
+/** Redeem an operator invitation using only the verified phone on the current Better Auth session. */
+export const acceptCurrentProviderOperatorInvite = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ token: z.string().min(1).max(64) }).strict())
+  .handler(async ({ context, data }) => {
+    const { acceptProviderOperatorInvitationForUser } = await import("./operator-invitations.server");
+    return acceptProviderOperatorInvitationForUser({
+      userId: context.userId,
+      accountPhone: context.verifiedPhoneNumber,
+      phoneVerified: context.phoneNumberVerified,
+      token: data.token,
+    });
+  });
 
 /** Provider owner adds or updates one operator and the machines they may operate. */
 export const saveCurrentProviderOperator = createServerFn({ method: "POST" })
