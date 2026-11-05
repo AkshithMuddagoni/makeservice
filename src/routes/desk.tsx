@@ -871,6 +871,11 @@ function ProductionProviderOperations({ applications, onRefresh }: { application
                     <div>
                       <p className="font-semibold">{booking.publicReference} · {getService(booking.serviceId)?.name ?? booking.serviceId}</p>
                       <p className="mt-1 text-xs text-muted">{booking.siteLabel}, {booking.area}, {booking.city}</p>
+                      <p className="mt-1 text-xs text-muted">
+                        {booking.assignedAssetLabel ? "Machine: " + booking.assignedAssetLabel : "Machine: not assigned"}
+                        {" · "}
+                        {booking.assignedOperatorName ? "Operator: " + booking.assignedOperatorName : "Operator: not assigned"}
+                      </p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold">{inr(booking.amountPaise / 100)}</p>
