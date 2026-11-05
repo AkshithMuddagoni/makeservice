@@ -560,13 +560,26 @@ export async function saveProviderOperatorForUser(
 
     let operatorId = input.operatorId;
     if (operatorId) {
-      const existing = await tx.query<{ id: string }>(
-        `select id::text as id from public.provider_operators
+      const existing = await tx.query<{ id: string; linked_user_id: string | null; phone_e164: string | null }>(
+        `select id::text as id, linked_user_id, phone_e164
+         from public.provider_operators
          where id = $1::uuid and business_id = $2::uuid
          for update`,
         [operatorId, input.businessId],
       );
       if (!existing[0]) throw new Error("The selected operator does not belong to this provider business.");
+      const nextPhone = input.phoneE164 ?? null;
+      if (existing[0].linked_user_id && existing[0].phone_e164 !== nextPhone) {
+        throw new Error("This operator account is already linked. Contact support before changing its registered mobile number.");
+      }
+      if (existing[0].phone_e164 !== nextPhone) {
+        await tx.query(
+          `update public.provider_operator_invites
+           set revoked_at = now()
+           where operator_id = $1::uuid and accepted_at is null and revoked_at is null`,
+          [operatorId],
+        );
+      }
       const removedBookedAssignments = await tx.query<{ asset_id: string }>(
         `select poa.asset_id::text as asset_id
          from public.provider_operator_assets poa
@@ -722,6 +735,8 @@ export type ProviderDashboardApplication = {
     id: string;
     fullName: string;
     phoneLast4: string | null;
+    isLinked: boolean;
+    hasPhone: boolean;
     roleTitle: string;
     experienceYears: number;
     verificationStatus: string;
@@ -852,6 +867,8 @@ export async function getProviderDashboardForUser(
         id: string;
         full_name: string;
         phone_last4: string | null;
+        is_linked: boolean;
+        has_phone: boolean;
         role_title: string;
         experience_years: number | string | null;
         verification_status: string;
@@ -861,6 +878,8 @@ export async function getProviderDashboardForUser(
       }>(
         `select po.id::text as id, po.full_name,
                 right(po.phone_e164, 4) as phone_last4,
+                (po.linked_user_id is not null) as is_linked,
+                (po.phone_e164 is not null) as has_phone,
                 po.role_title, po.experience_years,
                 po.verification_status::text as verification_status,
                 po.reviewer_note, po.reviewed_at::text as reviewed_at,
@@ -977,6 +996,8 @@ export async function getProviderDashboardForUser(
         id: operator.id,
         fullName: operator.full_name,
         phoneLast4: operator.phone_last4,
+        isLinked: operator.is_linked,
+        hasPhone: operator.has_phone,
         roleTitle: operator.role_title,
         experienceYears: Number(operator.experience_years ?? 0),
         verificationStatus: operator.verification_status,
@@ -1422,11 +1443,13 @@ export async function getAdminProviderApplicationDetail(
       [businessId],
     ),
     sql.query<{
-      id: string; full_name: string; phone_last4: string | null; role_title: string;
+      id: string; full_name: string; phone_last4: string | null; is_linked: boolean; has_phone: boolean; role_title: string;
       experience_years: number | string | null; verification_status: string;
       reviewer_note: string | null; reviewed_at: string | null; asset_ids: string[] | null;
     }>(
       `select po.id::text as id, po.full_name, right(po.phone_e164, 4) as phone_last4,
+              (po.linked_user_id is not null) as is_linked,
+              (po.phone_e164 is not null) as has_phone,
               po.role_title, po.experience_years,
               po.verification_status::text as verification_status,
               po.reviewer_note, po.reviewed_at::text as reviewed_at,
@@ -1531,6 +1554,8 @@ export async function getAdminProviderApplicationDetail(
       id: item.id,
       fullName: item.full_name,
       phoneLast4: item.phone_last4,
+      isLinked: item.is_linked,
+      hasPhone: item.has_phone,
       roleTitle: item.role_title,
       experienceYears: Number(item.experience_years ?? 0),
       verificationStatus: item.verification_status,
@@ -3092,7 +3117,7 @@ function participantSiteSnapshot(value: Record<string, unknown>): LiveBookingDet
   };
 }
 
-/** Read a booking only for its customer or its assigned provider business owner. */
+/** Read a booking only for its customer, provider owner or approved assigned operator. */
 export async function getBookingDetailForUser(
   userId: string,
   bookingId: string,
@@ -3592,6 +3617,74 @@ export async function getProviderBookingsForUser(userId: string): Promise<Provid
   }));
 }
 
+
+/** List bookings assigned to the authenticated, linked operator account. */
+export async function getAssignedOperatorBookingsForUser(userId: string) {
+  assertProductionIdentity(userId);
+  const sql = await getSql();
+  const rows = await sql.query<{
+    booking_id: string;
+    public_reference: string;
+    service_id: string;
+    status: LiveBookingStatus;
+    amount_paise: string | number;
+    currency: string;
+    scheduled_for: string | null;
+    site_label: string | null;
+    area: string | null;
+    city: string | null;
+    business_name: string;
+    asset_label: string | null;
+    operator_name: string;
+    created_at: string;
+    updated_at: string;
+  }>(
+    `select b.id::text as booking_id, b.public_reference, b.service_id,
+            b.status::text as status, b.amount_paise::text as amount_paise, b.currency,
+            b.scheduled_for::text as scheduled_for,
+            b.site_snapshot->>'label' as site_label,
+            b.site_snapshot->>'area' as area,
+            b.site_snapshot->>'city' as city,
+            pb.trading_name as business_name,
+            case when pa.id is null then null
+              else concat_ws(' · ', pa.asset_type, pa.make, pa.model) end as asset_label,
+            po.full_name as operator_name,
+            b.created_at::text as created_at,
+            b.updated_at::text as updated_at
+     from public.bookings b
+     join public.provider_businesses pb on pb.id = b.business_id
+     join public.provider_operators po
+       on po.id = b.assigned_operator_id
+      and po.business_id = b.business_id
+     left join public.provider_assets pa
+       on pa.id = b.assigned_asset_id
+      and pa.business_id = b.business_id
+     where po.linked_user_id = $1
+       and po.verification_status = 'approved'
+       and pb.is_suspended = false
+     order by b.created_at desc
+     limit 100`,
+    [userId],
+  );
+
+  return rows.map((row) => ({
+    bookingId: row.booking_id,
+    publicReference: row.public_reference,
+    serviceId: row.service_id,
+    status: row.status,
+    amountPaise: Number(row.amount_paise),
+    currency: row.currency,
+    scheduledFor: row.scheduled_for,
+    siteLabel: row.site_label ?? "Work site",
+    area: row.area ?? "",
+    city: row.city ?? "",
+    businessName: row.business_name,
+    assignedAssetLabel: row.asset_label,
+    assignedOperatorName: row.operator_name,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
 
 export type ProviderBookingLocationResult = {
   bookingId: string;
