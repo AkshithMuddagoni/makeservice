@@ -52,7 +52,16 @@ BEGIN
     SELECT 1
     FROM public.bookings
     WHERE assigned_asset_id IS NOT NULL
-      AND status IN ('confirmed', 'on_the_way', 'arrived', 'service_started', 'disputed')
+      AND (
+        status IN ('confirmed', 'on_the_way', 'arrived', 'service_started')
+        OR (
+          status = 'disputed'
+          AND (
+            dispute_status IS NULL
+            OR dispute_status::text NOT IN ('resolved_customer', 'resolved_provider', 'closed_no_action')
+          )
+        )
+      )
     GROUP BY assigned_asset_id
     HAVING count(*) > 1
   ) THEN
@@ -81,7 +90,16 @@ BEGIN
     SELECT 1
     FROM public.bookings
     WHERE assigned_operator_id IS NOT NULL
-      AND status IN ('confirmed', 'on_the_way', 'arrived', 'service_started', 'disputed')
+      AND (
+        status IN ('confirmed', 'on_the_way', 'arrived', 'service_started')
+        OR (
+          status = 'disputed'
+          AND (
+            dispute_status IS NULL
+            OR dispute_status::text NOT IN ('resolved_customer', 'resolved_provider', 'closed_no_action')
+          )
+        )
+      )
     GROUP BY assigned_operator_id
     HAVING count(*) > 1
   ) THEN
@@ -132,12 +150,30 @@ ALTER TABLE public.bookings
 CREATE UNIQUE INDEX IF NOT EXISTS bookings_active_assigned_asset_uidx
   ON public.bookings (assigned_asset_id)
   WHERE assigned_asset_id IS NOT NULL
-    AND status IN ('confirmed', 'on_the_way', 'arrived', 'service_started', 'disputed');
+    AND (
+        status IN ('confirmed', 'on_the_way', 'arrived', 'service_started')
+        OR (
+          status = 'disputed'
+          AND (
+            dispute_status IS NULL
+            OR dispute_status::text NOT IN ('resolved_customer', 'resolved_provider', 'closed_no_action')
+          )
+        )
+      );
 
 CREATE UNIQUE INDEX IF NOT EXISTS bookings_active_assigned_operator_uidx
   ON public.bookings (assigned_operator_id)
   WHERE assigned_operator_id IS NOT NULL
-    AND status IN ('confirmed', 'on_the_way', 'arrived', 'service_started', 'disputed');
+    AND (
+        status IN ('confirmed', 'on_the_way', 'arrived', 'service_started')
+        OR (
+          status = 'disputed'
+          AND (
+            dispute_status IS NULL
+            OR dispute_status::text NOT IN ('resolved_customer', 'resolved_provider', 'closed_no_action')
+          )
+        )
+      );
 
 CREATE INDEX IF NOT EXISTS bookings_assigned_asset_business_idx
   ON public.bookings (assigned_asset_id, business_id)
