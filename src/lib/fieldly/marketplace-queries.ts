@@ -65,7 +65,7 @@ with candidates as (
                   busy.status = 'disputed'
                   and (
                     busy.dispute_status is null
-                    or busy.dispute_status::text not in ('resolved_customer', 'resolved_provider', 'closed_no_action')
+                    or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status, 'resolved_provider'::public.fieldly_dispute_status, 'closed_no_action'::public.fieldly_dispute_status)
                   )
                 )
               )
@@ -79,7 +79,7 @@ with candidates as (
                   busy.status = 'disputed'
                   and (
                     busy.dispute_status is null
-                    or busy.dispute_status::text not in ('resolved_customer', 'resolved_provider', 'closed_no_action')
+                    or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status, 'resolved_provider'::public.fieldly_dispute_status, 'closed_no_action'::public.fieldly_dispute_status)
                   )
                 )
               )
@@ -123,7 +123,7 @@ with candidates as (
                   busy.status = 'disputed'
                   and (
                     busy.dispute_status is null
-                    or busy.dispute_status::text not in ('resolved_customer', 'resolved_provider', 'closed_no_action')
+                    or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status, 'resolved_provider'::public.fieldly_dispute_status, 'closed_no_action'::public.fieldly_dispute_status)
                   )
                 )
               )
@@ -137,7 +137,7 @@ with candidates as (
                   busy.status = 'disputed'
                   and (
                     busy.dispute_status is null
-                    or busy.dispute_status::text not in ('resolved_customer', 'resolved_provider', 'closed_no_action')
+                    or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status, 'resolved_provider'::public.fieldly_dispute_status, 'closed_no_action'::public.fieldly_dispute_status)
                   )
                 )
               )
