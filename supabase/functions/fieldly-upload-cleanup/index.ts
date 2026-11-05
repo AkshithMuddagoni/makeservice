@@ -181,7 +181,7 @@ Deno.serve(async (request: Request) => {
         `;
       }
 
-      const retryLimitRows = await tx<{ count: number }>`
+      const retryLimitRows = await tx<{ count: number }[]>`
         select count(*)::int as count
         from public.provider_document_upload_sessions s
         where s.storage_bucket = ${BUCKET}
