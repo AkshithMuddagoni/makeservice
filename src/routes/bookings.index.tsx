@@ -15,12 +15,13 @@ function BookingsPage() {
   const bookings = useFieldly((s) => s.bookings);
   const session = useFieldly((s) => s.session);
   const providers = useProviders();
-  const { data: authSession, isPending: authSessionPending } = authClient.useSession();
+  const { data: authSession } = authClient.useSession();
   const [operatorBookings, setOperatorBookings] = useState<Awaited<ReturnType<typeof getCurrentAssignedOperatorBookings>>>([]);
   const [operatorBookingsLoading, setOperatorBookingsLoading] = useState(false);
   useEffect(() => {
     if (!authEnabled || !authSession?.user) {
       setOperatorBookings([]);
+      setOperatorBookingsLoading(false);
       return;
     }
     let cancelled = false;
@@ -92,7 +93,7 @@ function BookingsPage() {
       <div className="mt-6 grid gap-3">
         {mine.length === 0 && (
           <div className="rounded-3xl border border-line bg-card p-6">
-            {session ? (
+            {session || authSession?.user ? (
               <>
                 <p>{t(lang, "empty_bookings")}</p>
                 <Link to="/" className="mt-3 inline-block font-semibold">Find a machine</Link>
