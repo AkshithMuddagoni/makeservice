@@ -14,7 +14,7 @@ ALTER TABLE public.bookings
 ALTER TABLE public.bookings
   DROP CONSTRAINT IF EXISTS bookings_assigned_operator_id_fkey;
 
-DO $
+DO $assignment$
 BEGIN
   IF EXISTS (
     SELECT 1
@@ -106,7 +106,7 @@ BEGIN
       'Cannot add booking resource assignment rules: an operator is already reserved by multiple active bookings.';
   END IF;
 END
-$;
+$assignment$;
 
 ALTER TABLE public.bookings
   ADD CONSTRAINT bookings_assigned_resource_pair_check
