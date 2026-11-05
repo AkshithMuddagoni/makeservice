@@ -735,6 +735,8 @@ export type ProviderDashboardApplication = {
     id: string;
     fullName: string;
     phoneLast4: string | null;
+    isLinked: boolean;
+    hasPhone: boolean;
     roleTitle: string;
     experienceYears: number;
     verificationStatus: string;
