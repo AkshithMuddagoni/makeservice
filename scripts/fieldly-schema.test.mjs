@@ -27,6 +27,7 @@ const migrationFiles = [
   "migrations/fieldly/0017_index_bookings_dispute_resolved_by.sql",
   "migrations/fieldly/0018_booking_resource_assignment.sql",
   "migrations/fieldly/0019_index_booking_assigned_operator_asset_fk.sql",
+  "migrations/fieldly/0021_provider_document_upload_cleanup.sql",
 ];
 
 test("Fieldly PostgreSQL migrations apply cleanly without Supabase Auth tables", async () => {
@@ -246,6 +247,7 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
       "provider_quotes_business_id_idx",
       "provider_services_reviewed_by_idx",
       "bookings_assigned_operator_asset_pair_idx",
+      "provider_document_upload_sessions_cleanup_idx",
     ];
     const indexes = await db.query(
       "select indexname from pg_indexes where schemaname = 'public'",
@@ -254,6 +256,24 @@ test("full Better Auth and Fieldly migration order applies cleanly", async () =>
     for (const name of expectedIndexes) {
       assert.ok(indexNames.has(name), `missing expected foreign-key index: ${name}`);
     }
+    const cleanupColumns = await db.query(
+      "select column_name from information_schema.columns " +
+      "where table_schema = 'public' and table_name = 'provider_document_upload_sessions'",
+    );
+    const cleanupColumnNames = new Set(cleanupColumns.rows.map((row) => row.column_name));
+    for (const name of [
+      "storage_cleanup_completed_at",
+      "storage_cleanup_attempts",
+      "storage_cleanup_last_attempt_at",
+    ]) {
+      assert.ok(cleanupColumnNames.has(name), "missing upload cleanup column: " + name);
+    }
+    const cleanupAttemptsConstraint = await db.query(
+      "select conname from pg_constraint " +
+      "where conrelid = 'public.provider_document_upload_sessions'::regclass " +
+      "and conname = 'provider_document_upload_sessions_cleanup_attempts_check'",
+    );
+    assert.equal(cleanupAttemptsConstraint.rows.length, 1);
     assert.ok(
       !indexNames.has("provider_businesses_owner_lookup_idx"),
       "the duplicate provider owner index must be removed",

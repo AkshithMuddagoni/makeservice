@@ -8,13 +8,13 @@ Fieldly is a responsive marketplace for discovering equipment and site services 
 
 The production backend foundation was squash-merged into `main` through [PR #28](https://github.com/AkshithMuddagoni/makeservice/pull/28) on November 2, 2026, and deployed through the existing Render web service `makeservice`. The service still runs on Render Free for development and backend validation; a successful deploy is not customer-launch approval.
 
-The live `makeservice` Supabase migration ledger was checked read-only on November 5, 2026 and is applied through `0018_booking_resource_assignment.sql`. [PR #35](https://github.com/AkshithMuddagoni/makeservice/pull/35) was merged on November 5, 2026 after its exact-head CI passed dependency audit, type-check, lint, automated tests, Playwright smoke tests and the production build. It adds migration `0019_index_booking_assigned_operator_asset_fk.sql`, supporting schema assertions and a CI lint step. The additive index is merged to `main`; the live database and Render rollout must be verified separately before considering it deployed. Render preview was skipped because the build runs database migrations and preview environments inherit the base service's environment variables.
+The live `makeservice` Supabase migration ledger was verified on November 5, 2026 through `0019_index_booking_assigned_operator_asset_fk.sql`. PR #35 was merged and the controlled Render deployment of commit `1283cf7` applied migration 0019; the composite index on `(assigned_operator_id, assigned_asset_id)` was verified in `pg_indexes`. PRs #36, #38 and #39 are also merged; the latest deployment is live. Render preview is skipped for database-changing pull requests because previews inherit base-service environment values and the build command runs migrations.
 
 The deployed backend connects authenticated Better Auth server sessions to PostgreSQL-backed accounts, provider onboarding, verified provider discovery, customer requests, provider quotes, booking lifecycle, participant chat, provider presence and short-lived GPS operations. Provider and operator review is server-authoritative and audit logged. The local preview path still contains fixed-code/browser-local demonstration behavior; it is not production identity or shared data.
 
-The private `fieldly-private` Storage bucket is provisioned, private and limited to PDF/JPEG/PNG/WebP files up to 10 MiB. The server upload flow has owner-bound upload sessions, content-signature checks, fail-closed ClamAV scanning and administrator-only short-lived download links. However, `PROVIDER_DOCUMENT_UPLOADS_ENABLED` remains **false**, and secure uploads also require a configured private ClamAV scanner. Do not enable uploads until scanner health, expiry, deletion and retention behavior are tested. Secure identity/PAN verification still requires a specialist KYC provider.
+The private `fieldly-private` Storage bucket is provisioned, private and limited to PDF/JPEG/PNG/WebP files up to 10 MiB. The server upload flow has owner-bound upload sessions, content-signature checks, fail-closed ClamAV scanning and administrator-only short-lived download links. `PROVIDER_DOCUMENT_UPLOADS_ENABLED` remains **false** because a private ClamAV scanner has not been provisioned. The current development branch adds migration 0021 and a Vault-authenticated cleanup Edge Function for expired upload sessions and orphaned objects; it is not deployed or scheduled until the migration and function pass CI/review. Secure identity/PAN verification still requires a specialist KYC provider.
 
-Database-triggered **in-app** notifications and authenticated list/read functions are installed. The Supabase Cron cleanup job is registered and active daily at 02:17 UTC for expired notifications and live-location records. External transactional delivery (such as SMS/email/push) and delivery-failure alerting are still launch work.
+Database-triggered **in-app** notifications and authenticated list/read functions are installed. The existing Supabase Cron job is active daily at 02:17 UTC for expired notifications and live-location records. The separate provider-upload storage cleanup worker is still a development branch and must not be described as active until its Edge Function is deployed and its Vault-backed Cron invocation is verified. External transactional delivery (such as SMS/email/push) remains launch work.
 
 All public application tables have RLS enabled; browser `anon` and `authenticated` roles have no application-table grants. Do not add broad RLS policies or expose the Supabase secret/service-role key.
 
@@ -71,12 +71,14 @@ The migration runner applies the uniquely named SQL files in basename order from
 18. `0016_notifications_and_location_retention.sql` — durable in-app notifications, trigger-driven events and live-location retention cleanup.
 19. `0017_index_bookings_dispute_resolved_by.sql` — supporting dispute-resolution index.
 20. `0018_booking_resource_assignment.sql` — business-scoped operator/asset assignment constraints for bookings.
-21. `0019_index_booking_assigned_operator_asset_fk.sql` — supporting composite index for the booking-to-operator/asset foreign key (**merged to `main` through PR #35; verify the production migration ledger after deployment**).
+21. `0019_index_booking_assigned_operator_asset_fk.sql` — supporting composite index for the booking-to-operator/asset foreign key (**merged and applied to production on November 5, 2026**).
+22. `0021_provider_document_upload_cleanup.sql` — cleanup retry metadata for expired provider-upload sessions (**in branch `feat/provider-upload-cleanup-worker-20261105`; not yet merged or applied**).
 
 The live `makeservice` Supabase project was verified through migration
-0018 on November 5, 2026. Migrations 0015–0018 are applied. Migration 0019 is
-merged to `main`; it must appear in `public._migrations` and its index must be
-visible in `public.bookings` after the controlled Render rollout.
+0019 on November 5, 2026. Migration 0019 and the index
+`bookings_assigned_operator_asset_pair_idx` are present in production. Migration
+0021 is still pending review and must not be described as deployed until its
+controlled rollout is verified.
 
 **Production migration safety:** `npm run build` invokes `npm run db:migrate`,
 which applies every pending SQL migration found in `migrations/auth/` and
@@ -192,11 +194,11 @@ React 19, TanStack Start/Router, Vite, TypeScript, Tailwind CSS 4, Lucide, MapLi
 - Re-check the Render environment variable **names and safe-off flags** before launch: `DATABASE_URL`, `DATABASE_SSL_CA_BASE64`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NODE_ENV`, `VITE_AUTH_ENABLED`, `VITE_PHONE_OTP_ENABLED` and `PROVIDER_DOCUMENT_UPLOADS_ENABLED`. The operator previously confirmed the core database/auth variables during PR #28 deployment. Secret values are not stored in Git and were not read during this audit.
 - Complete MSG91 account setup and Indian DLT Principal Entity, sender ID and transactional template approval; then test OTP send, verify, expiry, throttling, replay protection and delivery-failure alerts. Keep OTP activation deferred until this integration is complete.
 - Integrate a specialist KYC provider for owner/PAN and other secure-only evidence. Do not collect full Aadhaar/PAN or bank details using the ordinary document picker.
-- Deploy a private, monitored ClamAV service and implement/verify cleanup for expired upload sessions and orphaned storage objects. Keep `PROVIDER_DOCUMENT_UPLOADS_ENABLED=false` until clean/infected/timeout/signature-mismatch, signed-download, expiry, deletion and retention tests pass.
+- Deploy a private, monitored ClamAV service. The cleanup worker implementation is being prepared in `feat/provider-upload-cleanup-worker-20261105`; merge/deploy migration 0021 and the Edge Function, create its random token in Vault, register the pg_cron/pg_net call, then verify an authenticated worker run and Storage API deletion before considering cleanup active. Keep `PROVIDER_DOCUMENT_UPLOADS_ENABLED=false` until clean/infected/timeout/signature-mismatch, signed-download, expiry, deletion and retention tests pass.
 - Keep the installed database-triggered in-app notifications. Add and test external transactional delivery (SMS/email/push as selected), retries, dead-letter/failure visibility and operational alerts.
 - Payments remain deferred. PR #19 is a Cashfree Easy Split **foundation only**; it does not provide checkout or real-money movement. Later work must add server-created checkout, verified signed webhooks, idempotent ledger changes, refunds, reconciliation, chargeback handling, provider KYC, commission and settlements. Do not enable payments or collect real money yet.
 - Complete a backup/restore drill and document RPO/RTO; configure uptime/error/database alerts, credential rotation and Git-history review, production domain/TLS, rollback procedure, external security review, accessibility, real-device and load tests.
-- Review open prototype work carefully before merge. PR #16 describes an older browser-localStorage prototype and is not the production backend. PR #34 operator linking remains gated on verified phone identity, so it must stay disabled until OTP is live. Do not merge prototype or OTP-dependent changes just to clear the PR list.
+- Review open prototype work carefully before merge. PR #16 describes an older browser-localStorage prototype and is not the production backend. PR #37 operator linking remains gated on verified phone identity, so it must stay disabled until OTP is live. Do not merge prototype or OTP-dependent changes just to clear the PR list.
 
 ## Current production marketplace scope
 

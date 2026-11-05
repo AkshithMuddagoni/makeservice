@@ -28,6 +28,14 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev
 
+      - name: Set up Deno for Supabase Edge Functions
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check Supabase upload cleanup Edge Function
+        run: deno check --config supabase/functions/fieldly-upload-cleanup/deno.json supabase/functions/fieldly-upload-cleanup/index.ts
+
       - name: Type-check
         run: npm run typecheck
 
