@@ -73,7 +73,7 @@ function DeskPage() {
       );
     }
     const phone = authSession.user.phoneNumber ?? "";
-    const phoneVerified = Boolean(authSession.user.phoneNumberVerified && /^\\+91[6-9]\\d{9}$/.test(phone));
+    const phoneVerified = Boolean(authSession.user.phoneNumberVerified && /^\+91[6-9]\d{9}$/.test(phone));
     if (!phoneVerified) {
       return (
         <div className="mx-auto max-w-lg px-4 py-12">
