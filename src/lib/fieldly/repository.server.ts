@@ -5,6 +5,7 @@ import { getSql } from "../db";
 import { getProviderDocumentRequirements, SERVICE_ONBOARDING } from "./provider-onboarding";
 import { getService } from "./catalog";
 import { PROVIDER_DISCOVERY_SQL } from "./marketplace-queries";
+import { BOOKING_RESOURCE_RESERVED_STATUSES } from "./booking-resource-assignment";
 import { detectProviderDocumentMime, validateProviderDocumentMetadata } from "./document-security";
 import { scanProviderDocument } from "./clamav.server";
 import {
@@ -566,6 +567,22 @@ export async function saveProviderOperatorForUser(
         [operatorId, input.businessId],
       );
       if (!existing[0]) throw new Error("The selected operator does not belong to this provider business.");
+      const removedBookedAssignments = await tx.query<{ asset_id: string }>(
+        `select poa.asset_id::text as asset_id
+         from public.provider_operator_assets poa
+         where poa.operator_id = $1::uuid
+           and poa.business_id = $2::uuid
+           and not (poa.asset_id = any($3::uuid[]))
+           and exists (
+             select 1 from public.bookings b
+             where b.assigned_operator_id = poa.operator_id
+               and b.assigned_asset_id = poa.asset_id
+           )`,
+        [operatorId, input.businessId, input.assetIds],
+      );
+      if (removedBookedAssignments.length > 0) {
+        throw new Error("This operator has booking history on one or more selected machines. Keep those machine assignments on the operator record, or create a new operator record for a different roster.");
+      }
       await tx.query(
         `update public.provider_operators
          set full_name = $3, phone_e164 = $4, role_title = $5,
@@ -586,8 +603,10 @@ export async function saveProviderOperatorForUser(
         [input.businessId, operatorId],
       );
       await tx.query(
-        "delete from public.provider_operator_assets where operator_id = $1::uuid and business_id = $2::uuid",
-        [operatorId, input.businessId],
+        "delete from public.provider_operator_assets " +
+        "where operator_id = $1::uuid and business_id = $2::uuid " +
+        "and not (asset_id = any($3::uuid[]))",
+        [operatorId, input.businessId, input.assetIds],
       );
     } else {
       const created = await tx.query<{ id: string }>(
@@ -604,7 +623,8 @@ export async function saveProviderOperatorForUser(
     for (const assetId of input.assetIds) {
       await tx.query(
         `insert into public.provider_operator_assets (business_id, operator_id, asset_id)
-         values ($1::uuid, $2::uuid, $3::uuid)`,
+         values ($1::uuid, $2::uuid, $3::uuid)
+         on conflict (operator_id, asset_id) do nothing`,
         [input.businessId, operatorId, assetId],
       );
     }
@@ -2533,11 +2553,22 @@ export async function submitProviderQuoteForUser(
       "and ps.verification_status = 'approved' and ps.is_listed = true and ps.is_available = true " +
       "and exists (select 1 from public.provider_asset_services pas " +
       "join public.provider_assets pa on pa.id = pas.asset_id and pa.business_id = pb.id " +
-      "where pas.provider_service_id = ps.id and pa.verification_status = 'approved' and pa.is_available = true) " +
+      "join public.provider_operator_assets poa on poa.asset_id = pa.id and poa.business_id = pa.business_id " +
+      "join public.provider_operators po on po.id = poa.operator_id and po.business_id = pa.business_id " +
+      "where pas.provider_service_id = ps.id and pa.verification_status = 'approved' and pa.is_available = true " +
+      "and po.verification_status = 'approved' " +
+      "and not exists (select 1 from public.bookings busy where busy.assigned_asset_id = pa.id " +
+      "and (busy.status = any($4::public.fieldly_booking_status[]) " +
+      "or (busy.status = 'disputed' and (busy.dispute_status is null " +
+      "or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status,'resolved_provider'::public.fieldly_dispute_status,'closed_no_action'::public.fieldly_dispute_status))))) "+
+      "and not exists (select 1 from public.bookings busy where busy.assigned_operator_id = po.id " +
+      "and (busy.status = any($4::public.fieldly_booking_status[]) " +
+      "or (busy.status = 'disputed' and (busy.dispute_status is null " +
+      "or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status,'resolved_provider'::public.fieldly_dispute_status,'closed_no_action'::public.fieldly_dispute_status))))) "+
       "and exists (select 1 from public.provider_presence presence where presence.business_id = pb.id " +
       "and presence.is_online = true and coalesce(presence.last_seen_at,presence.updated_at) >= now() - interval '10 minutes') " +
       "for update of jr, jrt",
-      [userId, input.businessId, input.requestId],
+      [userId, input.businessId, input.requestId, BOOKING_RESOURCE_RESERVED_STATUSES],
     );
     const target = targets[0];
     if (!target) {
@@ -2649,9 +2680,20 @@ export async function acceptProviderQuoteForCustomer(
       "and ps.verification_status = 'approved' and ps.is_listed = true and ps.is_available = true " +
       "and exists (select 1 from public.provider_asset_services pas " +
       "join public.provider_assets pa on pa.id = pas.asset_id and pa.business_id = pb.id " +
-      "where pas.provider_service_id = ps.id and pa.verification_status = 'approved' and pa.is_available = true) " +
+      "join public.provider_operator_assets poa on poa.asset_id = pa.id and poa.business_id = pa.business_id " +
+      "join public.provider_operators po on po.id = poa.operator_id and po.business_id = pa.business_id " +
+      "where pas.provider_service_id = ps.id and pa.verification_status = 'approved' and pa.is_available = true " +
+      "and po.verification_status = 'approved' " +
+      "and not exists (select 1 from public.bookings busy where busy.assigned_asset_id = pa.id " +
+      "and (busy.status = any($3::public.fieldly_booking_status[]) " +
+      "or (busy.status = 'disputed' and (busy.dispute_status is null " +
+      "or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status,'resolved_provider'::public.fieldly_dispute_status,'closed_no_action'::public.fieldly_dispute_status))))) "+
+      "and not exists (select 1 from public.bookings busy where busy.assigned_operator_id = po.id " +
+      "and (busy.status = any($3::public.fieldly_booking_status[]) " +
+      "or (busy.status = 'disputed' and (busy.dispute_status is null " +
+      "or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status,'resolved_provider'::public.fieldly_dispute_status,'closed_no_action'::public.fieldly_dispute_status))))) "+
       "for update of jr, pq, jrt",
-      [input.quoteId, userId],
+      [input.quoteId, userId, BOOKING_RESOURCE_RESERVED_STATUSES],
     );
     const quote = rows[0];
     if (!quote) {
@@ -2660,6 +2702,45 @@ export async function acceptProviderQuoteForCustomer(
     const amountPaise = Number(quote.amount_paise);
     if (!Number.isSafeInteger(amountPaise) || amountPaise < 1) {
       throw new Error("The provider quote contains an invalid amount.");
+    }
+
+    const assignments = await tx.query<{
+      asset_id: string;
+      asset_type: string;
+      asset_make: string;
+      asset_model: string;
+      operator_id: string;
+      operator_name: string;
+      operator_role_title: string;
+    }>(
+      "select pa.id::text as asset_id, pa.asset_type, pa.make as asset_make, pa.model as asset_model, " +
+      "po.id::text as operator_id, po.full_name as operator_name, po.role_title as operator_role_title " +
+      "from public.provider_asset_services pas " +
+      "join public.provider_assets pa on pa.id = pas.asset_id and pa.business_id = $2::uuid " +
+      "join public.provider_services ps on ps.id = pas.provider_service_id and ps.business_id = pa.business_id " +
+      "join public.provider_businesses pb on pb.id = pa.business_id " +
+      "join public.provider_operator_assets poa on poa.asset_id = pa.id and poa.business_id = pa.business_id " +
+      "join public.provider_operators po on po.id = poa.operator_id and po.business_id = pa.business_id " +
+      "where pas.provider_service_id = $1::uuid " +
+      "and pb.verification_status = 'approved' and pb.is_suspended = false " +
+      "and ps.verification_status = 'approved' and ps.is_listed = true and ps.is_available = true " +
+      "and pa.verification_status = 'approved' and pa.is_available = true " +
+      "and po.verification_status = 'approved' " +
+      "and not exists (select 1 from public.bookings busy where busy.assigned_asset_id = pa.id " +
+      "and (busy.status = any($3::public.fieldly_booking_status[]) " +
+      "or (busy.status = 'disputed' and (busy.dispute_status is null " +
+      "or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status,'resolved_provider'::public.fieldly_dispute_status,'closed_no_action'::public.fieldly_dispute_status))))) "+
+      "and not exists (select 1 from public.bookings busy where busy.assigned_operator_id = po.id " +
+      "and (busy.status = any($3::public.fieldly_booking_status[]) " +
+      "or (busy.status = 'disputed' and (busy.dispute_status is null " +
+      "or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status,'resolved_provider'::public.fieldly_dispute_status,'closed_no_action'::public.fieldly_dispute_status))))) "+
+      "order by pa.created_at asc, pa.id asc, po.created_at asc, po.id asc " +
+      "limit 1 for update of pb, ps, pa, po skip locked",
+      [quote.provider_service_id, quote.business_id, BOOKING_RESOURCE_RESERVED_STATUSES],
+    );
+    const assignment = assignments[0];
+    if (!assignment) {
+      throw new Error("This provider no longer has an available approved machine and operator for this service. Ask the customer to choose another quote.");
     }
 
     const publicReference = "MS-" + new Date().toISOString().slice(0, 10).replaceAll("-", "") +
@@ -2691,8 +2772,8 @@ export async function acceptProviderQuoteForCustomer(
     const bookings = await tx.query<{ id: string }>(
       "insert into public.bookings (" +
       "public_reference, request_id, quote_id, customer_user_id, business_id, provider_service_id, " +
-      "service_id, status, amount_paise, currency, scheduled_for, site_snapshot, requirements_snapshot, terms_snapshot" +
-      ") values ($1, $2::uuid, $3::uuid, $4, $5::uuid, $6::uuid, $7, 'confirmed', $8, $9, $10, $11::jsonb, $12::jsonb, $13::jsonb) " +
+      "assigned_asset_id, assigned_operator_id, service_id, status, amount_paise, currency, scheduled_for, site_snapshot, requirements_snapshot, terms_snapshot" +
+      ") values ($1, $2::uuid, $3::uuid, $4, $5::uuid, $6::uuid, $7::uuid, $8::uuid, $9, 'confirmed', $10, $11, $12, $13::jsonb, $14::jsonb, $15::jsonb) " +
       "returning id::text as id",
       [
         publicReference,
@@ -2701,6 +2782,8 @@ export async function acceptProviderQuoteForCustomer(
         userId,
         quote.business_id,
         quote.provider_service_id,
+        assignment.asset_id,
+        assignment.operator_id,
         quote.service_id,
         amountPaise,
         quote.currency,
@@ -2716,7 +2799,12 @@ export async function acceptProviderQuoteForCustomer(
     await tx.query(
       "insert into public.booking_events (booking_id, actor_user_id, from_status, to_status, event_type, note, metadata) " +
       "values ($1::uuid, $2, null, 'confirmed', 'quote_accepted', 'Customer accepted provider quote', $3::jsonb)",
-      [booking.id, userId, JSON.stringify({ quoteId: input.quoteId, publicReference })],
+      [booking.id, userId, JSON.stringify({
+        quoteId: input.quoteId,
+        publicReference,
+        assignedAssetId: assignment.asset_id,
+        assignedOperatorId: assignment.operator_id,
+      })],
     );
     await tx.query(
       "update public.job_requests set status = 'booked', updated_at = now() where id = $1::uuid and status = 'open'",
@@ -2908,9 +2996,14 @@ export type LiveBookingDetail = {
     baseLatitude: number | null;
     baseLongitude: number | null;
   };
+  assignment: {
+    asset: { id: string; assetType: string; make: string; model: string } | null;
+    operator: { id: string; fullName: string; roleTitle: string } | null;
+  };
   permissions: {
     isCustomer: boolean;
     isProvider: boolean;
+    isAssignedOperator: boolean;
   };
   review: { rating: number; reviewText: string; createdAt: string } | null;
   startCode: {
@@ -2974,6 +3067,14 @@ type BookingRow = {
   provider_name: string;
   provider_latitude: number | null;
   provider_longitude: number | null;
+  assigned_asset_id: string | null;
+  assigned_asset_type: string | null;
+  assigned_asset_make: string | null;
+  assigned_asset_model: string | null;
+  assigned_operator_id: string | null;
+  assigned_operator_name: string | null;
+  assigned_operator_role_title: string | null;
+  assigned_operator_verification_status: string | null;
 };
 
 function participantSiteSnapshot(value: Record<string, unknown>): LiveBookingDetail["site"] {
@@ -3003,22 +3104,30 @@ export async function getBookingDetailForUser(
     "b.currency,b.service_id,b.scheduled_for::text as scheduled_for,b.created_at::text as created_at, " +
     "b.updated_at::text as updated_at,b.completed_at::text as completed_at,b.cancellation_reason,b.dispute_reason, " +
     "b.customer_user_id,pb.owner_user_id as provider_owner_user_id,po.linked_user_id as assigned_operator_user_id," +
+    "b.assigned_asset_id::text as assigned_asset_id,pa.asset_type as assigned_asset_type, " +
+    "pa.make as assigned_asset_make,pa.model as assigned_asset_model,b.assigned_operator_id::text as assigned_operator_id, " +
+    "po.full_name as assigned_operator_name,po.role_title as assigned_operator_role_title, " +
+    "po.verification_status::text as assigned_operator_verification_status," +
     "b.site_snapshot,b.requirements_snapshot,b.terms_snapshot,b.start_code_hash, " +
     "b.start_code_expires_at::text as start_code_expires_at,b.start_code_attempts,b.start_code_issue_count, " +
     "pb.id::text as business_id,pb.trading_name as provider_name,pb.latitude as provider_latitude,pb.longitude as provider_longitude " +
     "from public.bookings b join public.provider_businesses pb on pb.id=b.business_id " +
-    "left join public.provider_operators po on po.id=b.assigned_operator_id " +
-    "where b.id=$1::uuid and (b.customer_user_id=$2 or pb.owner_user_id=$2 or po.linked_user_id=$2) limit 1",
+    "left join public.provider_operators po on po.id=b.assigned_operator_id and po.business_id=b.business_id " +
+    "left join public.provider_assets pa on pa.id=b.assigned_asset_id and pa.business_id=b.business_id " +
+    "where b.id=$1::uuid and (b.customer_user_id=$2 or pb.owner_user_id=$2 " +
+    "or (po.linked_user_id=$2 and po.verification_status='approved')) limit 1",
     [bookingId, userId],
   );
   const row = rows[0];
   if (!row) return null;
 
   const isCustomer = row.customer_user_id === userId;
-  const isProvider = row.provider_owner_user_id === userId || row.assigned_operator_user_id === userId;
+  const isProvider = row.provider_owner_user_id === userId;
+  const isAssignedOperator = row.assigned_operator_user_id === userId &&
+    row.assigned_operator_verification_status === "approved";
   if (isCustomer) await requireCustomerRole(sql, userId);
   if (isProvider) await requireProviderRole(sql, userId);
-  if (!isCustomer && !isProvider) return null;
+  if (!isCustomer && !isProvider && !isAssignedOperator) return null;
   const [events, locations, messages, reviewRows] = await Promise.all([
     sql.query<{
       id: string; from_status: string | null; to_status: string;
@@ -3091,7 +3200,15 @@ export async function getBookingDetailForUser(
       baseLatitude: row.provider_latitude === null ? null : Number(row.provider_latitude),
       baseLongitude: row.provider_longitude === null ? null : Number(row.provider_longitude),
     },
-    permissions: { isCustomer, isProvider },
+    assignment: {
+      asset: row.assigned_asset_id && row.assigned_asset_type && row.assigned_asset_make && row.assigned_asset_model
+        ? { id: row.assigned_asset_id, assetType: row.assigned_asset_type, make: row.assigned_asset_make, model: row.assigned_asset_model }
+        : null,
+      operator: row.assigned_operator_id && row.assigned_operator_name && row.assigned_operator_role_title
+        ? { id: row.assigned_operator_id, fullName: row.assigned_operator_name, roleTitle: row.assigned_operator_role_title }
+        : null,
+    },
+    permissions: { isCustomer, isProvider, isAssignedOperator },
     review: reviewRows[0] ? {
       rating: Number(reviewRows[0].rating),
       reviewText: reviewRows[0].review_text,
@@ -3414,6 +3531,8 @@ export type ProviderBookingSummary = {
   siteLabel: string;
   area: string;
   city: string;
+  assignedAssetLabel: string | null;
+  assignedOperatorName: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -3434,14 +3553,21 @@ export async function getProviderBookingsForUser(userId: string): Promise<Provid
     site_label: string;
     area: string | null;
     city: string;
+    assigned_asset_type: string | null;
+    assigned_asset_make: string | null;
+    assigned_asset_model: string | null;
+    assigned_operator_name: string | null;
     created_at: string;
     updated_at: string;
   }>(
     "select b.id::text as booking_id,b.business_id::text as business_id,b.public_reference,b.service_id, " +
     "b.status::text as status,b.amount_paise::text as amount_paise,b.currency,b.scheduled_for::text as scheduled_for, " +
     "b.site_snapshot->>'label' as site_label,b.site_snapshot->>'area' as area,b.site_snapshot->>'city' as city, " +
-    "b.created_at::text as created_at,b.updated_at::text as updated_at " +
+    "pa.asset_type as assigned_asset_type,pa.make as assigned_asset_make,pa.model as assigned_asset_model, " +
+    "po.full_name as assigned_operator_name,b.created_at::text as created_at,b.updated_at::text as updated_at " +
     "from public.bookings b join public.provider_businesses pb on pb.id=b.business_id " +
+    "left join public.provider_assets pa on pa.id=b.assigned_asset_id and pa.business_id=b.business_id " +
+    "left join public.provider_operators po on po.id=b.assigned_operator_id and po.business_id=b.business_id " +
     "where pb.owner_user_id=$1 order by b.created_at desc limit 100",
     [userId],
   );
@@ -3457,6 +3583,10 @@ export async function getProviderBookingsForUser(userId: string): Promise<Provid
     siteLabel: row.site_label ?? "Work site",
     area: row.area ?? "",
     city: row.city ?? "",
+    assignedAssetLabel: row.assigned_asset_type && row.assigned_asset_make && row.assigned_asset_model
+      ? [row.assigned_asset_type, row.assigned_asset_make, row.assigned_asset_model].join(" · ")
+      : null,
+    assignedOperatorName: row.assigned_operator_name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
@@ -3474,28 +3604,33 @@ export async function updateProviderBookingLocationForUser(
   userId: string,
   input: UpdateProviderBookingLocationInput,
 ): Promise<ProviderBookingLocationResult> {
+  assertProductionIdentity(userId);
   if (input.accuracyMeters > 200) throw new Error("GPS accuracy is too low. Move to a clear area and try again.");
   const sql = await getSql();
   return sql.transaction(async (tx) => {
-    await requireProviderRole(tx, userId);
     const rows = await tx.query<{
       business_id: string;
       owner_user_id: string;
       assigned_operator_id: string | null;
       operator_user_id: string | null;
+      operator_verification_status: string | null;
       status: LiveBookingStatus;
     }>(
       "select b.business_id::text as business_id,pb.owner_user_id,b.assigned_operator_id::text as assigned_operator_id, " +
-      "po.linked_user_id as operator_user_id,b.status::text as status " +
+      "po.linked_user_id as operator_user_id,po.verification_status::text as operator_verification_status,b.status::text as status " +
       "from public.bookings b join public.provider_businesses pb on pb.id=b.business_id " +
-      "left join public.provider_operators po on po.id=b.assigned_operator_id " +
+      "left join public.provider_operators po on po.id=b.assigned_operator_id and po.business_id=b.business_id " +
       "where b.id=$1::uuid for update of b",
       [input.bookingId],
     );
     const booking = rows[0];
-    if (!booking || (booking.owner_user_id !== userId && booking.operator_user_id !== userId)) {
-      throw new Error("Only the owning provider or assigned linked operator may share this booking's location.");
+    const isOwner = booking?.owner_user_id === userId;
+    const isAssignedOperator = booking?.operator_user_id === userId &&
+      booking?.operator_verification_status === "approved";
+    if (!booking || (!isOwner && !isAssignedOperator)) {
+      throw new Error("Only the owning provider or approved assigned operator may share this booking's location.");
     }
+    if (isOwner) await requireProviderRole(tx, userId);
     if (!["on_the_way", "arrived", "service_started"].includes(booking.status)) {
       throw new Error("Live location can be shared only while travelling to or performing the service.");
     }
@@ -3529,17 +3664,23 @@ export async function stopProviderBookingLocationForUser(
   userId: string,
   bookingId: string,
 ): Promise<{ bookingId: string; stopped: boolean }> {
+  assertProductionIdentity(userId);
   const sql = await getSql();
   return sql.transaction(async (tx) => {
-    await requireProviderRole(tx, userId);
-    const access = await tx.query<{ business_id: string }>(
-      "select b.business_id::text as business_id from public.bookings b " +
+    const access = await tx.query<{
+      business_id: string;
+      owner_user_id: string;
+      operator_verification_status: string | null;
+    }>(
+      "select b.business_id::text as business_id,pb.owner_user_id,po.verification_status::text as operator_verification_status " +
+      "from public.bookings b " +
       "join public.provider_businesses pb on pb.id=b.business_id " +
-      "left join public.provider_operators po on po.id=b.assigned_operator_id " +
-      "where b.id=$1::uuid and (pb.owner_user_id=$2 or po.linked_user_id=$2) for update of b",
+      "left join public.provider_operators po on po.id=b.assigned_operator_id and po.business_id=b.business_id " +
+      "where b.id=$1::uuid and (pb.owner_user_id=$2 or (po.linked_user_id=$2 and po.verification_status='approved')) for update of b",
       [bookingId, userId],
     );
-    if (!access[0]) throw new Error("Only the owning provider or assigned linked operator may stop this location share.");
+    if (!access[0]) throw new Error("Only the owning provider or approved assigned operator may stop this location share.");
+    if (access[0].owner_user_id === userId) await requireProviderRole(tx, userId);
     const rows = await tx.query<{ booking_id: string }>(
       "update public.booking_live_locations set expires_at=now() " +
       "where booking_id=$1::uuid and business_id=$2::uuid returning booking_id::text as booking_id",
@@ -3580,7 +3721,8 @@ export async function sendBookingMessageForParticipant(
       "po.linked_user_id as assigned_operator_user_id " +
       "from public.bookings b join public.provider_businesses pb on pb.id=b.business_id " +
       "left join public.provider_operators po on po.id=b.assigned_operator_id " +
-      "where b.id=$1::uuid and (b.customer_user_id=$2 or pb.owner_user_id=$2 or po.linked_user_id=$2) " +
+      "where b.id=$1::uuid and (b.customer_user_id=$2 or pb.owner_user_id=$2 " +
+      "or (po.linked_user_id=$2 and po.verification_status='approved')) " +
       "for update of b",
       [input.bookingId, userId],
     );
