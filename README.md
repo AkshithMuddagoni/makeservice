@@ -90,6 +90,48 @@ stop and inspect `public._migrations` before continuing.
 policies assume Supabase Auth UUIDs and are incompatible with Better Auth TEXT
 identities. Use the ordered migrations above only.
 
+## Backup and recovery
+
+The `makeservice` Supabase organization was verified on November 5, 2026 as
+**Free**. Free-plan projects do not receive automatic daily database backups.
+Before customer-facing launch, choose one of these supported approaches:
+
+- Upgrade the Supabase organization to a paid plan with automatic daily backups,
+  then document backup retention, recovery objectives and a tested restore drill.
+- While remaining on Free, schedule regular encrypted logical exports with the
+  Supabase CLI `db dump` command and store them outside this repository and
+  outside the Supabase project. Supabase recommends this for Free projects.
+
+The Supabase CLI dump process requires Docker Desktop. The CLI's default dump
+is schema-only; export roles and application data separately. Use the current
+CLI reference for exact flags and confirm the outputs are non-empty before
+considering a backup successful:
+
+```powershell
+supabase --version
+supabase db dump --help
+
+New-Item -ItemType Directory -Force .\backups | Out-Null
+# Set SUPABASE_DB_URL temporarily in this PowerShell session from the
+# Supabase Dashboard > Connect screen. Never paste it into chat or source.
+supabase db dump --db-url "$env:SUPABASE_DB_URL" --role-only -f .\backups\roles.sql
+supabase db dump --db-url "$env:SUPABASE_DB_URL" -f .\backups\schema.sql
+supabase db dump --db-url "$env:SUPABASE_DB_URL" --data-only --use-copy -f .\backups\data.sql
+Remove-Item Env:SUPABASE_DB_URL -ErrorAction SilentlyContinue
+Get-ChildItem .\backups
+```
+
+Add `backups/` to the local `.gitignore`; never commit database dumps. Encrypt
+the exports before transferring them to independent storage and restrict access.
+A database dump does **not** include the bytes stored in Supabase Storage. The
+private `fieldly-private` bucket is currently empty, but any future KYC or
+equipment documents need their own encrypted object backup and retention plan.
+
+A backup is not considered validated until a restore has been performed against
+an isolated non-production database and key checks pass: schema/migration
+ledger, RLS enabled, browser-role grants denied, representative records and
+private object access. Do not test restore commands against the live project.
+
 ## Render
 
 The repository includes `render.yaml` for a Render Node web service (Node.js 22, `npm install && npm run build`, `npm run start`). The Blueprint and existing `makeservice` service remain on **Free** during development and backend validation. Upgrade to Starter only before customer-facing production, after persistent database/auth configuration and launch gates are ready. The Blueprint declares `DATABASE_URL` as a secret prompt, asks Render to generate `BETTER_AUTH_SECRET`, sets `BETTER_AUTH_URL` to the public app origin, and keeps auth/OTP/document-upload feature flags off by default. A custom domain can be added separately later.
