@@ -8,7 +8,7 @@ import {
 
 const OPERATOR_INVITATION_TTL_HOURS = 72;
 const MAX_OPERATOR_INVITATIONS_PER_HOUR = 5;
-const INDIA_E164_PATTERN = /^\\+91[6-9]\\d{9}$/;
+const INDIA_E164_PATTERN = /^\+91[6-9]\d{9}$/;
 
 function assertAuthenticatedIdentity(userId: string): void {
   if (!userId || userId === "dev-user") {
