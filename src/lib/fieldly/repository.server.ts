@@ -3115,7 +3115,7 @@ function participantSiteSnapshot(value: Record<string, unknown>): LiveBookingDet
   };
 }
 
-/** Read a booking only for its customer or its assigned provider business owner. */
+/** Read a booking only for its customer, provider owner or approved assigned operator. */
 export async function getBookingDetailForUser(
   userId: string,
   bookingId: string,
@@ -3615,6 +3615,74 @@ export async function getProviderBookingsForUser(userId: string): Promise<Provid
   }));
 }
 
+
+/** List bookings assigned to the authenticated, linked operator account. */
+export async function getAssignedOperatorBookingsForUser(userId: string) {
+  assertProductionIdentity(userId);
+  const sql = await getSql();
+  const rows = await sql.query<{
+    booking_id: string;
+    public_reference: string;
+    service_id: string;
+    status: LiveBookingStatus;
+    amount_paise: string | number;
+    currency: string;
+    scheduled_for: string | null;
+    site_label: string | null;
+    area: string | null;
+    city: string | null;
+    business_name: string;
+    asset_label: string | null;
+    operator_name: string;
+    created_at: string;
+    updated_at: string;
+  }>(
+    `select b.id::text as booking_id, b.public_reference, b.service_id,
+            b.status::text as status, b.amount_paise::text as amount_paise, b.currency,
+            b.scheduled_for::text as scheduled_for,
+            b.site_snapshot->>'label' as site_label,
+            b.site_snapshot->>'area' as area,
+            b.site_snapshot->>'city' as city,
+            pb.trading_name as business_name,
+            case when pa.id is null then null
+              else concat_ws(' · ', pa.asset_type, pa.make, pa.model) end as asset_label,
+            po.full_name as operator_name,
+            b.created_at::text as created_at,
+            b.updated_at::text as updated_at
+     from public.bookings b
+     join public.provider_businesses pb on pb.id = b.business_id
+     join public.provider_operators po
+       on po.id = b.assigned_operator_id
+      and po.business_id = b.business_id
+     left join public.provider_assets pa
+       on pa.id = b.assigned_asset_id
+      and pa.business_id = b.business_id
+     where po.linked_user_id = $1
+       and po.verification_status = 'approved'
+       and pb.is_suspended = false
+     order by b.created_at desc
+     limit 100`,
+    [userId],
+  );
+
+  return rows.map((row) => ({
+    bookingId: row.booking_id,
+    publicReference: row.public_reference,
+    serviceId: row.service_id,
+    status: row.status,
+    amountPaise: Number(row.amount_paise),
+    currency: row.currency,
+    scheduledFor: row.scheduled_for,
+    siteLabel: row.site_label ?? "Work site",
+    area: row.area ?? "",
+    city: row.city ?? "",
+    businessName: row.business_name,
+    assignedAssetLabel: row.asset_label,
+    assignedOperatorName: row.operator_name,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
 
 export type ProviderBookingLocationResult = {
   bookingId: string;
