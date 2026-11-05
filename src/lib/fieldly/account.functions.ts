@@ -337,6 +337,14 @@ export const getCurrentProviderBookings = createServerFn({ method: "GET" })
   });
 
 
+/** List active and previous bookings assigned to the authenticated operator. */
+export const getCurrentAssignedOperatorBookings = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const { getAssignedOperatorBookingsForUser } = await import("./repository.server");
+    return getAssignedOperatorBookingsForUser(context.userId);
+  });
+
 /** Save a short-lived GPS point for an assigned active booking. */
 export const updateCurrentProviderBookingLocation = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
