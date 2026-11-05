@@ -41,7 +41,11 @@ type LiveBooking = {
     cancellationTerms?: string; etaMinutes?: number | null;
   };
   provider: { businessId: string; name: string; baseLatitude: number | null; baseLongitude: number | null };
-  permissions: { isCustomer: boolean; isProvider: boolean };
+  assignment: {
+    asset: { id: string; assetType: string; make: string; model: string } | null;
+    operator: { id: string; fullName: string; roleTitle: string } | null;
+  };
+  permissions: { isCustomer: boolean; isProvider: boolean; isAssignedOperator: boolean };
   review: { rating: number; reviewText: string; createdAt: string } | null;
   startCode: {
     hasActiveCode: boolean; expiresAt: string | null; attempts: number;
@@ -127,7 +131,7 @@ function BookingPage() {
   useEffect(() => {
     if (
       !authEnabled ||
-      (!liveBooking?.permissions.isCustomer && !liveBooking?.permissions.isProvider) ||
+      (!liveBooking?.permissions.isCustomer && !liveBooking?.permissions.isProvider && !liveBooking?.permissions.isAssignedOperator) ||
       ["paid", "disputed", "cancelled"].includes(liveBooking.status)
     ) return;
     let cancelled = false;
@@ -411,6 +415,8 @@ function BookingPage() {
     ];
     const isLiveCustomer = liveBooking.permissions.isCustomer;
     const isLiveProvider = liveBooking.permissions.isProvider;
+    const isLiveAssignedOperator = liveBooking.permissions.isAssignedOperator;
+    const canShareLiveLocation = isLiveProvider || isLiveAssignedOperator;
     const canCancel = ["confirmed", "on_the_way"].includes(liveBooking.status);
     const canDispute = ["arrived", "service_started", "service_completed"].includes(liveBooking.status);
 
@@ -474,6 +480,25 @@ function BookingPage() {
                 ? "The vehicle marker is the most recent provider GPS update. GPS expires automatically if updates stop. Last received: " + new Date(liveBooking.liveLocation.recordedAt).toLocaleTimeString("en-IN") + "."
                 : "No live GPS update is available. The provider marker, when shown, is only the registered business base location."}
             </p>
+
+            <section className="mt-4 rounded-2xl border border-line bg-card p-5">
+              <h2 className="font-display text-xl font-bold">Assigned machine & operator</h2>
+              {liveBooking.assignment.asset ? (
+                <p className="mt-2 text-sm">
+                  <span className="font-semibold">Machine:</span> {liveBooking.assignment.asset.assetType} · {liveBooking.assignment.asset.make} {liveBooking.assignment.asset.model}
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-muted">No machine assignment is recorded for this booking.</p>
+              )}
+              {liveBooking.assignment.operator ? (
+                <p className="mt-1 text-sm">
+                  <span className="font-semibold">Operator:</span> {liveBooking.assignment.operator.fullName} · {liveBooking.assignment.operator.roleTitle}
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-muted">No operator assignment is recorded for this booking.</p>
+              )}
+              <p className="mt-2 text-xs text-muted">The assigned machine and approved operator are reserved for this booking while it is active.</p>
+            </section>
 
             <section className="mt-4 rounded-2xl border border-line bg-card p-5">
               <h2 className="font-display text-xl font-bold">Work site</h2>
@@ -588,11 +613,11 @@ function BookingPage() {
               </section>
             )}
 
-            {isLiveProvider && ["on_the_way", "arrived", "service_started"].includes(liveBooking.status) && (
+            {canShareLiveLocation && ["on_the_way", "arrived", "service_started"].includes(liveBooking.status) && (
               <section className="rounded-2xl border border-line bg-card p-5">
                 <h2 className="font-display text-xl font-bold">Live GPS sharing</h2>
                 <p className="mt-2 text-sm leading-5 text-muted">
-                  Sharing sends your device's current GPS point for this booking only. Points expire automatically after two minutes if updates stop.
+                  Sharing sends this device's current GPS point for the assigned booking only. Points expire automatically after two minutes if updates stop.
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <span className={cn("rounded-full px-3 py-1.5 text-xs font-semibold", sharingLiveLocation ? "bg-field-soft text-field" : "bg-paper text-muted")}>
