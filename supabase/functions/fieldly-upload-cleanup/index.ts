@@ -105,7 +105,7 @@ Deno.serve(async (request: Request) => {
       idle_timeout: 5,
     });
 
-    // The only caller is the Supabase pg_cron job. Its 256-bit token is stored
+    // The only caller is the Supabase pg_cron job. Its high-entropy token is stored
     // in Vault and compared here; the endpoint does not accept user credentials.
     const secrets = await db`
       select decrypted_secret
