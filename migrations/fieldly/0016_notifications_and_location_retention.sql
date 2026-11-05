@@ -399,4 +399,3 @@ $function_privileges$;
 -- Schedule: 17 2 * * * (daily at 02:17 UTC)
 -- Command:
 -- SELECT public.fieldly_cleanup_expired_marketplace_data();
-
