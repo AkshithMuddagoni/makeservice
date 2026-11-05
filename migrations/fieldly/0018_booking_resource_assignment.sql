@@ -5,8 +5,17 @@
 -- in progress, or disputed. Once work is service_completed, the physical
 -- resources can be allocated to another job even if payment is still pending.
 -- A dispute raised after completion reserves the resources again.
+-- Once a booking references resources, those resource rows are retained for
+-- booking history: replace legacy single-column SET NULL foreign keys with
+-- same-business composite foreign keys using RESTRICT.
 
-DO $$
+ALTER TABLE public.bookings
+  DROP CONSTRAINT IF EXISTS bookings_assigned_asset_id_fkey;
+
+ALTER TABLE public.bookings
+  DROP CONSTRAINT IF EXISTS bookings_assigned_operator_id_fkey;
+
+DO $
 BEGIN
   IF EXISTS (
     SELECT 1
@@ -77,6 +86,7 @@ ALTER TABLE public.bookings
   ADD CONSTRAINT bookings_assigned_asset_business_fk
   FOREIGN KEY (assigned_asset_id, business_id)
   REFERENCES public.provider_assets (id, business_id)
+  ON DELETE RESTRICT
   NOT VALID;
 
 ALTER TABLE public.bookings
@@ -86,6 +96,7 @@ ALTER TABLE public.bookings
   ADD CONSTRAINT bookings_assigned_operator_business_fk
   FOREIGN KEY (assigned_operator_id, business_id)
   REFERENCES public.provider_operators (id, business_id)
+  ON DELETE RESTRICT
   NOT VALID;
 
 ALTER TABLE public.bookings
