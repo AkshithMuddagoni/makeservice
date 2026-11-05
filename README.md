@@ -12,9 +12,9 @@ The live `makeservice` Supabase migration ledger was verified on November 5, 202
 
 The deployed backend connects authenticated Better Auth server sessions to PostgreSQL-backed accounts, provider onboarding, verified provider discovery, customer requests, provider quotes, booking lifecycle, participant chat, provider presence and short-lived GPS operations. Provider and operator review is server-authoritative and audit logged. The local preview path still contains fixed-code/browser-local demonstration behavior; it is not production identity or shared data.
 
-The private `fieldly-private` Storage bucket is provisioned, private and limited to PDF/JPEG/PNG/WebP files up to 10 MiB. The server upload flow has owner-bound upload sessions, content-signature checks, fail-closed ClamAV scanning and administrator-only short-lived download links. `PROVIDER_DOCUMENT_UPLOADS_ENABLED` remains **false** because a private ClamAV scanner has not been provisioned. The current development branch adds migration 0021 and a Vault-authenticated cleanup Edge Function for expired upload sessions and orphaned objects; it is not deployed or scheduled until the migration and function pass CI/review. Secure identity/PAN verification still requires a specialist KYC provider.
+The private `fieldly-private` Storage bucket is provisioned, private and limited to PDF/JPEG/PNG/WebP files up to 10 MiB. The server upload flow has owner-bound upload sessions, content-signature checks, fail-closed ClamAV scanning and administrator-only short-lived download links. `PROVIDER_DOCUMENT_UPLOADS_ENABLED` remains **false** because a private ClamAV scanner has not been provisioned. Migration 0021 and the Vault-authenticated `fieldly-upload-cleanup` Edge Function are deployed. The worker is scheduled daily at 02:27 UTC; its first authenticated manual invocation returned HTTP 200 with zero expired sessions and zero orphan objects. Because the bucket is empty, actual object deletion has not yet been exercised. Secure identity/PAN verification still requires a specialist KYC provider.
 
-Database-triggered **in-app** notifications and authenticated list/read functions are installed. The existing Supabase Cron job is active daily at 02:17 UTC for expired notifications and live-location records. The separate provider-upload storage cleanup worker is still a development branch and must not be described as active until its Edge Function is deployed and its Vault-backed Cron invocation is verified. External transactional delivery (such as SMS/email/push) remains launch work.
+Database-triggered **in-app** notifications and authenticated list/read functions are installed. Supabase Cron job 2 runs daily at 02:17 UTC for expired notifications and live-location records; job 3 runs the Vault-authenticated provider upload cleanup at 02:27 UTC. The first manual invocation of the upload cleanup function succeeded. External transactional delivery (such as SMS/email/push) remains launch work.
 
 All public application tables have RLS enabled; browser `anon` and `authenticated` roles have no application-table grants. Do not add broad RLS policies or expose the Supabase secret/service-role key.
 
@@ -72,13 +72,14 @@ The migration runner applies the uniquely named SQL files in basename order from
 19. `0017_index_bookings_dispute_resolved_by.sql` — supporting dispute-resolution index.
 20. `0018_booking_resource_assignment.sql` — business-scoped operator/asset assignment constraints for bookings.
 21. `0019_index_booking_assigned_operator_asset_fk.sql` — supporting composite index for the booking-to-operator/asset foreign key (**merged and applied to production on November 5, 2026**).
-22. `0021_provider_document_upload_cleanup.sql` — cleanup retry metadata for expired provider-upload sessions (**in branch `feat/provider-upload-cleanup-worker-20261105`; not yet merged or applied**).
+22. `0021_provider_document_upload_cleanup.sql` — cleanup retry metadata for expired provider-upload sessions (**merged and applied to production on November 5, 2026**).
 
 The live `makeservice` Supabase project was verified through migration
-0019 on November 5, 2026. Migration 0019 and the index
-`bookings_assigned_operator_asset_pair_idx` are present in production. Migration
-0021 is still pending review and must not be described as deployed until its
-controlled rollout is verified.
+0021 on November 5, 2026. Migration 0019 and index
+`bookings_assigned_operator_asset_pair_idx` are present. Migration 0021 and the
+three provider upload cleanup metadata columns are present. The cleanup Edge
+Function is active and its Vault-backed daily cron job is registered; verify the
+first scheduled run before treating the schedule as run-tested.
 
 **Production migration safety:** `npm run build` invokes `npm run db:migrate`,
 which applies every pending SQL migration found in `migrations/auth/` and
@@ -194,7 +195,7 @@ React 19, TanStack Start/Router, Vite, TypeScript, Tailwind CSS 4, Lucide, MapLi
 - Re-check the Render environment variable **names and safe-off flags** before launch: `DATABASE_URL`, `DATABASE_SSL_CA_BASE64`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NODE_ENV`, `VITE_AUTH_ENABLED`, `VITE_PHONE_OTP_ENABLED` and `PROVIDER_DOCUMENT_UPLOADS_ENABLED`. The operator previously confirmed the core database/auth variables during PR #28 deployment. Secret values are not stored in Git and were not read during this audit.
 - Complete MSG91 account setup and Indian DLT Principal Entity, sender ID and transactional template approval; then test OTP send, verify, expiry, throttling, replay protection and delivery-failure alerts. Keep OTP activation deferred until this integration is complete.
 - Integrate a specialist KYC provider for owner/PAN and other secure-only evidence. Do not collect full Aadhaar/PAN or bank details using the ordinary document picker.
-- Deploy a private, monitored ClamAV service. The cleanup worker implementation is being prepared in `feat/provider-upload-cleanup-worker-20261105`; merge/deploy migration 0021 and the Edge Function, create its random token in Vault, register the pg_cron/pg_net call, then verify an authenticated worker run and Storage API deletion before considering cleanup active. Keep `PROVIDER_DOCUMENT_UPLOADS_ENABLED=false` until clean/infected/timeout/signature-mismatch, signed-download, expiry, deletion and retention tests pass.
+- Deploy a private, monitored ClamAV service. The expired-upload cleanup worker and Vault-backed daily schedule are deployed; its manual empty-bucket invocation succeeded. Verify the first scheduled execution and test Storage API removal using a controlled scanner-backed test upload before enabling uploads. Keep `PROVIDER_DOCUMENT_UPLOADS_ENABLED=false` until clean/infected/timeout/signature-mismatch, signed-download, expiry, deletion and retention tests pass.
 - Keep the installed database-triggered in-app notifications. Add and test external transactional delivery (SMS/email/push as selected), retries, dead-letter/failure visibility and operational alerts.
 - Payments remain deferred. PR #19 is a Cashfree Easy Split **foundation only**; it does not provide checkout or real-money movement. Later work must add server-created checkout, verified signed webhooks, idempotent ledger changes, refunds, reconciliation, chargeback handling, provider KYC, commission and settlements. Do not enable payments or collect real money yet.
 - Complete a backup/restore drill and document RPO/RTO; configure uptime/error/database alerts, credential rotation and Git-history review, production domain/TLS, rollback procedure, external security review, accessibility, real-device and load tests.
