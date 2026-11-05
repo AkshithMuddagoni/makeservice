@@ -1,10 +1,9 @@
 -- Bind each booking's selected asset and operator to the same provider
 -- business, and prevent the same physical resource being reserved twice.
 --
--- Resources remain reserved while work is confirmed, travelling, arrived,
--- in progress, or disputed. Once work is service_completed, the physical
--- resources can be allocated to another job even if payment is still pending.
--- A dispute raised after completion reserves the resources again.
+-- Resources are reserved while work is confirmed, travelling, arrived, or
+-- in progress. Open disputes retain a reservation; terminal disputes release
+-- it. service_completed releases resources while payment is pending.
 -- Once a booking references resources, those resource rows are retained for
 -- booking history: replace legacy single-column SET NULL foreign keys with
 -- same-business composite foreign keys using RESTRICT.
