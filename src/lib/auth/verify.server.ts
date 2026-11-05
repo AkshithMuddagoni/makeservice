@@ -67,11 +67,15 @@ export async function getSessionUser(
   }
   const session = await auth.api.getSession({ headers });
   if (!session?.user) return null;
+  const authUser = session.user as typeof session.user & {
+    phoneNumber?: string | null;
+    phoneNumberVerified?: boolean;
+  };
   return {
     id: session.user.id,
     email: session.user.email ?? null,
-    phoneNumber: session.user.phoneNumber ?? null,
-    phoneNumberVerified: Boolean(session.user.phoneNumberVerified),
+    phoneNumber: authUser.phoneNumber ?? null,
+    phoneNumberVerified: Boolean(authUser.phoneNumberVerified),
   };
 }
 
