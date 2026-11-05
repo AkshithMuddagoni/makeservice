@@ -25,13 +25,18 @@ export function providerDocumentExtension(mimeType: string): string | null {
 /** Remove path components/control characters; filenames are display metadata only. */
 export function sanitizeProviderDocumentFilename(value: string): string {
   const basename = value.replace(/\\/g, "/").split("/").pop() ?? "";
-  const safe = basename
-    .normalize("NFKC")
-    .replace(/[\u0000-\u001f\u007f]/g, "")
+
+  const safe = Array.from(basename.normalize("NFKC"))
+    .filter((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint > 0x1f && codePoint !== 0x7f;
+    })
+    .join("")
     .replace(/[<>:"|?*]/g, "_")
     .trim()
     .replace(/^\.+/, "")
     .slice(0, 160);
+
   return safe || "provider-document";
 }
 
