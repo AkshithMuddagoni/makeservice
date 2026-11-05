@@ -78,6 +78,9 @@ function AccountPage() {
   }
 
   if (!session && !customer && !authSession?.user) {
+    if (authSessionPending) {
+      return <div className="mx-auto max-w-xl px-4 py-10 text-sm text-muted">Checking your account…</div>;
+    }
     return (
       <CustomerSignInDialog
         open
