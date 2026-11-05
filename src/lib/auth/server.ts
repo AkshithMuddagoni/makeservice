@@ -328,6 +328,14 @@ export const auth = betterAuth({
       account_data: { name: "__Host-grok-auth.account_data" },
       dont_remember: { name: "__Host-grok-auth.dont_remember" },
     },
+    // Render's public edge sits behind Cloudflare. Cloudflare overwrites
+    // CF-Connecting-IP with the visitor address before forwarding to Render,
+    // so use this single trusted value instead of parsing a spoofable,
+    // multi-hop X-Forwarded-For chain. This keeps Better Auth rate limits
+    // client-specific without trusting arbitrary leftmost forwarded values.
+    ipAddress: {
+      ipAddressHeaders: ["cf-connecting-ip"],
+    },
   },
 
   plugins: [
