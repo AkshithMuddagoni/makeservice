@@ -21,7 +21,56 @@ import type {
   ReviewAdminProviderDocumentInput,
   SaveProviderOperatorInput,
 } from "./marketplace-validation";
-import type { CreateJobRequestInput, DiscoverProvidersInput, SendBookingMessageInput, SetProviderAssetAvailabilityInput, SetProviderServiceAvailabilityInput, SubmitProviderQuoteInput, SubmitProviderReviewInput, AdminBookingDisputeDecisionInput, UpdateProviderBookingLocationInput } from "./marketplace-validation";
+import type { CreateJobRequestInput, DiscoverProvidersInput, SendBookingMessageInput, SetProviderAssetAvailabilityInput, SetProviderServiceAvailabilityInput, SubmitProviderQuoteInput, SubmitProviderReviewInput, AdminBookingDisputeDecisionInput, MarkFieldlyNotificationReadInput, UpdateProviderBookingLocationInput } from "./marketplace-validation";
+
+export type FieldlyNotificationItem = {
+  id: string;
+  notificationType: string;
+  title: string;
+  body: string;
+  targetType: "request" | "booking" | "provider_application";
+  targetId: string;
+  createdAt: string;
+  readAt: string | null;
+};
+
+export async function getFieldlyNotificationsForUser(
+  userId: string,
+): Promise<{ items: FieldlyNotificationItem[]; unreadCount: number }> {
+  assertProductionIdentity(userId);
+  const sql = await getSql();
+  const [items, counts] = await Promise.all([
+    sql.query<FieldlyNotificationItem>(
+      "select id::text as id,notification_type as \"notificationType\",title,body, " +
+      "target_type as \"targetType\",target_id::text as \"targetId\", " +
+      "created_at::text as \"createdAt\",read_at::text as \"readAt\" " +
+      "from public.fieldly_notifications where recipient_user_id=$1 and expires_at>now() " +
+      "order by created_at desc limit 50",
+      [userId],
+    ),
+    sql.query<{ count: string | number }>(
+      "select count(*)::int as count from public.fieldly_notifications " +
+      "where recipient_user_id=$1 and read_at is null and expires_at>now()",
+      [userId],
+    ),
+  ]);
+  return { items, unreadCount: Number(counts[0]?.count ?? 0) };
+}
+
+export async function markFieldlyNotificationReadForUser(
+  userId: string,
+  input: MarkFieldlyNotificationReadInput,
+): Promise<{ marked: boolean }> {
+  assertProductionIdentity(userId);
+  const sql = await getSql();
+  const rows = await sql.query<{ id: string }>(
+    "update public.fieldly_notifications set read_at=coalesce(read_at,now()) " +
+    "where id=$1::uuid and recipient_user_id=$2 and expires_at>now() returning id::text as id",
+    [input.notificationId, userId],
+  );
+  return { marked: Boolean(rows[0]) };
+}
+
 
 export type FieldlyProfile = {
   user_id: string;

@@ -13,6 +13,7 @@ import {
   getAdminProviderDocumentInputSchema,
   getBookingDetailInputSchema,
   issueBookingStartCodeInputSchema,
+  markFieldlyNotificationReadInputSchema,
   reviewAdminProviderDocumentInputSchema,
   saveProviderOperatorInputSchema,
   sendBookingMessageInputSchema,
@@ -33,6 +34,21 @@ import {
  * imported inside the server handler, and the user id is supplied only by the
  * session-verifying auth middleware (never by a browser argument).
  */
+export const getCurrentFieldlyNotifications = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const { getFieldlyNotificationsForUser } = await import("./repository.server");
+    return getFieldlyNotificationsForUser(context.userId);
+  });
+
+export const markCurrentFieldlyNotificationRead = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(markFieldlyNotificationReadInputSchema)
+  .handler(async ({ context, data }) => {
+    const { markFieldlyNotificationReadForUser } = await import("./repository.server");
+    return markFieldlyNotificationReadForUser(context.userId, data);
+  });
+
 export const getCurrentFieldlyAccount = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {

@@ -7,6 +7,7 @@ import {
   submitProviderQuoteInputSchema,
   acceptProviderQuoteInputSchema,
   adminBookingDisputeDecisionInputSchema,
+  markFieldlyNotificationReadInputSchema,
   setProviderServiceAvailabilityInputSchema,
   setProviderAssetAvailabilityInputSchema,
   getBookingDetailInputSchema,
@@ -274,4 +275,15 @@ test("admin dispute actions are limited to supported states and require an audit
   assert.throws(() => adminBookingDisputeDecisionInputSchema.parse({ bookingId, decision: "paid", note: "Reviewed evidence." }));
   assert.throws(() => adminBookingDisputeDecisionInputSchema.parse({ bookingId, decision: "resolved_customer", note: "short" }));
   assert.throws(() => adminBookingDisputeDecisionInputSchema.parse({ bookingId, decision: "resolved_customer", note: "Reviewed evidence.", adminUserId: "spoofed" }));
+});
+
+
+test("notification read actions require a valid notification id and reject extra fields", () => {
+  const notificationId = "f9b0c52f-a6f4-4d5e-8f6c-e6d8f6a5f516";
+  assert.deepEqual(
+    markFieldlyNotificationReadInputSchema.parse({ notificationId }),
+    { notificationId },
+  );
+  assert.throws(() => markFieldlyNotificationReadInputSchema.parse({ notificationId: "not-a-uuid" }));
+  assert.throws(() => markFieldlyNotificationReadInputSchema.parse({ notificationId, userId: "spoofed" }));
 });

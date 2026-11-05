@@ -8,6 +8,7 @@ import { useFieldly } from "@/lib/fieldly/store";
 import type { Lang } from "@/lib/fieldly/types";
 import { cn } from "@/lib/utils";
 import { SitePicker } from "./site-picker";
+import { NotificationsCenter } from "./notifications-center";
 
 export function Shell({ children }: { children: ReactNode }) {
   const lang = useFieldly((s) => s.lang);
@@ -138,6 +139,7 @@ export function Shell({ children }: { children: ReactNode }) {
               {session ? session.name.split(" ")[0] : "Login"}
             </Link>
           </div>
+          <NotificationsCenter enabled={Boolean(authEnabled && authSession?.user)} />
           <button
             type="button"
             className="fieldly-mobile-menu grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-white text-ink transition hover:border-field lg:hidden"

@@ -147,6 +147,12 @@ export const getBookingMessagesInputSchema = z.object({
   bookingId: z.string().uuid(),
 }).strict();
 
+export const markFieldlyNotificationReadInputSchema = z.object({
+  notificationId: z.string().uuid(),
+}).strict();
+
+export type MarkFieldlyNotificationReadInput = z.infer<typeof markFieldlyNotificationReadInputSchema>;
+
 export const submitProviderReviewInputSchema = z.object({
   bookingId: z.string().uuid(),
   rating: z.number().int().min(1).max(5),
