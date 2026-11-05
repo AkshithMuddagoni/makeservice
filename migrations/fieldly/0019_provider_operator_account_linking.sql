@@ -12,8 +12,8 @@ ALTER TABLE public.provider_operators
 ALTER TABLE public.provider_operators
   VALIDATE CONSTRAINT provider_operators_linked_user_fk;
 
-CREATE UNIQUE INDEX IF NOT EXISTS provider_operators_linked_user_id_uidx
-  ON public.provider_operators (linked_user_id)
+CREATE UNIQUE INDEX IF NOT EXISTS provider_operators_business_linked_user_uidx
+  ON public.provider_operators (business_id, linked_user_id)
   WHERE linked_user_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.provider_operator_invites (
