@@ -567,6 +567,22 @@ export async function saveProviderOperatorForUser(
         [operatorId, input.businessId],
       );
       if (!existing[0]) throw new Error("The selected operator does not belong to this provider business.");
+      const removedBookedAssignments = await tx.query<{ asset_id: string }>(
+        `select poa.asset_id::text as asset_id
+         from public.provider_operator_assets poa
+         where poa.operator_id = $1::uuid
+           and poa.business_id = $2::uuid
+           and not (poa.asset_id = any($3::uuid[]))
+           and exists (
+             select 1 from public.bookings b
+             where b.assigned_operator_id = poa.operator_id
+               and b.assigned_asset_id = poa.asset_id
+           )`,
+        [operatorId, input.businessId, input.assetIds],
+      );
+      if (removedBookedAssignments.length > 0) {
+        throw new Error("This operator has booking history on one or more selected machines. Keep those machine assignments on the operator record, or create a new operator record for a different roster.");
+      }
       await tx.query(
         `update public.provider_operators
          set full_name = $3, phone_e164 = $4, role_title = $5,
@@ -587,8 +603,10 @@ export async function saveProviderOperatorForUser(
         [input.businessId, operatorId],
       );
       await tx.query(
-        "delete from public.provider_operator_assets where operator_id = $1::uuid and business_id = $2::uuid",
-        [operatorId, input.businessId],
+        "delete from public.provider_operator_assets " +
+        "where operator_id = $1::uuid and business_id = $2::uuid " +
+        "and not (asset_id = any($3::uuid[]))",
+        [operatorId, input.businessId, input.assetIds],
       );
     } else {
       const created = await tx.query<{ id: string }>(
@@ -605,7 +623,8 @@ export async function saveProviderOperatorForUser(
     for (const assetId of input.assetIds) {
       await tx.query(
         `insert into public.provider_operator_assets (business_id, operator_id, asset_id)
-         values ($1::uuid, $2::uuid, $3::uuid)`,
+         values ($1::uuid, $2::uuid, $3::uuid)
+         on conflict (operator_id, asset_id) do nothing`,
         [input.businessId, operatorId, assetId],
       );
     }
