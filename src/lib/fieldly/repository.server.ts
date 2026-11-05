@@ -1056,6 +1056,9 @@ export async function resolveAdminBookingDisputeForUser(
     if (!booking || booking.status !== "disputed") {
       throw new Error("This booking is not an open dispute case.");
     }
+    if (["resolved_customer", "resolved_provider", "closed_no_action"].includes(booking.dispute_status ?? "")) {
+      throw new Error("This dispute is already closed and cannot be changed.");
+    }
 
     const resolved = ["resolved_customer", "resolved_provider", "closed_no_action"].includes(input.decision);
     const updated = await tx.query<{ dispute_status: string }>(
