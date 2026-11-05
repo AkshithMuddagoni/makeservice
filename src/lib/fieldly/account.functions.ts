@@ -4,6 +4,7 @@ import { authMiddleware } from "../auth/middleware";
 import { isValidIndiaPincode } from "../india-validation";
 import {
   acceptProviderQuoteInputSchema,
+  adminBookingDisputeDecisionInputSchema,
   adminItemReviewInputSchema,
   confirmProviderDocumentUploadInputSchema,
   createJobRequestInputSchema,
@@ -121,6 +122,21 @@ export const getCurrentProviderDashboard = createServerFn({ method: "GET" })
 
 
 /** Admin-only functions. Repository handlers independently check the admin role. */
+export const getAdminBookingDisputeQueue = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const { getAdminBookingDisputeQueue: getQueue } = await import("./repository.server");
+    return getQueue(context.userId);
+  });
+
+export const resolveAdminBookingDispute = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(adminBookingDisputeDecisionInputSchema)
+  .handler(async ({ context, data }) => {
+    const { resolveAdminBookingDisputeForUser } = await import("./repository.server");
+    return resolveAdminBookingDisputeForUser(context.userId, data);
+  });
+
 export const getAdminProviderReviewQueue = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {

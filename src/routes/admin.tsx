@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { authClient, authEnabled } from "@/lib/auth/client";
 import {
   applyAdminProviderReviewDecision,
+  getAdminBookingDisputeQueue,
+  resolveAdminBookingDispute,
   getAdminProviderApplicationDetail,
   getAdminProviderDocumentDownloadUrl,
   getAdminProviderReviewQueue,
@@ -22,6 +24,9 @@ export const Route = createFileRoute("/admin")({ component: AdminRoutePage });
 type Queue = Awaited<ReturnType<typeof getAdminProviderReviewQueue>>;
 type QueueItem = Queue[number];
 type ApplicationDetail = NonNullable<Awaited<ReturnType<typeof getAdminProviderApplicationDetail>>>;
+type DisputeQueue = Awaited<ReturnType<typeof getAdminBookingDisputeQueue>>;
+type DisputeItem = DisputeQueue[number];
+type DisputeDecision = "under_review" | "awaiting_customer" | "awaiting_provider" | "resolved_customer" | "resolved_provider" | "closed_no_action";
 type Decision = "under_review" | "needs_information" | "rejected" | "approved";
 
 function statusLabel(status: string) {
@@ -320,10 +325,167 @@ function AdminWorkspace() {
         </section>
       </div>
 
+      <DisputeOperations />
+
       <p className="mt-6 rounded-2xl bg-paper p-4 text-xs leading-5 text-muted">
         Security boundary: this page cannot grant administrator roles. Approval remains locked until every required checklist item has an actual verified document record. File paths and storage keys never reach the browser; document links are created only after a server-side administrator check and expire after five minutes.
       </p>
     </div>
+  );
+}
+
+function DisputeOperations() {
+  const [cases, setCases] = useState<DisputeQueue>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadCases = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const rows = await getAdminBookingDisputeQueue();
+      setCases(rows);
+      setSelectedId((current) => current && rows.some((item) => item.bookingId === current)
+        ? current
+        : rows[0]?.bookingId ?? null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load booking disputes.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCases();
+  }, [loadCases]);
+
+  async function decide(decision: DisputeDecision) {
+    if (!selectedId || busy) return;
+    if (note.trim().length < 8) {
+      toast.error("Add a case note of at least 8 characters.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await resolveAdminBookingDispute({ data: { bookingId: selectedId, decision, note: note.trim() } });
+      toast.success("Dispute decision saved and audit logged.");
+      setNote("");
+      await loadCases();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not update this dispute.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const selected = cases.find((item) => item.bookingId === selectedId) ?? null;
+  const terminal = selected
+    ? ["resolved_customer", "resolved_provider", "closed_no_action"].includes(selected.disputeStatus)
+    : false;
+  const activeCount = cases.filter((item) =>
+    !["resolved_customer", "resolved_provider", "closed_no_action"].includes(item.disputeStatus),
+  ).length;
+
+  return (
+    <section className="mt-7 rounded-3xl border border-line bg-card p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-field">Customer support</p>
+          <h2 className="mt-1 font-display text-2xl font-bold">Booking disputes</h2>
+          <p className="mt-1 text-sm text-muted">{activeCount} active case(s) · {cases.length} total loaded</p>
+        </div>
+        <Button variant="secondary" disabled={loading} onClick={() => void loadCases()}>
+          <RefreshCw className={cn("mr-2 size-4", loading && "animate-spin")} />Refresh cases
+        </Button>
+      </div>
+      {error && <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-900">{error}</p>}
+      {loading ? (
+        <p className="mt-4 py-6 text-sm text-muted">Loading dispute cases…</p>
+      ) : cases.length === 0 ? (
+        <div className="mt-4 rounded-2xl bg-paper p-6 text-center">
+          <CheckCircle2 className="mx-auto size-7 text-emerald-700" />
+          <p className="mt-2 font-semibold">No booking disputes</p>
+          <p className="mt-1 text-sm text-muted">Customer or provider disputes will appear here for administrator review.</p>
+        </div>
+      ) : (
+        <div className="mt-4 grid items-start gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className="grid max-h-[34rem] gap-2 overflow-y-auto pr-1">
+            {cases.map((item) => (
+              <button
+                key={item.bookingId}
+                type="button"
+                onClick={() => { setSelectedId(item.bookingId); setNote(item.resolutionNote ?? ""); }}
+                className={cn("rounded-2xl border p-3 text-left transition", selectedId === item.bookingId ? "border-ink bg-paper" : "border-line hover:border-ink")}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <span className="font-semibold">{item.publicReference}</span>
+                  <span className={cn("rounded-full px-2 py-1 text-[10px] font-bold", statusTone(item.disputeStatus))}>{statusLabel(item.disputeStatus)}</span>
+                </div>
+                <p className="mt-1 text-sm">{item.serviceId.replaceAll("_", " ")} · {item.providerName}</p>
+                <p className="mt-1 text-xs text-muted">{item.customerName} · {item.siteLabel}, {item.city}</p>
+                <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted">{item.reason}</p>
+              </button>
+            ))}
+          </div>
+          {selected && (
+            <div className="rounded-2xl border border-line p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">Case details</p>
+                  <h3 className="mt-1 font-display text-xl font-bold">{selected.publicReference}</h3>
+                </div>
+                <p className="font-semibold tabular-nums">₹{(selected.amountPaise / 100).toLocaleString("en-IN")}</p>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="rounded-xl bg-paper p-3"><p className="text-[11px] text-muted">Customer</p><p className="mt-1 text-sm font-semibold">{selected.customerName}</p></div>
+                <div className="rounded-xl bg-paper p-3"><p className="text-[11px] text-muted">Provider</p><p className="mt-1 text-sm font-semibold">{selected.providerName}</p></div>
+                <div className="rounded-xl bg-paper p-3"><p className="text-[11px] text-muted">Work site</p><p className="mt-1 text-sm font-semibold">{selected.siteLabel}, {selected.city}, {selected.state}</p></div>
+                <div className="rounded-xl bg-paper p-3"><p className="text-[11px] text-muted">Raised</p><p className="mt-1 text-sm font-semibold">{new Date(selected.createdAt).toLocaleString("en-IN")}</p></div>
+              </div>
+              <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm leading-5 text-amber-950">
+                <p className="font-semibold">Reported issue</p>
+                <p className="mt-1 whitespace-pre-wrap">{selected.reason}</p>
+              </div>
+              {selected.resolutionNote && (
+                <div className="mt-3 rounded-xl bg-paper p-3 text-sm leading-5">
+                  <p className="font-semibold">Last administrator note</p>
+                  <p className="mt-1 whitespace-pre-wrap">{selected.resolutionNote}</p>
+                </div>
+              )}
+              {terminal ? (
+                <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">This dispute is marked {statusLabel(selected.disputeStatus)}. The decision is retained in the admin audit log.</p>
+              ) : (
+                <>
+                  <label className="mt-4 grid gap-1 text-xs font-semibold">
+                    Case note (required)
+                    <textarea
+                      value={note}
+                      onChange={(event) => setNote(event.target.value.slice(0, 2000))}
+                      maxLength={2000}
+                      rows={3}
+                      className="rounded-xl border border-line bg-white p-3 text-sm font-normal"
+                      placeholder="Summarise evidence reviewed and the next action…"
+                    />
+                  </label>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <Button size="sm" variant="secondary" disabled={busy || note.trim().length < 8} onClick={() => void decide("under_review")}>Mark under review</Button>
+                    <Button size="sm" variant="secondary" disabled={busy || note.trim().length < 8} onClick={() => void decide("awaiting_customer")}>Await customer</Button>
+                    <Button size="sm" variant="secondary" disabled={busy || note.trim().length < 8} onClick={() => void decide("awaiting_provider")}>Await provider</Button>
+                    <Button size="sm" disabled={busy || note.trim().length < 8} onClick={() => void decide("resolved_customer")}>Resolve for customer</Button>
+                    <Button size="sm" disabled={busy || note.trim().length < 8} onClick={() => void decide("resolved_provider")}>Resolve for provider</Button>
+                    <Button size="sm" variant="danger" disabled={busy || note.trim().length < 8} onClick={() => void decide("closed_no_action")}>Close · no action</Button>
+                  </div>
+                </>
+              )}
+              <p className="mt-3 text-xs leading-5 text-muted">This records the administrative outcome only. It does not change the agreed booking amount or move money. Any refund or payout adjustment must be handled through the payment provider once payments are integrated.</p>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 

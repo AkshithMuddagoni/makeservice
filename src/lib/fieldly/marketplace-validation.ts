@@ -209,6 +209,21 @@ export const getAdminProviderDocumentInputSchema = z.object({
   documentId: z.string().uuid(),
 }).strict();
 
+export const adminBookingDisputeDecisionInputSchema = z.object({
+  bookingId: z.string().uuid(),
+  decision: z.enum([
+    "under_review",
+    "awaiting_customer",
+    "awaiting_provider",
+    "resolved_customer",
+    "resolved_provider",
+    "closed_no_action",
+  ]),
+  note: z.string().trim().min(8).max(2000),
+}).strict();
+
+export type AdminBookingDisputeDecisionInput = z.infer<typeof adminBookingDisputeDecisionInputSchema>;
+
 export const reviewAdminProviderDocumentInputSchema = z.object({
   documentId: z.string().uuid(),
   decision: z.enum(["verified", "rejected"]),

@@ -6,6 +6,7 @@ import {
   setProviderPresenceInputSchema,
   submitProviderQuoteInputSchema,
   acceptProviderQuoteInputSchema,
+  adminBookingDisputeDecisionInputSchema,
   setProviderServiceAvailabilityInputSchema,
   setProviderAssetAvailabilityInputSchema,
   getBookingDetailInputSchema,
@@ -245,4 +246,32 @@ test("provider reviews require a valid booking, one-to-five rating and bounded t
   assert.throws(() => submitProviderReviewInputSchema.parse({ bookingId, rating: 4.5 }));
   assert.throws(() => submitProviderReviewInputSchema.parse({ bookingId, rating: 5, reviewText: "x".repeat(1001) }));
   assert.throws(() => submitProviderReviewInputSchema.parse({ bookingId, rating: 5, customerUserId: "spoofed" }));
+});
+
+
+test("admin dispute actions are limited to supported states and require an audit note", () => {
+  const bookingId = "f9b0c52f-a6f4-4d5e-8f6c-e6d8f6a5f516";
+  assert.deepEqual(
+    adminBookingDisputeDecisionInputSchema.parse({
+      bookingId,
+      decision: "under_review",
+      note: "Reviewing both parties' evidence.",
+    }),
+    { bookingId, decision: "under_review", note: "Reviewing both parties' evidence." },
+  );
+  for (const decision of [
+    "awaiting_customer",
+    "awaiting_provider",
+    "resolved_customer",
+    "resolved_provider",
+    "closed_no_action",
+  ]) {
+    assert.equal(
+      adminBookingDisputeDecisionInputSchema.parse({ bookingId, decision, note: "Reviewed the submitted evidence." }).decision,
+      decision,
+    );
+  }
+  assert.throws(() => adminBookingDisputeDecisionInputSchema.parse({ bookingId, decision: "paid", note: "Reviewed evidence." }));
+  assert.throws(() => adminBookingDisputeDecisionInputSchema.parse({ bookingId, decision: "resolved_customer", note: "short" }));
+  assert.throws(() => adminBookingDisputeDecisionInputSchema.parse({ bookingId, decision: "resolved_customer", note: "Reviewed evidence.", adminUserId: "spoofed" }));
 });

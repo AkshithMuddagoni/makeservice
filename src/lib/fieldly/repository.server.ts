@@ -21,7 +21,7 @@ import type {
   ReviewAdminProviderDocumentInput,
   SaveProviderOperatorInput,
 } from "./marketplace-validation";
-import type { CreateJobRequestInput, DiscoverProvidersInput, SendBookingMessageInput, SetProviderAssetAvailabilityInput, SetProviderServiceAvailabilityInput, SubmitProviderQuoteInput, SubmitProviderReviewInput, UpdateProviderBookingLocationInput } from "./marketplace-validation";
+import type { CreateJobRequestInput, DiscoverProvidersInput, SendBookingMessageInput, SetProviderAssetAvailabilityInput, SetProviderServiceAvailabilityInput, SubmitProviderQuoteInput, SubmitProviderReviewInput, AdminBookingDisputeDecisionInput, UpdateProviderBookingLocationInput } from "./marketplace-validation";
 
 export type FieldlyProfile = {
   user_id: string;
@@ -959,6 +959,137 @@ async function requireFieldlyAdmin(sql: Awaited<ReturnType<typeof getSql>>, user
     throw error;
   }
 }
+
+export type AdminBookingDisputeQueueItem = {
+  bookingId: string;
+  publicReference: string;
+  serviceId: string;
+  amountPaise: number;
+  currency: string;
+  customerName: string;
+  providerName: string;
+  siteLabel: string;
+  city: string;
+  state: string;
+  reason: string;
+  disputeStatus: string;
+  resolutionNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Admin-only queue. Customer and provider details are limited to case context. */
+export async function getAdminBookingDisputeQueue(
+  adminUserId: string,
+): Promise<AdminBookingDisputeQueueItem[]> {
+  const sql = await getSql();
+  await requireFieldlyAdmin(sql, adminUserId);
+  const rows = await sql.query<{
+    booking_id: string;
+    public_reference: string;
+    service_id: string;
+    amount_paise: string | number;
+    currency: string;
+    customer_name: string | null;
+    provider_name: string;
+    site_label: string | null;
+    city: string | null;
+    state: string | null;
+    reason: string;
+    dispute_status: string | null;
+    resolution_note: string | null;
+    created_at: string;
+    updated_at: string;
+  }>(
+    "select b.id::text as booking_id,b.public_reference,b.service_id, " +
+    "b.amount_paise::text as amount_paise,b.currency,cu.name as customer_name, " +
+    "pb.trading_name as provider_name,b.site_snapshot->>'label' as site_label, " +
+    "b.site_snapshot->>'city' as city,b.site_snapshot->>'state' as state, " +
+    "b.dispute_reason as reason,b.dispute_status::text as dispute_status, " +
+    "b.dispute_resolution_note as resolution_note,b.created_at::text as created_at, " +
+    "b.updated_at::text as updated_at " +
+    "from public.bookings b join public.provider_businesses pb on pb.id=b.business_id " +
+    "join public.\"user\" cu on cu.id=b.customer_user_id " +
+    "where b.status='disputed' " +
+    "order by case coalesce(b.dispute_status::text,'open') " +
+    "when 'open' then 0 when 'under_review' then 1 " +
+    "when 'awaiting_customer' then 2 when 'awaiting_provider' then 3 else 4 end, " +
+    "b.updated_at desc limit 100",
+  );
+  return rows.map((row) => ({
+    bookingId: row.booking_id,
+    publicReference: row.public_reference,
+    serviceId: row.service_id,
+    amountPaise: Number(row.amount_paise),
+    currency: row.currency,
+    customerName: row.customer_name || "Customer",
+    providerName: row.provider_name,
+    siteLabel: row.site_label || "Work site",
+    city: row.city || "",
+    state: row.state || "",
+    reason: row.reason,
+    disputeStatus: row.dispute_status || "open",
+    resolutionNote: row.resolution_note,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+export async function resolveAdminBookingDisputeForUser(
+  adminUserId: string,
+  input: AdminBookingDisputeDecisionInput,
+): Promise<{ bookingId: string; disputeStatus: string; resolved: boolean }> {
+  assertProductionIdentity(adminUserId);
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    await requireFieldlyAdmin(tx, adminUserId);
+    const rows = await tx.query<{
+      public_reference: string;
+      status: string;
+      dispute_status: string | null;
+    }>(
+      "select public_reference,status::text as status,dispute_status::text as dispute_status " +
+      "from public.bookings where id=$1::uuid for update",
+      [input.bookingId],
+    );
+    const booking = rows[0];
+    if (!booking || booking.status !== "disputed") {
+      throw new Error("This booking is not an open dispute case.");
+    }
+    if (["resolved_customer", "resolved_provider", "closed_no_action"].includes(booking.dispute_status ?? "")) {
+      throw new Error("This dispute is already closed and cannot be changed.");
+    }
+
+    const resolved = ["resolved_customer", "resolved_provider", "closed_no_action"].includes(input.decision);
+    const updated = await tx.query<{ dispute_status: string }>(
+      "update public.bookings set dispute_status=$2::public.fieldly_dispute_status, " +
+      "dispute_resolution_note=$3, " +
+      "dispute_resolved_by=case when $4::boolean then $5 else null end, " +
+      "dispute_resolved_at=case when $4::boolean then now() else null end, " +
+      "updated_at=now() where id=$1::uuid " +
+      "returning dispute_status::text as dispute_status",
+      [input.bookingId, input.decision, input.note, resolved, adminUserId],
+    );
+    await tx.query(
+      "insert into public.fieldly_admin_audit " +
+      "(admin_user_id,action,target_type,target_id,reason,metadata) " +
+      "values ($1,$2,'booking',$3,$4,$5::jsonb)",
+      [
+        adminUserId,
+        "booking_dispute_" + input.decision,
+        input.bookingId,
+        input.note,
+        JSON.stringify({ publicReference: booking.public_reference, previousStatus: booking.dispute_status || "open" }),
+      ],
+    );
+    return {
+      bookingId: input.bookingId,
+      disputeStatus: updated[0]?.dispute_status ?? input.decision,
+      resolved,
+    };
+  });
+}
+
 
 export type AdminProviderQueueItem = {
   id: string;
@@ -3193,7 +3324,11 @@ export async function updateBookingByParticipant(
     const updated = await tx.query<{ status: "cancelled" | "disputed" }>(
       "update public.bookings set status=$2::fieldly_booking_status, " +
       "cancellation_reason=case when $2='cancelled' then $3 else cancellation_reason end, " +
-      "dispute_reason=case when $2='disputed' then $3 else dispute_reason end,updated_at=now() " +
+      "dispute_reason=case when $2='disputed' then $3 else dispute_reason end, " +
+      "dispute_status=case when $2='disputed' then 'open'::public.fieldly_dispute_status else dispute_status end, " +
+      "dispute_resolution_note=case when $2='disputed' then null else dispute_resolution_note end, " +
+      "dispute_resolved_by=case when $2='disputed' then null else dispute_resolved_by end, " +
+      "dispute_resolved_at=case when $2='disputed' then null else dispute_resolved_at end,updated_at=now() " +
       "where id=$1::uuid returning status::text as status",
       [input.bookingId, input.action, reason],
     );
