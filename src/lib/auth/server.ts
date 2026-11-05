@@ -130,20 +130,24 @@ const phoneNumberAuthPlugin = phoneOtpConfigured
       },
       // Better Auth owns OTP generation and verification. MSG91 only delivers
       // that code through our pre-approved DLT transactional template.
-      // The send operation is intentionally fire-and-forget per Better Auth's
-      // timing guidance; failures are logged without exposing phone or OTP.
-      sendOTP: ({ phoneNumber: recipient, code }) => {
-        void sendOtpWithMsg91({
-          settings: {
-            authKey: msg91AuthKey!,
-            templateId: msg91TemplateId!,
-            otpVariable: msg91OtpVariable,
-          },
-          phoneNumber: recipient,
-          code,
-        }).catch(() => {
-          console.error("[auth] MSG91 OTP delivery failed; request a new code.");
-        });
+      // Await delivery so the API never tells a user that a code was sent
+      // when MSG91 rejected the request or timed out. Keep errors generic:
+      // never log or return the OTP, auth key, or full phone number.
+      sendOTP: async ({ phoneNumber: recipient, code }) => {
+        try {
+          await sendOtpWithMsg91({
+            settings: {
+              authKey: msg91AuthKey!,
+              templateId: msg91TemplateId!,
+              otpVariable: msg91OtpVariable,
+            },
+            phoneNumber: recipient,
+            code,
+          });
+        } catch {
+          console.error("[auth] MSG91 OTP delivery failed.");
+          throw new Error("OTP delivery is temporarily unavailable. Please try again.");
+        }
       },
     })
   : null;
