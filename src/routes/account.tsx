@@ -77,7 +77,7 @@ function AccountPage() {
     }
   }
 
-  if (!session && !customer) {
+  if (!session && !customer && !authSession?.user) {
     return (
       <CustomerSignInDialog
         open
@@ -140,8 +140,8 @@ function AccountPage() {
 
       <div className="mt-6 rounded-3xl border border-line bg-card p-5">
         <div className="text-sm text-muted">Signed in</div>
-        <div className="font-display text-2xl font-bold">{session?.name ?? customer?.name}</div>
-        <div className="text-sm">{session?.phone ?? customer?.phone}</div>
+        <div className="font-display text-2xl font-bold">{session?.name ?? customer?.name ?? authSession?.user.name}</div>
+        <div className="text-sm">{session?.phone ?? customer?.phone ?? (authSession?.user.phoneNumber || "Mobile number not added")}</div>
         <div className="mt-1 text-sm text-muted">
           {session?.role === "provider" ? `Operating ${session.name}` : "Customer"}
         </div>
