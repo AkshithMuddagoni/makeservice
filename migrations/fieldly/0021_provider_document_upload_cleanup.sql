@@ -17,7 +17,7 @@ BEGIN
   ) THEN
     ALTER TABLE public.provider_document_upload_sessions
       ADD CONSTRAINT provider_document_upload_sessions_cleanup_attempts_check
-      CHECK (storage_cleanup_attempts BETWEEN 0 AND 1000);
+      CHECK (storage_cleanup_attempts BETWEEN 0 AND 10);
   END IF;
 END
 $$;
@@ -25,7 +25,8 @@ $$;
 CREATE INDEX IF NOT EXISTS provider_document_upload_sessions_cleanup_idx
   ON public.provider_document_upload_sessions (expires_at, id)
   WHERE status IN ('pending', 'expired', 'failed')
-    AND storage_cleanup_completed_at IS NULL;
+    AND storage_cleanup_completed_at IS NULL
+    AND storage_cleanup_attempts < 10;
 
 COMMENT ON COLUMN public.provider_document_upload_sessions.storage_cleanup_completed_at IS
   'Set only after the Storage API confirms removal or the Storage object is verified absent.';
