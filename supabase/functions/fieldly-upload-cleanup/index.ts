@@ -71,7 +71,6 @@ async function removeStorageObjects(
         method: "DELETE",
         headers: {
           apikey: secretKey,
-          authorization: `Bearer ${secretKey}`,
           "content-type": "application/json",
         },
         body: JSON.stringify({ prefixes: paths }),
@@ -172,6 +171,32 @@ Deno.serve(async (request: Request) => {
         .filter((session) => !validSessions.includes(session))
         .map((session) => session.id);
 
+      if (invalidSessionIds.length > 0) {
+        await tx`
+          update public.provider_document_upload_sessions
+          set storage_cleanup_attempts = least(storage_cleanup_attempts + 1, 10),
+              storage_cleanup_last_attempt_at = now()
+          where id::text = any(${tx.array(invalidSessionIds)})
+            and storage_cleanup_completed_at is null
+        `;
+      }
+
+      const retryLimitRows = await tx<{ count: number }>`
+        select count(*)::int as count
+        from public.provider_document_upload_sessions s
+        where s.storage_bucket = ${BUCKET}
+          and s.status in ('pending', 'expired', 'failed')
+          and s.expires_at <= now()
+          and s.storage_cleanup_completed_at is null
+          and s.storage_cleanup_attempts >= 10
+          and not exists (
+            select 1
+            from public.provider_documents d
+            where d.storage_bucket = s.storage_bucket
+              and d.storage_path = s.storage_path
+          )
+      `;
+
       const missingObjectIds = validSessions
         .filter((session) => !session.object_exists)
         .map((session) => session.id);
@@ -228,7 +253,7 @@ Deno.serve(async (request: Request) => {
           await tx`
             update public.provider_document_upload_sessions
             set status = case when status = 'pending' then 'expired' else status end,
-                storage_cleanup_attempts = least(storage_cleanup_attempts + 1, 1000),
+                storage_cleanup_attempts = least(storage_cleanup_attempts + 1, 10),
                 storage_cleanup_last_attempt_at = now(),
                 storage_cleanup_completed_at = now()
             where id::text = any(${tx.array(sessionIdsForBatch)})
@@ -238,7 +263,7 @@ Deno.serve(async (request: Request) => {
           await tx`
             update public.provider_document_upload_sessions
             set status = case when status = 'pending' then 'expired' else status end,
-                storage_cleanup_attempts = least(storage_cleanup_attempts + 1, 1000),
+                storage_cleanup_attempts = least(storage_cleanup_attempts + 1, 10),
                 storage_cleanup_last_attempt_at = now()
             where id::text = any(${tx.array(sessionIdsForBatch)})
               and storage_cleanup_completed_at is null
@@ -257,10 +282,7 @@ Deno.serve(async (request: Request) => {
           : 0,
         failedStorageBatch: !storageRemoved,
         invalidSessionPathsSkipped: invalidSessionIds.length,
-        retryLimitReachedPaths: sessions.filter(
-          (session) => session.storage_bucket === BUCKET && isProviderDocumentPath(session.storage_path)
-            && session.id && false,
-        ).length,
+        retryLimitReachedPaths: Number(retryLimitRows[0]?.count ?? 0),
       };
     });
     if (summary.busy) {
