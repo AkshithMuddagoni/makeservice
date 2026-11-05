@@ -560,13 +560,26 @@ export async function saveProviderOperatorForUser(
 
     let operatorId = input.operatorId;
     if (operatorId) {
-      const existing = await tx.query<{ id: string }>(
-        `select id::text as id from public.provider_operators
+      const existing = await tx.query<{ id: string; linked_user_id: string | null; phone_e164: string | null }>(
+        `select id::text as id, linked_user_id, phone_e164
+         from public.provider_operators
          where id = $1::uuid and business_id = $2::uuid
          for update`,
         [operatorId, input.businessId],
       );
       if (!existing[0]) throw new Error("The selected operator does not belong to this provider business.");
+      const nextPhone = input.phoneE164 ?? null;
+      if (existing[0].linked_user_id && existing[0].phone_e164 !== nextPhone) {
+        throw new Error("This operator account is already linked. Contact support before changing its registered mobile number.");
+      }
+      if (existing[0].phone_e164 !== nextPhone) {
+        await tx.query(
+          `update public.provider_operator_invites
+           set revoked_at = now()
+           where operator_id = $1::uuid and accepted_at is null and revoked_at is null`,
+          [operatorId],
+        );
+      }
       const removedBookedAssignments = await tx.query<{ asset_id: string }>(
         `select poa.asset_id::text as asset_id
          from public.provider_operator_assets poa
@@ -852,6 +865,8 @@ export async function getProviderDashboardForUser(
         id: string;
         full_name: string;
         phone_last4: string | null;
+        is_linked: boolean;
+        has_phone: boolean;
         role_title: string;
         experience_years: number | string | null;
         verification_status: string;
@@ -861,6 +876,8 @@ export async function getProviderDashboardForUser(
       }>(
         `select po.id::text as id, po.full_name,
                 right(po.phone_e164, 4) as phone_last4,
+                (po.linked_user_id is not null) as is_linked,
+                (po.phone_e164 is not null) as has_phone,
                 po.role_title, po.experience_years,
                 po.verification_status::text as verification_status,
                 po.reviewer_note, po.reviewed_at::text as reviewed_at,
@@ -977,6 +994,8 @@ export async function getProviderDashboardForUser(
         id: operator.id,
         fullName: operator.full_name,
         phoneLast4: operator.phone_last4,
+        isLinked: operator.is_linked,
+        hasPhone: operator.has_phone,
         roleTitle: operator.role_title,
         experienceYears: Number(operator.experience_years ?? 0),
         verificationStatus: operator.verification_status,
@@ -1422,11 +1441,13 @@ export async function getAdminProviderApplicationDetail(
       [businessId],
     ),
     sql.query<{
-      id: string; full_name: string; phone_last4: string | null; role_title: string;
+      id: string; full_name: string; phone_last4: string | null; is_linked: boolean; has_phone: boolean; role_title: string;
       experience_years: number | string | null; verification_status: string;
       reviewer_note: string | null; reviewed_at: string | null; asset_ids: string[] | null;
     }>(
       `select po.id::text as id, po.full_name, right(po.phone_e164, 4) as phone_last4,
+              (po.linked_user_id is not null) as is_linked,
+              (po.phone_e164 is not null) as has_phone,
               po.role_title, po.experience_years,
               po.verification_status::text as verification_status,
               po.reviewer_note, po.reviewed_at::text as reviewed_at,
@@ -1531,6 +1552,8 @@ export async function getAdminProviderApplicationDetail(
       id: item.id,
       fullName: item.full_name,
       phoneLast4: item.phone_last4,
+      isLinked: item.is_linked,
+      hasPhone: item.has_phone,
       roleTitle: item.role_title,
       experienceYears: Number(item.experience_years ?? 0),
       verificationStatus: item.verification_status,
