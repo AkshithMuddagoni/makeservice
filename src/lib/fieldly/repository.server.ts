@@ -2541,11 +2541,11 @@ export async function submitProviderQuoteForUser(
       "and not exists (select 1 from public.bookings busy where busy.assigned_asset_id = pa.id " +
       "and (busy.status = any($4::public.fieldly_booking_status[]) " +
       "or (busy.status = 'disputed' and (busy.dispute_status is null " +
-      "or busy.dispute_status::text not in ('resolved_customer','resolved_provider','closed_no_action')))) "+
+      "or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status,'resolved_provider'::public.fieldly_dispute_status,'closed_no_action'::public.fieldly_dispute_status)))) "+
       "and not exists (select 1 from public.bookings busy where busy.assigned_operator_id = po.id " +
       "and (busy.status = any($4::public.fieldly_booking_status[]) " +
       "or (busy.status = 'disputed' and (busy.dispute_status is null " +
-      "or busy.dispute_status::text not in ('resolved_customer','resolved_provider','closed_no_action')))) "+
+      "or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status,'resolved_provider'::public.fieldly_dispute_status,'closed_no_action'::public.fieldly_dispute_status)))) "+
       "and exists (select 1 from public.provider_presence presence where presence.business_id = pb.id " +
       "and presence.is_online = true and coalesce(presence.last_seen_at,presence.updated_at) >= now() - interval '10 minutes') " +
       "for update of jr, jrt",
@@ -2668,11 +2668,11 @@ export async function acceptProviderQuoteForCustomer(
       "and not exists (select 1 from public.bookings busy where busy.assigned_asset_id = pa.id " +
       "and (busy.status = any($3::public.fieldly_booking_status[]) " +
       "or (busy.status = 'disputed' and (busy.dispute_status is null " +
-      "or busy.dispute_status::text not in ('resolved_customer','resolved_provider','closed_no_action')))) "+
+      "or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status,'resolved_provider'::public.fieldly_dispute_status,'closed_no_action'::public.fieldly_dispute_status)))) "+
       "and not exists (select 1 from public.bookings busy where busy.assigned_operator_id = po.id " +
       "and (busy.status = any($3::public.fieldly_booking_status[]) " +
       "or (busy.status = 'disputed' and (busy.dispute_status is null " +
-      "or busy.dispute_status::text not in ('resolved_customer','resolved_provider','closed_no_action')))) "+
+      "or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status,'resolved_provider'::public.fieldly_dispute_status,'closed_no_action'::public.fieldly_dispute_status)))) "+
       "for update of jr, pq, jrt",
       [input.quoteId, userId, BOOKING_RESOURCE_RESERVED_STATUSES],
     );
@@ -2710,11 +2710,11 @@ export async function acceptProviderQuoteForCustomer(
       "and not exists (select 1 from public.bookings busy where busy.assigned_asset_id = pa.id " +
       "and (busy.status = any($3::public.fieldly_booking_status[]) " +
       "or (busy.status = 'disputed' and (busy.dispute_status is null " +
-      "or busy.dispute_status::text not in ('resolved_customer','resolved_provider','closed_no_action')))) "+
+      "or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status,'resolved_provider'::public.fieldly_dispute_status,'closed_no_action'::public.fieldly_dispute_status)))) "+
       "and not exists (select 1 from public.bookings busy where busy.assigned_operator_id = po.id " +
       "and (busy.status = any($3::public.fieldly_booking_status[]) " +
       "or (busy.status = 'disputed' and (busy.dispute_status is null " +
-      "or busy.dispute_status::text not in ('resolved_customer','resolved_provider','closed_no_action')))) "+
+      "or busy.dispute_status not in ('resolved_customer'::public.fieldly_dispute_status,'resolved_provider'::public.fieldly_dispute_status,'closed_no_action'::public.fieldly_dispute_status)))) "+
       "order by pa.created_at asc, pa.id asc, po.created_at asc, po.id asc " +
       "limit 1 for update of pb, ps, pa, po skip locked",
       [quote.provider_service_id, quote.business_id, BOOKING_RESOURCE_RESERVED_STATUSES],
