@@ -10,6 +10,7 @@ import {
   getCurrentProviderBookings,
   getCurrentProviderDashboard,
   getCurrentProviderOpenRequests,
+  createCurrentProviderOperatorInvite,
   saveCurrentProviderOperator,
   setCurrentProviderAssetAvailability,
   setCurrentProviderPresence,
@@ -72,7 +73,7 @@ function DeskPage() {
       );
     }
     const phone = authSession.user.phoneNumber ?? "";
-    const phoneVerified = Boolean(authSession.user.phoneNumberVerified && /^\\+91[6-9]\\d{9}$/.test(phone));
+    const phoneVerified = Boolean(authSession.user.phoneNumberVerified && /^\+91[6-9]\d{9}$/.test(phone));
     if (!phoneVerified) {
       return (
         <div className="mx-auto max-w-lg px-4 py-12">
@@ -340,6 +341,8 @@ function OperatorRosterManager({
   const [assetIds, setAssetIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [invitingOperatorId, setInvitingOperatorId] = useState<string | null>(null);
+  const [invitationLink, setInvitationLink] = useState("");
 
   const hasRoadUseAsset = application.assets.some((asset) =>
     ["public_road", "commercial_transport"].includes(asset.roadUse.toLowerCase()),
@@ -379,6 +382,28 @@ function OperatorRosterManager({
       toast.error(cause instanceof Error ? cause.message : "Could not save this operator.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function inviteOperator(operatorId: string) {
+    setInvitingOperatorId(operatorId);
+    setInvitationLink("");
+    try {
+      const invitation = await createCurrentProviderOperatorInvite({ data: { operatorId } });
+      // Put the token in the URL fragment, which browsers do not send in HTTP
+      // requests or referrer headers. The account page clears it immediately.
+      const link = `${window.location.origin}/account#operator-invite=${invitation.token}`;
+      setInvitationLink(link);
+      try {
+        await navigator.clipboard.writeText(link);
+        toast.success("One-time invitation link copied. Share it privately with the operator.");
+      } catch {
+        toast.info("Invitation created. Copy the one-time link shown below.");
+      }
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not create the operator invitation.");
+    } finally {
+      setInvitingOperatorId(null);
     }
   }
 
@@ -459,7 +484,22 @@ function OperatorRosterManager({
                     <p className="font-semibold">{operator.fullName}</p>
                     <p className="mt-1 text-xs text-muted">{operator.roleTitle} · {operator.experienceYears} years' experience{operator.phoneLast4 ? " · phone ending " + operator.phoneLast4 : ""}</p>
                   </div>
-                  <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", reviewTone(operator.verificationStatus))}>{reviewLabel(operator.verificationStatus)}</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", reviewTone(operator.verificationStatus))}>{reviewLabel(operator.verificationStatus)}</span>
+                    {operator.isLinked ? (
+                      <span className="rounded-full bg-field-soft px-2.5 py-1 text-[11px] font-bold text-field">Account linked</span>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={!operator.hasPhone || operator.verificationStatus !== "approved" || application.verificationStatus !== "approved" || invitingOperatorId !== null}
+                        onClick={() => void inviteOperator(operator.id)}
+                      >
+                        {invitingOperatorId === operator.id ? "Creating link…" : "Invite operator"}
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <p className="mt-2 text-xs text-muted">Machines: {assignedAssets.map((asset) => asset.make + " " + asset.model).join(", ") || "No machine assigned"}</p>
                 {operator.reviewerNote && <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">{operator.reviewerNote}</p>}
@@ -488,6 +528,19 @@ function OperatorRosterManager({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {invitationLink && (
+        <div className="mt-4 grid gap-2 rounded-2xl border border-field/30 bg-field-soft p-4">
+          <p className="text-sm font-semibold">One-time operator invitation</p>
+          <p className="text-xs leading-5 text-muted">
+            Expires in 72 hours. Share privately with the operator using the mobile number on their roster. The operator must sign in and verify that exact number before accepting.
+          </p>
+          <input readOnly value={invitationLink} onFocus={(event) => event.currentTarget.select()} className="min-w-0 rounded-xl border border-line bg-white p-3 text-xs" aria-label="Operator invitation link" />
+          <Button type="button" size="sm" variant="secondary" onClick={() => void navigator.clipboard.writeText(invitationLink)}>
+            Copy invitation link
+          </Button>
         </div>
       )}
 

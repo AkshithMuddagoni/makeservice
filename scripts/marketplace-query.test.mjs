@@ -27,6 +27,7 @@ async function createMarketplaceFixture() {
     "migrations/fieldly/0015_booking_dispute_resolution.sql",
     "migrations/fieldly/0017_index_bookings_dispute_resolved_by.sql",
     "migrations/fieldly/0018_booking_resource_assignment.sql",
+    "migrations/fieldly/0020_provider_operator_account_linking.sql",
   ];
   for (const path of migrations) {
     await db.exec(await readFile(join(root, path), "utf8"));
@@ -200,6 +201,100 @@ test("provider discovery returns no listings when providers are outside the serv
     assert.ok(match);
     const rows = await db.query(match[1], ["borewell", 28.6139, 77.209, 45, 25]);
     assert.equal(rows.rows.length, 0);
+  } finally {
+    await db.close();
+  }
+});
+
+
+test("operator invitations allow only one outstanding invitation per operator", async () => {
+  const { db, resourceIds } = await createMarketplaceFixture();
+  const operator = resourceIds.approved;
+  const values = [
+    operator.businessId,
+    operator.operatorId,
+    "+919876543210",
+    "a".repeat(64),
+    "provider-1",
+  ];
+  try {
+    await db.query(
+      "insert into public.provider_operator_invites (business_id,operator_id,invited_phone_e164,token_hash,created_by_user_id,expires_at) " +
+      "values ($1::uuid,$2::uuid,$3,$4,$5,now()+interval '72 hours')",
+      values,
+    );
+    await assert.rejects(
+      db.query(
+        "insert into public.provider_operator_invites (business_id,operator_id,invited_phone_e164,token_hash,created_by_user_id,expires_at) " +
+        "values ($1::uuid,$2::uuid,$3,$4,$5,now()+interval '72 hours')",
+        [operator.businessId, operator.operatorId, "+919876543210", "b".repeat(64), "provider-1"],
+      ),
+      (error) => error.code === "23505",
+    );
+
+    await db.query(
+      "update public.provider_operator_invites set revoked_at = now() where operator_id = $1::uuid",
+      [operator.operatorId],
+    );
+    await db.query(
+      "insert into public.provider_operator_invites (business_id,operator_id,invited_phone_e164,token_hash,created_by_user_id,expires_at) " +
+      "values ($1::uuid,$2::uuid,$3,$4,$5,now()+interval '72 hours')",
+      [operator.businessId, operator.operatorId, "+919876543210", "c".repeat(64), "provider-1"],
+    );
+    const rows = await db.query(
+      "select count(*)::int as total, count(*) filter (where revoked_at is null)::int as open " +
+      "from public.provider_operator_invites where operator_id = $1::uuid",
+      [operator.operatorId],
+    );
+    assert.equal(rows.rows[0].total, 2);
+    assert.equal(rows.rows[0].open, 1);
+  } finally {
+    await db.close();
+  }
+});
+
+test("operator invitations enforce verified acceptance metadata, phone format and user references", async () => {
+  const { db, resourceIds } = await createMarketplaceFixture();
+  const operator = resourceIds.approved;
+  try {
+    await assert.rejects(
+      db.query(
+        "insert into public.provider_operator_invites (business_id,operator_id,invited_phone_e164,token_hash,created_by_user_id,expires_at) " +
+        "values ($1::uuid,$2::uuid,$3,$4,$5,now()+interval '72 hours')",
+        [operator.businessId, operator.operatorId, "1234567890", "d".repeat(64), "provider-1"],
+      ),
+      (error) => error.code === "23514",
+    );
+
+    await assert.rejects(
+      db.query(
+        "insert into public.provider_operator_invites (business_id,operator_id,invited_phone_e164,token_hash,created_by_user_id,expires_at,accepted_at) " +
+        "values ($1::uuid,$2::uuid,'+919876543210',$3,'provider-1',now()+interval '72 hours',now())",
+        [operator.businessId, operator.operatorId, "e".repeat(64)],
+      ),
+      (error) => error.code === "23514",
+    );
+
+    await db.query(
+      "update public.provider_operators set phone_e164 = '+919876543210' where id = $1::uuid",
+      [operator.operatorId],
+    );
+    await assert.rejects(
+      db.query(
+        "update public.provider_operators set linked_user_id = 'missing-user' where id = $1::uuid",
+        [operator.operatorId],
+      ),
+      (error) => error.code === "23503",
+    );
+    await db.query(
+      "update public.provider_operators set linked_user_id = 'customer-1' where id = $1::uuid",
+      [operator.operatorId],
+    );
+    const row = await db.query(
+      "select linked_user_id from public.provider_operators where id = $1::uuid",
+      [operator.operatorId],
+    );
+    assert.equal(row.rows[0].linked_user_id, "customer-1");
   } finally {
     await db.close();
   }

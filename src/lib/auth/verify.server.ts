@@ -42,7 +42,7 @@ export class UnauthorizedError extends Error {
   }
 }
 
-export type VerifiedUser = { id: string; email: string | null };
+export type VerifiedUser = { id: string; email: string | null; phoneNumber: string | null; phoneNumberVerified: boolean };
 
 /**
  * Resolve the signed-in user from the current request, or `null` when auth isn't
@@ -67,7 +67,16 @@ export async function getSessionUser(
   }
   const session = await auth.api.getSession({ headers });
   if (!session?.user) return null;
-  return { id: session.user.id, email: session.user.email ?? null };
+  const authUser = session.user as typeof session.user & {
+    phoneNumber?: string | null;
+    phoneNumberVerified?: boolean;
+  };
+  return {
+    id: session.user.id,
+    email: session.user.email ?? null,
+    phoneNumber: authUser.phoneNumber ?? null,
+    phoneNumberVerified: Boolean(authUser.phoneNumberVerified),
+  };
 }
 
 /**
