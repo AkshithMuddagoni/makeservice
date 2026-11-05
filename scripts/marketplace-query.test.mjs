@@ -27,7 +27,7 @@ async function createMarketplaceFixture() {
     "migrations/fieldly/0015_booking_dispute_resolution.sql",
     "migrations/fieldly/0017_index_bookings_dispute_resolved_by.sql",
     "migrations/fieldly/0018_booking_resource_assignment.sql",
-    "migrations/fieldly/0019_provider_operator_account_linking.sql",
+    "migrations/fieldly/0020_provider_operator_account_linking.sql",
   ];
   for (const path of migrations) {
     await db.exec(await readFile(join(root, path), "utf8"));
