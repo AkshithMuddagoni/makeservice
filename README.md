@@ -8,7 +8,7 @@ Fieldly is a responsive marketplace for discovering equipment and site services 
 
 The production backend foundation was squash-merged into `main` through [PR #28](https://github.com/AkshithMuddagoni/makeservice/pull/28) on November 2, 2026, and deployed through the existing Render web service `makeservice`. The service still runs on Render Free for development and backend validation; a successful deploy is not customer-launch approval.
 
-The live `makeservice` Supabase migration ledger was checked read-only on November 5, 2026 and is applied through `0018_booking_resource_assignment.sql`. [PR #35](https://github.com/AkshithMuddagoni/makeservice/pull/35) is open and contains migration `0019_index_booking_assigned_operator_asset_fk.sql`, the supporting schema assertions, lint fixes and a CI lint step. Its latest GitHub Actions validation (run #390) passed dependency audit, type-check, lint, automated tests, Playwright smoke tests and the production build. PR previews are skipped because the Render build runs database migrations and preview environments inherit the base service's environment variables. PR #35 has not been merged; migration 0019 is not yet applied to production.
+The live `makeservice` Supabase migration ledger was checked read-only on November 5, 2026 and is applied through `0018_booking_resource_assignment.sql`. [PR #35](https://github.com/AkshithMuddagoni/makeservice/pull/35) was merged on November 5, 2026 after its exact-head CI passed dependency audit, type-check, lint, automated tests, Playwright smoke tests and the production build. It adds migration `0019_index_booking_assigned_operator_asset_fk.sql`, supporting schema assertions and a CI lint step. The additive index is merged to `main`; the live database and Render rollout must be verified separately before considering it deployed. Render preview was skipped because the build runs database migrations and preview environments inherit the base service's environment variables.
 
 The deployed backend connects authenticated Better Auth server sessions to PostgreSQL-backed accounts, provider onboarding, verified provider discovery, customer requests, provider quotes, booking lifecycle, participant chat, provider presence and short-lived GPS operations. Provider and operator review is server-authoritative and audit logged. The local preview path still contains fixed-code/browser-local demonstration behavior; it is not production identity or shared data.
 
@@ -71,11 +71,12 @@ The migration runner applies the uniquely named SQL files in basename order from
 18. `0016_notifications_and_location_retention.sql` — durable in-app notifications, trigger-driven events and live-location retention cleanup.
 19. `0017_index_bookings_dispute_resolved_by.sql` — supporting dispute-resolution index.
 20. `0018_booking_resource_assignment.sql` — business-scoped operator/asset assignment constraints for bookings.
-21. `0019_index_booking_assigned_operator_asset_fk.sql` — supporting composite index for the booking-to-operator/asset foreign key (**pending in PR #35; not yet applied to production**).
+21. `0019_index_booking_assigned_operator_asset_fk.sql` — supporting composite index for the booking-to-operator/asset foreign key (**merged to `main` through PR #35; verify the production migration ledger after deployment**).
 
 The live `makeservice` Supabase project was verified through migration
-0018 on November 5, 2026. Migrations 0015–0018 are already applied. Migration
-0019 is additive and remains pending review in PR #35.
+0018 on November 5, 2026. Migrations 0015–0018 are applied. Migration 0019 is
+merged to `main`; it must appear in `public._migrations` and its index must be
+visible in `public.bookings` after the controlled Render rollout.
 
 **Production migration safety:** `npm run build` invokes `npm run db:migrate`,
 which applies every pending SQL migration found in `migrations/auth/` and
