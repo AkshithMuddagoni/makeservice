@@ -20,6 +20,7 @@ import {
   setProviderServiceAvailabilityInputSchema,
   stopProviderBookingLocationInputSchema,
   submitProviderQuoteInputSchema,
+  submitProviderReviewInputSchema,
   updateBookingParticipantInputSchema,
   updateProviderBookingLocationInputSchema,
   updateProviderBookingStatusInputSchema,
@@ -245,6 +246,15 @@ export const getCurrentBookingDetail = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const { getBookingDetailForUser } = await import("./repository.server");
     return getBookingDetailForUser(context.userId, data.bookingId);
+  });
+
+/** Submit one review for a completed booking owned by the authenticated customer. */
+export const submitCurrentProviderReview = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(submitProviderReviewInputSchema)
+  .handler(async ({ context, data }) => {
+    const { submitProviderReviewForCustomer } = await import("./repository.server");
+    return submitProviderReviewForCustomer(context.userId, data);
   });
 
 /** Provider transitions: confirmed -> on the way -> arrived -> completed. */

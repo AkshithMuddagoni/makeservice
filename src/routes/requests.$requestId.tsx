@@ -95,6 +95,32 @@ function RequestPage() {
     return () => { cancelled = true; };
   }, [requestId, liveRefreshKey]);
 
+  // Automatically pick up provider quotations while a saved request is open.
+  // Poll only in a visible tab and stop as soon as the request is booked/closed.
+  useEffect(() => {
+    if (!authEnabled || liveRequest?.status !== "open") return;
+    let cancelled = false;
+    let inFlight = false;
+    const poll = async () => {
+      if (cancelled || document.visibilityState !== "visible" || inFlight) return;
+      inFlight = true;
+      try {
+        const result = await getCurrentJobRequestDetail({ data: { requestId } });
+        if (!cancelled) setLiveRequest(result);
+      } catch {
+        // Keep the last confirmed server response visible; manual refresh still
+        // reports errors to the user and the next polling cycle retries.
+      } finally {
+        inFlight = false;
+      }
+    };
+    const interval = window.setInterval(() => { void poll(); }, 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [requestId, liveRequest?.status]);
+
   useEffect(() => {
     if (!request) return;
     const age = Date.now() - request.createdAt;

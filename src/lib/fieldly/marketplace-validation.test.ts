@@ -16,6 +16,7 @@ import {
   updateProviderBookingLocationInputSchema,
   stopProviderBookingLocationInputSchema,
   sendBookingMessageInputSchema,
+  submitProviderReviewInputSchema,
 } from "./marketplace-validation.ts";
 
 const site = {
@@ -226,4 +227,22 @@ test("booking chat accepts plain text only and caps message size", () => {
   assert.throws(() => sendBookingMessageInputSchema.parse({ bookingId, messageText: "   " }));
   assert.throws(() => sendBookingMessageInputSchema.parse({ bookingId, messageText: "x".repeat(2001) }));
   assert.throws(() => sendBookingMessageInputSchema.parse({ bookingId, messageText: "Hello", senderUserId: "spoofed" }));
+});
+
+
+test("provider reviews require a valid booking, one-to-five rating and bounded text", () => {
+  const bookingId = "f9b0c52f-a6f4-4d5e-8f6c-e6d8f6a5f516";
+  assert.deepEqual(
+    submitProviderReviewInputSchema.parse({ bookingId, rating: 5, reviewText: "Excellent service." }),
+    { bookingId, rating: 5, reviewText: "Excellent service." },
+  );
+  assert.deepEqual(
+    submitProviderReviewInputSchema.parse({ bookingId, rating: 4 }),
+    { bookingId, rating: 4, reviewText: "" },
+  );
+  assert.throws(() => submitProviderReviewInputSchema.parse({ bookingId, rating: 0 }));
+  assert.throws(() => submitProviderReviewInputSchema.parse({ bookingId, rating: 6 }));
+  assert.throws(() => submitProviderReviewInputSchema.parse({ bookingId, rating: 4.5 }));
+  assert.throws(() => submitProviderReviewInputSchema.parse({ bookingId, rating: 5, reviewText: "x".repeat(1001) }));
+  assert.throws(() => submitProviderReviewInputSchema.parse({ bookingId, rating: 5, customerUserId: "spoofed" }));
 });

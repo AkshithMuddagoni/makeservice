@@ -147,6 +147,14 @@ export const getBookingMessagesInputSchema = z.object({
   bookingId: z.string().uuid(),
 }).strict();
 
+export const submitProviderReviewInputSchema = z.object({
+  bookingId: z.string().uuid(),
+  rating: z.number().int().min(1).max(5),
+  reviewText: z.string().trim().max(1000).default(""),
+}).strict();
+
+export type SubmitProviderReviewInput = z.infer<typeof submitProviderReviewInputSchema>;
+
 export const sendBookingMessageInputSchema = z.object({
   bookingId: z.string().uuid(),
   messageText: z.string().trim().min(1).max(2000),
