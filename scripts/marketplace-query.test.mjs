@@ -33,8 +33,8 @@ async function createMarketplaceFixture() {
   }
 
   await db.query(
-    'insert into public."user" (id) values ($1),($2),($3)',
-    ["customer-1", "provider-1", "provider-2"],
+    'insert into public."user" (id) values ($1),($2),($3),($4)',
+    ["customer-1", "provider-1", "provider-2", "admin-1"],
   );
   await db.query(
     "insert into public.fieldly_user_roles (user_id, role) values ($1, 'customer')",
@@ -45,6 +45,7 @@ async function createMarketplaceFixture() {
     approved: "10000000-0000-4000-8000-000000000001",
     pending: "10000000-0000-4000-8000-000000000002",
   };
+  const resourceIds = {};
   for (const [key, id, owner, status] of [
     ["approved", businessIds.approved, "provider-1", "approved"],
     ["pending", businessIds.pending, "provider-2", "under_review"],
@@ -81,9 +82,53 @@ async function createMarketplaceFixture() {
       "insert into public.provider_presence (business_id, is_online, last_seen_at) values ($1::uuid,true,now())",
       [id],
     );
+    resourceIds[key] = {
+      businessId: id,
+      serviceId: service.rows[0].id,
+      assetId: asset.rows[0].id,
+      operatorId: operator.rows[0].id,
+    };
   }
 
-  return { db, businessIds };
+  return { db, businessIds, resourceIds };
+}
+
+async function createBookingReservation(db, resource, bookingStatus, disputeStatus = null) {
+  const request = await db.query(
+    "insert into public.job_requests (customer_user_id, service_id, site_label, site_address, city, state, latitude, longitude, details_consent_at) " +
+    "values ('customer-1','borewell','Test site','Test address','Hyderabad','Telangana',17.39,78.49,now()) " +
+    "returning id::text as id",
+  );
+  const quote = await db.query(
+    "insert into public.provider_quotes (request_id, business_id, amount_paise, note) " +
+    "values ($1::uuid,$2::uuid,100000,'Reserved resource fixture quote') returning id::text as id",
+    [request.rows[0].id, resource.businessId],
+  );
+  await db.query(
+    "insert into public.bookings (" +
+    "public_reference,request_id,quote_id,customer_user_id,business_id,provider_service_id," +
+    "assigned_asset_id,assigned_operator_id,service_id,status,amount_paise,site_snapshot," +
+    "dispute_status,dispute_resolved_by,dispute_resolved_at" +
+    ") values (" +
+    "'MS-TEST-RESOURCE-1',$1::uuid,$2::uuid,'customer-1',$3::uuid,$4::uuid," +
+    "$5::uuid,$6::uuid,'borewell',$7::fieldly_booking_status,100000,'{}'::jsonb," +
+    "$8::public.fieldly_dispute_status,$9,case when $8::public.fieldly_dispute_status in " +
+    "('resolved_customer','resolved_provider','closed_no_action') then now() else null end" +
+    ")",
+    [
+      request.rows[0].id,
+      quote.rows[0].id,
+      resource.businessId,
+      resource.serviceId,
+      resource.assetId,
+      resource.operatorId,
+      bookingStatus,
+      disputeStatus,
+      disputeStatus && ["resolved_customer", "resolved_provider", "closed_no_action"].includes(disputeStatus)
+        ? "admin-1"
+        : null,
+    ],
+  );
 }
 
 test("provider discovery returns only approved, online providers with approved available equipment", async () => {
@@ -99,6 +144,49 @@ test("provider discovery returns only approved, online providers with approved a
     assert.match(rows.rows[0].equipment, /Borewell rig OEM Model X/);
     assert.ok(Number(rows.rows[0].distance_km) >= 0);
     assert.deepEqual(rows.rows[0].languages, []);
+  } finally {
+    await db.close();
+  }
+});
+
+test("provider discovery hides machine/operator pairs reserved by confirmed bookings", async () => {
+  const { db, resourceIds } = await createMarketplaceFixture();
+  try {
+    await createBookingReservation(db, resourceIds.approved, "confirmed");
+    const source = await readFile(join(root, "src/lib/fieldly/marketplace-queries.ts"), "utf8");
+    const match = source.match(/export const PROVIDER_DISCOVERY_SQL = `([\s\S]*?)`;?/);
+    assert.ok(match);
+    const rows = await db.query(match[1], ["borewell", 17.385, 78.4867, 45, 25]);
+    assert.equal(rows.rows.length, 0);
+  } finally {
+    await db.close();
+  }
+});
+
+test("provider discovery holds resources during an open dispute", async () => {
+  const { db, resourceIds } = await createMarketplaceFixture();
+  try {
+    await createBookingReservation(db, resourceIds.approved, "disputed", "under_review");
+    const source = await readFile(join(root, "src/lib/fieldly/marketplace-queries.ts"), "utf8");
+    const match = source.match(/export const PROVIDER_DISCOVERY_SQL = `([\s\S]*?)`;?/);
+    assert.ok(match);
+    const rows = await db.query(match[1], ["borewell", 17.385, 78.4867, 45, 25]);
+    assert.equal(rows.rows.length, 0);
+  } finally {
+    await db.close();
+  }
+});
+
+test("provider discovery releases resources after a dispute is terminally resolved", async () => {
+  const { db, resourceIds, businessIds } = await createMarketplaceFixture();
+  try {
+    await createBookingReservation(db, resourceIds.approved, "disputed", "resolved_customer");
+    const source = await readFile(join(root, "src/lib/fieldly/marketplace-queries.ts"), "utf8");
+    const match = source.match(/export const PROVIDER_DISCOVERY_SQL = `([\s\S]*?)`;?/);
+    assert.ok(match);
+    const rows = await db.query(match[1], ["borewell", 17.385, 78.4867, 45, 25]);
+    assert.equal(rows.rows.length, 1);
+    assert.equal(rows.rows[0].business_id, businessIds.approved);
   } finally {
     await db.close();
   }
