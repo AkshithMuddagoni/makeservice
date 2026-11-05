@@ -62,6 +62,23 @@ BEGIN
 
   IF EXISTS (
     SELECT 1
+    FROM public.bookings b
+    WHERE b.assigned_asset_id IS NOT NULL
+      AND b.assigned_operator_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.provider_operator_assets poa
+        WHERE poa.business_id = b.business_id
+          AND poa.asset_id = b.assigned_asset_id
+          AND poa.operator_id = b.assigned_operator_id
+      )
+  ) THEN
+    RAISE EXCEPTION
+      'Cannot add booking resource assignment rules: an assigned operator is not linked to the booking machine.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
     FROM public.bookings
     WHERE assigned_operator_id IS NOT NULL
       AND status IN ('confirmed', 'on_the_way', 'arrived', 'service_started', 'disputed')
@@ -72,7 +89,7 @@ BEGIN
       'Cannot add booking resource assignment rules: an operator is already reserved by multiple active bookings.';
   END IF;
 END
-$$;
+$;
 
 ALTER TABLE public.bookings
   ADD CONSTRAINT bookings_assigned_resource_pair_check
@@ -101,6 +118,16 @@ ALTER TABLE public.bookings
 
 ALTER TABLE public.bookings
   VALIDATE CONSTRAINT bookings_assigned_operator_business_fk;
+
+ALTER TABLE public.bookings
+  ADD CONSTRAINT bookings_assigned_operator_asset_pair_fk
+  FOREIGN KEY (assigned_operator_id, assigned_asset_id)
+  REFERENCES public.provider_operator_assets (operator_id, asset_id)
+  ON DELETE RESTRICT
+  NOT VALID;
+
+ALTER TABLE public.bookings
+  VALIDATE CONSTRAINT bookings_assigned_operator_asset_pair_fk;
 
 CREATE UNIQUE INDEX IF NOT EXISTS bookings_active_assigned_asset_uidx
   ON public.bookings (assigned_asset_id)
