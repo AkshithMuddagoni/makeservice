@@ -1,17 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { Bell, Check, Inbox, X } from "lucide-react";
+import { getFieldlyNotificationHref } from "@/lib/fieldly/notification-navigation";
 import {
   getCurrentFieldlyNotifications,
   markCurrentFieldlyNotificationRead,
 } from "@/lib/fieldly/account.functions";
 
 type NotificationItem = Awaited<ReturnType<typeof getCurrentFieldlyNotifications>>["items"][number];
-
-function notificationHref(item: NotificationItem) {
-  if (item.targetType === "booking") return "/bookings/" + item.targetId;
-  if (item.targetType === "request") return "/requests/" + item.targetId;
-  return "/desk";
-}
 
 export function NotificationsCenter({ enabled }: { enabled: boolean }) {
   const [open, setOpen] = useState(false);
@@ -76,7 +71,7 @@ export function NotificationsCenter({ enabled }: { enabled: boolean }) {
       }
     }
     setOpen(false);
-    window.location.assign(notificationHref(item));
+    window.location.assign(getFieldlyNotificationHref(item));
   }
 
   if (!enabled) return null;
