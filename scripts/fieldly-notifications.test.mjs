@@ -190,7 +190,7 @@ test("notification triggers target correct participants and deduplicate event up
     );
     assert.deepEqual(
       quoteNotifications.rows.map((row) => row.title),
-      ["A provider updated their quote", "A provider sent you a quote"],
+      ["A provider sent you a quote", "A provider updated their quote"],
     );
 
     const duplicates = await db.query(
