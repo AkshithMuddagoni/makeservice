@@ -28,6 +28,7 @@ const migrationFiles = [
   "migrations/fieldly/0018_booking_resource_assignment.sql",
   "migrations/fieldly/0019_index_booking_assigned_operator_asset_fk.sql",
   "migrations/fieldly/0021_provider_document_upload_cleanup.sql",
+  "migrations/fieldly/0022_notify_customer_of_quote_revisions.sql",
 ];
 
 test("Fieldly PostgreSQL migrations apply cleanly without Supabase Auth tables", async () => {
