@@ -17,7 +17,7 @@
     "preview:stop": "node scripts/preview.mjs stop",
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
-    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/msg91.server.test.ts src/lib/india-validation.test.ts src/lib/db-config.test.ts src/lib/fieldly/marketplace-validation.test.ts src/lib/fieldly/document-security.test.ts src/lib/fieldly/clamav.server.test.ts src/lib/fieldly/booking-security.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/preview-path-prefix.test.ts src/lib/fieldly/provider-onboarding.test.ts src/lib/fieldly/admin-review-policy.test.ts src/lib/fieldly/booking-resource-assignment.test.ts src/lib/fieldly/notification-navigation.test.ts",
+    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/msg91.server.test.ts src/lib/india-validation.test.ts src/lib/db-config.test.ts src/lib/fieldly/marketplace-validation.test.ts src/lib/fieldly/document-security.test.ts src/lib/fieldly/clamav.server.test.ts src/lib/fieldly/booking-security.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/preview-path-prefix.test.ts src/lib/fieldly/provider-onboarding.test.ts src/lib/fieldly/admin-review-policy.test.ts src/lib/fieldly/booking-resource-assignment.test.ts src/lib/fieldly/booking-permissions.test.ts src/lib/fieldly/notification-navigation.test.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "start": "node .output/server/index.mjs",
