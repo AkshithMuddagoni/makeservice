@@ -184,6 +184,15 @@ test("notification triggers target correct participants and deduplicate event up
     ]);
     assert.deepEqual([...actual.entries()].sort(), [...expected.entries()].sort());
 
+    const quoteNotifications = await db.query(
+      "select title from public.fieldly_notifications " +
+      "where notification_type = 'quote_received' order by title",
+    );
+    assert.deepEqual(
+      quoteNotifications.rows.map((row) => row.title),
+      ["A provider updated their quote", "A provider sent you a quote"],
+    );
+
     const duplicates = await db.query(
       "select event_key from public.fieldly_notifications " +
       "group by event_key having count(*) > 1",
