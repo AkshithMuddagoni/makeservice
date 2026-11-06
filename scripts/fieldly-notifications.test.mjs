@@ -29,6 +29,7 @@ const migrationFiles = [
   "migrations/fieldly/0018_booking_resource_assignment.sql",
   "migrations/fieldly/0019_index_booking_assigned_operator_asset_fk.sql",
   "migrations/fieldly/0021_provider_document_upload_cleanup.sql",
+  "migrations/fieldly/0022_notify_customer_of_quote_revisions.sql",
 ];
 
 async function createMigratedDatabase() {
@@ -98,6 +99,13 @@ async function seedNotificationScenario(db) {
     [quoteId],
   );
 
+  // Timestamp-only writes must not create another notification for the same quote version.
+  await db.query(
+    "update public.provider_quotes set updated_at = updated_at + interval '1 second' " +
+    "where id = $1::uuid",
+    [quoteId],
+  );
+
   const booking = await db.query(
     "insert into public.bookings " +
     "(public_reference, request_id, quote_id, customer_user_id, business_id, service_id, amount_paise, site_snapshot) " +
@@ -107,6 +115,13 @@ async function seedNotificationScenario(db) {
     [requestId, quoteId, businessId],
   );
   const bookingId = booking.rows[0].id;
+
+  // Acceptance is not another customer-facing quote revision.
+  await db.query(
+    "update public.provider_quotes set status = 'accepted', " +
+    "updated_at = updated_at + interval '1 second' where id = $1::uuid",
+    [quoteId],
+  );
 
   await db.query("update public.bookings set status = 'on_the_way' where id = $1::uuid", [bookingId]);
 
@@ -159,7 +174,7 @@ test("notification triggers target correct participants and deduplicate event up
     const expected = new Map([
       ["provider_application:provider-test", 2],
       ["request_received:provider-test", 1],
-      ["quote_received:customer-test", 1],
+      ["quote_received:customer-test", 2],
       ["booking_created:customer-test", 1],
       ["booking_created:provider-test", 1],
       ["booking_status:customer-test", 3],
@@ -168,6 +183,15 @@ test("notification triggers target correct participants and deduplicate event up
       ["booking_message:provider-test", 1],
     ]);
     assert.deepEqual([...actual.entries()].sort(), [...expected.entries()].sort());
+
+    const quoteNotifications = await db.query(
+      "select title from public.fieldly_notifications " +
+      "where notification_type = 'quote_received' order by title",
+    );
+    assert.deepEqual(
+      quoteNotifications.rows.map((row) => row.title),
+      ["A provider sent you a quote", "A provider updated their quote"],
+    );
 
     const duplicates = await db.query(
       "select event_key from public.fieldly_notifications " +
