@@ -11,6 +11,7 @@ import { midway } from "@/lib/fieldly/geo";
 import { STATUS_LABEL } from "@/lib/fieldly/i18n";
 import { useFieldly, useProviders } from "@/lib/fieldly/store";
 import type { BookingStatus } from "@/lib/fieldly/types";
+import { canViewBookingDetail } from "@/lib/fieldly/booking-permissions";
 import { cn } from "@/lib/utils";
 import { authEnabled } from "@/lib/auth/client";
 import { getCurrentBookingDetail, submitCurrentProviderReview, issueCurrentBookingStartCode, sendCurrentBookingMessage, stopCurrentProviderBookingLocation, updateCurrentBookingParticipantAction, updateCurrentProviderBookingLocation, updateCurrentProviderBookingStatus, verifyCurrentBookingStartCode } from "@/lib/fieldly/account.functions";
@@ -394,7 +395,7 @@ function BookingPage() {
     if (liveLoading) {
       return <main className="mx-auto max-w-3xl px-4 py-16 text-sm text-muted">Loading secure booking details…</main>;
     }
-    if (!liveBooking || (!liveBooking.permissions.isCustomer && !liveBooking.permissions.isProvider)) {
+    if (!liveBooking || !canViewBookingDetail(liveBooking.permissions)) {
       return (
         <main className="mx-auto max-w-xl px-4 py-16">
           <h1 className="font-display text-3xl font-bold">Booking unavailable</h1>
