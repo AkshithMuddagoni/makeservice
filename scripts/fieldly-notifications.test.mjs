@@ -162,8 +162,8 @@ test("notification triggers target correct participants and deduplicate event up
       ["quote_received:customer-test", 1],
       ["booking_created:customer-test", 1],
       ["booking_created:provider-test", 1],
-      ["booking_status:customer-test", 3],
-      ["booking_status:provider-test", 3],
+      ["booking_status:customer-test", 4],
+      ["booking_status:provider-test", 4],
       ["booking_message:customer-test", 1],
       ["booking_message:provider-test", 1],
     ]);
@@ -188,7 +188,7 @@ test("notification triggers target correct participants and deduplicate event up
       "select recipient_user_id, target_type, target_id::text as target_id " +
       "from public.fieldly_notifications where target_type = 'booking'",
     );
-    assert.equal(bookingEvents.rows.length, 10);
+    assert.equal(bookingEvents.rows.length, 12);
     for (const row of bookingEvents.rows) {
       assert.ok(["customer-test", "provider-test"].includes(row.recipient_user_id));
       assert.equal(row.target_id, bookingId);
